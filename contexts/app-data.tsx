@@ -55,6 +55,10 @@ import {
   type BuildTechnologySnapshotRow,
 } from "@/lib/data/build-technology";
 import {
+  listMaterialBatches as listWarehouseBatchesRemote,
+  type MaterialBatchRow as WarehouseBatchRow,
+} from "@/lib/data/material-batches";
+import {
   cancelBuildOrder as cancelBuildOrderRemote,
   generateOrderFromPlan as generateOrderFromPlanRemote,
   listBuildOrders,
@@ -422,6 +426,15 @@ function useAppDataState(
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  // Realne partie magazynowe (Faza 4) — czysty odczyt dla ekranu magazynu
+  // (data, ilość dostępna, cena, dokument, dostawca); NIE zastępuje
+  // `materialBatches` (lokalna symulacja FIFO pod raport dzienny/offline).
+  const warehouseBatchesQuery = useQuery({
+    queryKey: ["warehouseBatches", "list"],
+    queryFn: listWarehouseBatchesRemote,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (!buildsQuery.data?.length) return;
@@ -636,7 +649,16 @@ function useAppDataState(
       orderId: number;
       receivedQuantity: number;
       receivedUnitPrice?: number;
-    }) => receiveOrderRemote(vars.orderId, vars.receivedQuantity, vars.receivedUnitPrice),
+      documentNumber?: string;
+      supplier?: string;
+    }) =>
+      receiveOrderRemote(
+        vars.orderId,
+        vars.receivedQuantity,
+        vars.receivedUnitPrice,
+        vars.documentNumber,
+        vars.supplier,
+      ),
   });
   const generateOrderFromPlanMutation = useMutation({
     mutationFn: (vars: { buildId: number }) => generateOrderFromPlanRemote(vars.buildId),
@@ -652,8 +674,13 @@ function useAppDataState(
     mutationFn: (vars: { orderId: number }) => cancelBuildOrderRemote(vars.orderId),
   });
   const receiveBuildOrderMutation = useMutation({
-    mutationFn: (vars: { orderId: number; items: ReceiveBuildOrderItemInput[] }) =>
-      receiveBuildOrderRemote(vars.orderId, vars.items),
+    mutationFn: (vars: {
+      orderId: number;
+      items: ReceiveBuildOrderItemInput[];
+      documentNumber?: string;
+      supplier?: string;
+    }) =>
+      receiveBuildOrderRemote(vars.orderId, vars.items, vars.documentNumber, vars.supplier),
   });
   const approveReportMutation = useMutation({
     mutationFn: (vars: { buildId: number; date: string; status: "approved" | "do_poprawy" }) =>
@@ -1064,12 +1091,26 @@ function useAppDataState(
   // Przyjęcie dostawy: każda pozycja z osobną ilością/ceną dopisuje własną
   // partię (patrz receive_order w 007_faza3_zamowienia.sql) — dlatego po
   // sukcesie odświeżamy też magazyn, nie tylko listę zamówień.
-  const receiveBuildOrder = async (orderId: number, items: ReceiveBuildOrderItemInput[]) => {
+  const receiveBuildOrder = async (
+    orderId: number,
+    items: ReceiveBuildOrderItemInput[],
+    documentNumber?: string,
+    supplier?: string,
+  ) => {
     const valid = items.filter((i) => i.receivedQuantity > 0);
     if (valid.length === 0) return;
     try {
-      await receiveBuildOrderMutation.mutateAsync({ orderId, items: valid });
-      await Promise.all([invalidate("buildOrders"), invalidate("materials")]);
+      await receiveBuildOrderMutation.mutateAsync({
+        orderId,
+        items: valid,
+        documentNumber,
+        supplier,
+      });
+      await Promise.all([
+        invalidate("buildOrders"),
+        invalidate("materials"),
+        invalidate("warehouseBatches"),
+      ]);
     } catch (error) {
       reportMutationError(error, "Nie udało się przyjąć dostawy.");
     }
@@ -1390,6 +1431,8 @@ function useAppDataState(
     orderId: string,
     receivedQuantity: number,
     receivedUnitPrice?: number,
+    documentNumber?: string,
+    supplier?: string,
   ) => {
     const numericId = Number(orderId);
     if (Number.isNaN(numericId) || receivedQuantity <= 0) return;
@@ -1398,10 +1441,13 @@ function useAppDataState(
         orderId: numericId,
         receivedQuantity,
         receivedUnitPrice,
+        documentNumber,
+        supplier,
       });
       await Promise.all([
         invalidate("orders"),
         invalidate("materials"),
+        invalidate("warehouseBatches"),
       ]);
     } catch (error) {
       reportMutationError(error, "Nie udało się przyjąć dostawy.");
@@ -1567,6 +1613,7 @@ function useAppDataState(
     markBuildOrderOrdered,
     cancelBuildOrder,
     receiveBuildOrder,
+    warehouseBatches: (warehouseBatchesQuery.data ?? []) as WarehouseBatchRow[],
     assignments,
     query,
     showMaterial,

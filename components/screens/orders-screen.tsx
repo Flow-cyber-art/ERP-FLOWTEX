@@ -83,6 +83,14 @@ export function OrdersScreen() {
   const [receivePriceDrafts, setReceivePriceDrafts] = useState<
     Record<string, string>
   >({});
+  // Dokument dostawy i dostawca (Faza 4) — opcjonalne, zapisywane na
+  // przyjmowanej partii; jeden dokument/dostawca na to jedno przyjęcie.
+  const [receiveDocumentDrafts, setReceiveDocumentDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [receiveSupplierDrafts, setReceiveSupplierDrafts] = useState<
+    Record<string, string>
+  >({});
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("aktywne");
 
@@ -465,6 +473,36 @@ export function OrdersScreen() {
                     />
                   </View>
                 </View>
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text className="text-xs text-muted uppercase">Nr dokumentu (PZ)</Text>
+                    <Field
+                      style={{ marginTop: 8 }}
+                      placeholder="opcjonalnie"
+                      value={receiveDocumentDrafts[row.orderId!] ?? ""}
+                      onChangeText={(v: string) =>
+                        setReceiveDocumentDrafts({
+                          ...receiveDocumentDrafts,
+                          [row.orderId!]: v,
+                        })
+                      }
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text className="text-xs text-muted uppercase">Dostawca</Text>
+                    <Field
+                      style={{ marginTop: 8 }}
+                      placeholder="opcjonalnie"
+                      value={receiveSupplierDrafts[row.orderId!] ?? ""}
+                      onChangeText={(v: string) =>
+                        setReceiveSupplierDrafts({
+                          ...receiveSupplierDrafts,
+                          [row.orderId!]: v,
+                        })
+                      }
+                    />
+                  </View>
+                </View>
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
                   <View style={{ flex: 1 }}>
                     <Button
@@ -486,6 +524,8 @@ export function OrdersScreen() {
                           row.orderId!,
                           qty,
                           price > 0 ? price : undefined,
+                          receiveDocumentDrafts[row.orderId!],
+                          receiveSupplierDrafts[row.orderId!],
                         );
                         setReceivingId(null);
                       }}

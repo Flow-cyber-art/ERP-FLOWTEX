@@ -98,6 +98,10 @@ export function BuildsScreen() {
     Record<number, { qty: string; price: string }>
   >({});
   const [orderReceiveBusy, setOrderReceiveBusy] = useState(false);
+  // Dokument dostawy i dostawca (Faza 4) — jeden na całe przyjmowane
+  // zamówienie (wiele pozycji, jedna dostawa).
+  const [orderReceiveDocument, setOrderReceiveDocument] = useState("");
+  const [orderReceiveSupplier, setOrderReceiveSupplier] = useState("");
   const [editingOrderItemId, setEditingOrderItemId] = useState<number | null>(null);
   const [orderQtyDraft, setOrderQtyDraft] = useState("");
   // Aktywne/Archiwum: zamknięte budowy trafiają do osobnego widoku, żeby
@@ -941,6 +945,8 @@ export function BuildsScreen() {
                                 };
                               }
                               setOrderReceiveDrafts(drafts);
+                              setOrderReceiveDocument("");
+                              setOrderReceiveSupplier("");
                               setOrderReceivingId(order.id);
                             }}
                           />
@@ -986,6 +992,28 @@ export function BuildsScreen() {
                               </View>
                             </View>
                           ))}
+                          <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: COLORS.muted, fontSize: 10 }}>
+                                Nr dokumentu (PZ)
+                              </Text>
+                              <Field
+                                style={{ marginTop: 4 }}
+                                placeholder="opcjonalnie"
+                                value={orderReceiveDocument}
+                                onChangeText={setOrderReceiveDocument}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: COLORS.muted, fontSize: 10 }}>Dostawca</Text>
+                              <Field
+                                style={{ marginTop: 4 }}
+                                placeholder="opcjonalnie"
+                                value={orderReceiveSupplier}
+                                onChangeText={setOrderReceiveSupplier}
+                              />
+                            </View>
+                          </View>
                           <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
                             <View style={{ flex: 1 }}>
                               <Button
@@ -1011,6 +1039,8 @@ export function BuildsScreen() {
                                         receivedUnitPrice:
                                           Number(orderReceiveDrafts[item.id]?.price) || undefined,
                                       })),
+                                      orderReceiveDocument,
+                                      orderReceiveSupplier,
                                     );
                                     setOrderReceivingId(null);
                                   } finally {

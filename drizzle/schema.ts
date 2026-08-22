@@ -141,6 +141,11 @@ export const materialBatches = pgTable("material_batches", {
   receivedAt: date("receivedAt").notNull(),
   source: batchSourceEnum("source").notNull().default("zamówienie"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  // Faza 4 modułu Technologia (patrz plan wdrożenia) — dokument dostawy
+  // i dostawca, opcjonalne (partie "stan początkowy"/"korekta" ich nie
+  // mają) — patrz supabase/sql/008_faza4_magazyn_partie.sql.
+  documentNumber: text("documentNumber"),
+  supplier: text("supplier"),
 });
 
 /* ============================================================
@@ -488,7 +493,7 @@ export const buildMaterialPlan = pgTable("build_material_plan", {
  * dla zamówień spoza planu materiałowego.
  * ============================================================ */
 
-export const orderStatusV2Enum = pgEnum("order_status", [
+export const orderStatusV2Enum = pgEnum("order_header_status", [
   "robocze",
   "zamówione",
   "przyjęte",

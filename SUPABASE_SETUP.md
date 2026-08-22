@@ -171,6 +171,20 @@ zamyka zamówienie statusem "przyjęte". Nowe tabele: `orders`
 materiału spoza planu, np. przy brakach magazynowych) — oba flow
 działają obok siebie.
 
+**Faza 4 (gotowa)** — [`supabase/sql/008_faza4_magazyn_partie.sql`](./supabase/sql/008_faza4_magazyn_partie.sql).
+Uruchom PO `007`. Zero nowych tabel — sama koncepcja partii z różnymi
+cenami już działała (FIFO w `fn_consume_fifo`), tylko `material_batches`
+dostaje opcjonalne `documentNumber`/`supplier`, wypełniane przy
+przyjęciu dostawy (formularz "Dostawa dotarła", oba flow — stary
+`material_orders` i nowy `orders`/`order_items`). Ekran magazynu w
+rozwiniętej pozycji materiału pokazuje teraz **realne** partie z bazy
+(data, ilość dostępna, cena, dokument, dostawca) zamiast wcześniejszej
+jednej fikcyjnej partii odtworzonej z samego stanu — patrz
+`lib/data/material-batches.ts` i `warehouseBatches` w
+`contexts/app-data.tsx` (celowo osobne od `materialBatches`, lokalnej
+symulacji FIFO pod offline/optymistyczny raport dzienny — ta zostaje
+nietknięta).
+
 ## 6. Co jest zaimplementowane
 
 `lib/data/*.ts` — warstwa danych (cały serwer Express/tRPC —
@@ -191,6 +205,9 @@ patrz uwaga w punkcie 7) i endpoint do Google Drive):
 - `lib/data/build-orders.ts` — zamówienia z planu materiałowego (Faza
   3): generowanie z `build_material_plan`, edycja ilości zamawianej,
   złożenie u dostawcy, przyjęcie dostawy wielopozycyjnej.
+- `lib/data/material-batches.ts` — realne partie magazynowe (Faza 4):
+  czysty odczyt `material_batches` (ilość dostępna, cena, dokument,
+  dostawca) do wyświetlenia na ekranie magazynu.
 - `lib/data/build-materials.ts` — przypisania materiałów do budów.
 - `lib/data/reports.ts` — zapis raportu dziennego (FIFO + upsert po
   buildId+date), zatwierdzanie/odsyłanie do poprawy, **`listReports()`**

@@ -66,6 +66,11 @@ const WorkerScreen = lazy(() =>
     default: m.WorkerScreen,
   })),
 );
+const TechnologiesScreen = lazy(() =>
+  import("@/components/screens/technologies-screen").then((m) => ({
+    default: m.TechnologiesScreen,
+  })),
+);
 
 function HomeScreenInner() {
   const {
@@ -74,6 +79,8 @@ function HomeScreenInner() {
     setTab,
     buildsView,
     setBuildsView,
+    warehouseView,
+    setWarehouseView,
     shortages,
     orders,
     reportsPendingApprovalCount,
@@ -291,10 +298,30 @@ function HomeScreenInner() {
   // godzin" — bez osobnej pozycji nawigacji ani przełączania na
   // poziomie zakładek.
   const adminButton = routeButton("admin", "⚙", "Admin");
+  // Magazyn/Technologie: desktop ma miejsce na dwie osobne pozycje menu
+  // (technologiesButton niżej). Mobile ma za mało miejsca w dolnym
+  // pasku — jedna pozycja "Magazyn", a powtórne wciśnięcie (gdy ta
+  // zakładka jest już otwarta) przełącza na Technologie, tak samo jak
+  // buildsButton przełącza Budowy/Archiwum.
+  const warehouseButton = isDesktop
+    ? routeButton("warehouse", "▦", "Magazyn", { badgeCount: shortageCount })
+    : routeButton("warehouse", "▦", "Magazyn", {
+        badgeCount: shortageCount,
+        onPress: () => {
+          if (tab === "warehouse") {
+            setWarehouseView(warehouseView === "materials" ? "technologies" : "materials");
+          } else {
+            setTab("warehouse");
+            setWarehouseView("materials");
+          }
+        },
+      });
+  const technologiesButton = routeButton("technologies", "🧪", "Technologie");
   const visibleRoutes =
     devRole === "Admin"
       ? [
-          routeButton("warehouse", "▦", "Magazyn", { badgeCount: shortageCount }),
+          warehouseButton,
+          ...(isDesktop ? [technologiesButton] : []),
           buildsButton,
           ...(isDesktop ? [buildsArchiveButton] : []),
           routeButton("orders", "▧", "Zamówienia", {
@@ -475,7 +502,14 @@ function HomeScreenInner() {
               }
             >
               {tab === "start" && <StartScreen />}
-              {tab === "warehouse" && devRole === "Admin" && <WarehouseScreen />}
+              {tab === "warehouse" &&
+                devRole === "Admin" &&
+                (!isDesktop && warehouseView === "technologies" ? (
+                  <TechnologiesScreen />
+                ) : (
+                  <WarehouseScreen />
+                ))}
+              {tab === "technologies" && devRole === "Admin" && <TechnologiesScreen />}
               {tab === "builds" && devRole === "Admin" && <BuildsScreen />}
               {tab === "orders" && devRole === "Admin" && <OrdersScreen />}
               {tab === "manager" && devRole === "Admin" && <ManagerScreen />}

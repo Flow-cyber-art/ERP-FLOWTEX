@@ -310,6 +310,13 @@ function useAppDataState(
   const [buildsView, setBuildsView] = useState<"active" | "archive">(
     "active",
   );
+  // Materiały/Technologie na zakładce Magazyn. Na desktopie Technologie
+  // mają własną pozycję menu (osobny tab), więc to pole tam się nie
+  // liczy; na mobile dzielą jedną pozycję w dolnym pasku — powtórne
+  // wciśnięcie "Magazyn" przełącza widok, ten sam wzorzec co buildsView.
+  const [warehouseView, setWarehouseView] = useState<"materials" | "technologies">(
+    "materials",
+  );
   const [selectedBuildId, setSelectedBuildId] = useState(initialBuilds[0].id);
   const [selectedMaterialId, setSelectedMaterialId] = useState(
     initialMaterials[0].id,
@@ -1477,6 +1484,7 @@ function useAppDataState(
     showBuild,
     showAssignment,
     buildsView,
+    warehouseView,
     selectedBuildId,
     selectedMaterialId,
     plannedAmount,
@@ -1525,6 +1533,7 @@ function useAppDataState(
     setShowBuild,
     setShowAssignment,
     setBuildsView,
+    setWarehouseView,
     setSelectedBuildId,
     setSelectedMaterialId,
     setPlannedAmount,

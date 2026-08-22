@@ -5,6 +5,7 @@ import {
   COLORS,
   Field,
   QuantityStepper,
+  ScreenHeader,
   UNIT_OPTIONS,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
@@ -53,7 +54,7 @@ const emptyStage = (): DraftStage => ({
   materials: [emptyMaterial()],
 });
 
-export function TechnologiesSection() {
+export function TechnologiesScreen() {
   const { materials } = useAppData();
 
   const [technologies, setTechnologies] = useState<TechnologyRow[] | null>(null);
@@ -174,15 +175,16 @@ export function TechnologiesSection() {
 
   return (
     <>
-      <View className="flex-row justify-between items-center mb-3">
-        <Text className="text-base font-bold text-foreground">
-          Technologie {families.length ? `(${families.length})` : ""}
-        </Text>
-        <Pressable onPress={editorOpen ? () => setEditorOpen(false) : startNew}>
-          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-            {editorOpen ? "Anuluj" : "+ Nowa technologia"}
-          </Text>
-        </Pressable>
+      <View className="flex-row justify-between items-start mb-5">
+        <ScreenHeader
+          eyebrow="KONFIGURACJA / TECHNOLOGIE"
+          title="Technologie"
+          description="Receptury posadzek — etapy, materiały, zużycie na m²."
+        />
+        <Button
+          label={editorOpen ? "Anuluj" : "+ Nowa"}
+          onPress={editorOpen ? () => setEditorOpen(false) : startNew}
+        />
       </View>
 
       {editorOpen && (

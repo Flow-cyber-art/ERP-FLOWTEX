@@ -117,6 +117,45 @@ granulacji "który brygadzista widzi którą budowę"):
 - **Pracownik** — widzi wyłącznie własny czas pracy (`time_entries`
   filtrowane po `profiles.employeeId`).
 
+## 5b. Moduł "Technologia" — wdrożenie fazowe
+
+Duże rozszerzenie modelu (receptury/technologie, plan materiałowy,
+zamówienia jako nagłówek+pozycje, ręczny wybór partii, kilometrówka,
+rozliczenie z marżą) — pełny plan i uzasadnienie decyzji był
+przedstawiony jako artefakt na czacie. Wdrażane fazami 0–9, każda
+osobno testowana przed kolejną.
+
+**Faza 0 (gotowa)** — [`supabase/sql/004_faza0_fundament.sql`](./supabase/sql/004_faza0_fundament.sql).
+Uruchom PO `001`/`002`/`003` (używa `app_role()` z `003`). Czysto
+schemat, zero zmian w interfejsie:
+- `materials` + kolumna `category` (`technologiczny` / `pomocniczy`)
+- `builds` + `clientName`, `address`, `areaM2`, `contractValue`
+- `reports` + `km`, `kmRateApplied`, `kmCost`
+- `report_extra_costs` + `category`
+- nowa tabela `settings` (jednowierszowa, stawka za km) — snake_case,
+  bo nowa; reszta powyżej zostaje w camelCase jak cała istniejąca baza
+
+**Faza 1 (gotowa)** — [`supabase/sql/005_faza1_technologie.sql`](./supabase/sql/005_faza1_technologie.sql).
+Uruchom PO `004`. Własna pozycja nawigacji **Technologie** (desktop:
+stały tab w sidebarze; mobile: dzieli miejsce z zakładką Magazyn —
+drugie wciśnięcie "Magazyn", gdy jest już otwarta, przełącza na
+Technologie): tworzenie i
+edycja receptur (etapy + materiały, zużycie na m²). Edycja **nigdy nie
+nadpisuje** — RPC `save_technology()` zawsze tworzy nową wersję tej
+samej rodziny (`code`) i dezaktywuje poprzednią, więc budowa z już
+przypisaną technologią nigdy nie zobaczy późniejszej zmiany. Nowe
+tabele: `technologies`, `technology_stages`, `technology_materials`
+(snake_case — patrz Faza 0).
+
+**Faza 2 (gotowa)** — [`supabase/sql/006_faza2_plan_budowy.sql`](./supabase/sql/006_faza2_plan_budowy.sql).
+Uruchom PO `005`. Formularz "Nowa budowa" dostaje klienta/adres/wartość
+kontraktu; w rozwiniętej karcie budowy — sekcja **Technologia**:
+przypisanie (wybór technologii + m²) liczy plan materiałowy (etap →
+materiał → zużycie/m² → ilość planowana) i **zamraża go w momencie
+przypisania** (RPC `assign_technology_to_build()`), więc późniejsza
+zmiana/nowa wersja technologii już nie rusza tej budowy. Nowe tabele:
+`build_technology_snapshot`, `build_material_plan`.
+
 ## 6. Co jest zaimplementowane
 
 `lib/data/*.ts` — warstwa danych (cały serwer Express/tRPC —

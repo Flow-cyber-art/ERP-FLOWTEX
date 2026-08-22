@@ -12,7 +12,6 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
-import { TechnologiesSection } from "@/components/screens/technologies-screen";
 import type { AppRole } from "@/lib/data/auth";
 import {
   type AdminUser,
@@ -23,20 +22,19 @@ import {
   setAdminUserRole,
 } from "@/lib/data/admin-users";
 
-// Panel administracyjny, HR, technologie i konta logowania były wcześniej
-// (albo w koncepcji, albo w kodzie) osobnymi zakładkami nawigacji, mimo że
+// Panel administracyjny, HR i konta logowania były wcześniej (albo w
+// koncepcji, albo w kodzie) osobnymi zakładkami nawigacji, mimo że
 // wszystkie dotyczą tego samego: jak firma jest skonfigurowana, nie
 // codziennej pracy na budowie. Jeden ekran z wewnętrznym przełącznikiem,
-// żeby nie trzeba było skakać między pozycjami menu.
-type AdminTab = "team" | "hours" | "technologies" | "accounts";
+// żeby nie trzeba było skakać między pozycjami menu. Technologie NIE są
+// tu (mimo że to też "konfiguracja firmy") — mają własną pozycję w
+// nawigacji (patrz app/(tabs)/index.tsx), bo na desktopie zasługują na
+// stałą widoczność, a na mobile dzielą miejsce z zakładką Magazyn.
+type AdminTab = "team" | "hours" | "accounts";
 
 const TAB_META: Record<AdminTab, { title: string; description: string }> = {
   team: { title: "Zespół", description: "Pracownicy, dniówka i stawki." },
   hours: { title: "Rozliczenie godzin", description: "Godziny przepracowane per pracownik." },
-  technologies: {
-    title: "Technologie",
-    description: "Receptury posadzek — etapy, materiały, zużycie na m².",
-  },
   accounts: { title: "Konta logowania", description: "Dostęp do aplikacji per osoba." },
 };
 
@@ -57,7 +55,6 @@ export function AdminScreen() {
             [
               ["team", "Zespół i dniówka"],
               ["hours", "Rozliczenie godzin"],
-              ["technologies", "Technologie"],
               ["accounts", "Konta logowania"],
             ] as const
           ).map(([value, label]) => (
@@ -91,8 +88,6 @@ export function AdminScreen() {
         <AdminTeamSection />
       ) : section === "hours" ? (
         <HrSection />
-      ) : section === "technologies" ? (
-        <TechnologiesSection />
       ) : (
         <AdminAccountsSection />
       )}

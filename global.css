@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   STAN CZYSTY (reset po serii nieudanych fixow).
+
+   Ten plik robi teraz JEDNA rzecz: maluje tlo dokumentu, zeby pod
+   aplikacja nie przeswitywala biel. To jedyna zmiana, ktora na
+   pewno pomogla.
+
+   CELOWO NIE MA TU:
+   - height / min-height / dvh na html, body, #root
+   - position: fixed
+   - !important
+   - regul na "#root > div"
+
+   Wysokosc zostawiamy w rekach expo-router (<ScrollViewStyleReset/>
+   ustawia height:100%) i react-native-web. Kazda proba nadpisania
+   tego z zewnatrz konczyla sie gapem, wiec najpierw MIERZYMY,
+   ktora warstwa DOM jest za krotka, a dopiero potem poprawiamy
+   dokladnie ta jedna.
+   ============================================================ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-background, #1b1b1d);
+  overscroll-behavior: none;
+}
+
+#root {
+  background-color: var(--color-background, #1b1b1d);
+}

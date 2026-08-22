@@ -1,0 +1,13 @@
+Te pliki trzeba USUNĄĆ z repo (zip nie przenosi kasowania):
+
+lib/trpc.ts
+lib/trpc-vanilla.ts
+server/routers.ts
+server/data-routers.ts
+server/_core/context.ts
+server/_core/systemRouter.ts
+server/_core/trpc.ts
+tests/auth.logout.test.ts
+
+(Cały folder tests/ możesz usunąć, jeśli auth.logout.test.ts był w nim
+jedynym plikiem.)

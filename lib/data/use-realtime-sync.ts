@@ -24,6 +24,8 @@ const REALTIME_TABLES: { table: string; queryKey: string }[] = [
   { table: "report_materials", queryKey: "reports" },
   { table: "report_people", queryKey: "reports" },
   { table: "report_extra_costs", queryKey: "reports" },
+  { table: "orders", queryKey: "buildOrders" },
+  { table: "order_items", queryKey: "buildOrders" },
 ];
 
 export function useRealtimeSync(queryClient: QueryClient) {

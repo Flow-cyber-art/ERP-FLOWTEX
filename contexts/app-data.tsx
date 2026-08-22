@@ -46,6 +46,14 @@ import {
 } from "@/lib/data/reports";
 import { useRealtimeSync } from "@/lib/data/use-realtime-sync";
 import { createBuildDriveFolder } from "@/lib/data/drive";
+import { listActiveTechnologies, type TechnologyRow } from "@/lib/data/technologies";
+import {
+  assignTechnologyToBuild,
+  listBuildMaterialPlans,
+  listBuildTechnologySnapshots,
+  type BuildMaterialPlanRow,
+  type BuildTechnologySnapshotRow,
+} from "@/lib/data/build-technology";
 export type SavedReportStatus = "submitted" | "approved";
 
 export type SavedReport = {
@@ -325,6 +333,9 @@ function useAppDataState(
     manager: "",
     startDate: todayISO(),
     durationDays: "",
+    clientName: "",
+    address: "",
+    contractValue: "",
   });
   const [workdayHours, setWorkdayHours] = useState(8);
   const [workdayHoursInput, setWorkdayHoursInput] = useState("8");
@@ -364,6 +375,28 @@ function useAppDataState(
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  // Technologie (Faza 1/2) — tylko aktywne (najnowsza wersja każdej
+  // rodziny), to jest to, co widać przy przypisywaniu do budowy.
+  const technologiesQuery = useQuery({
+    queryKey: ["technologies", "active"],
+    queryFn: listActiveTechnologies,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  // Snapshot+plan dla WSZYSTKICH budów naraz, filtrowane po buildId w UI —
+  // ten sam wzorzec co assignments/savedReports poniżej.
+  const buildTechnologySnapshotsQuery = useQuery({
+    queryKey: ["buildTechnologySnapshots", "list"],
+    queryFn: listBuildTechnologySnapshots,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  const buildMaterialPlansQuery = useQuery({
+    queryKey: ["buildMaterialPlans", "list"],
+    queryFn: listBuildMaterialPlans,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (!buildsQuery.data?.length) return;
@@ -382,6 +415,10 @@ function useAppDataState(
           status: b.status,
           photosUrl: b.photosUrl,
           settlement: existing?.settlement,
+          clientName: b.clientName,
+          address: b.address,
+          areaM2: b.areaM2,
+          contractValue: b.contractValue,
         };
       }),
     );
@@ -549,6 +586,10 @@ function useAppDataState(
   const updateBuildPhotosUrlMutation = useMutation({
     mutationFn: (vars: { buildId: number; photosUrl: string }) =>
       updateBuildPhotosUrlRemote(vars.buildId, vars.photosUrl),
+  });
+  const assignTechnologyMutation = useMutation({
+    mutationFn: (vars: { buildId: number; technologyId: number; areaM2: number }) =>
+      assignTechnologyToBuild(vars.buildId, vars.technologyId, vars.areaM2),
   });
   const commitAssignmentsMutation = useMutation({
     mutationFn: (vars: {
@@ -883,6 +924,9 @@ function useAppDataState(
         manager: newBuild.manager,
         startDate: newBuild.startDate,
         durationDays: duration,
+        clientName: newBuild.clientName || undefined,
+        address: newBuild.address || undefined,
+        contractValue: newBuild.contractValue ? Number(newBuild.contractValue) : undefined,
       });
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
       setNewBuild({
@@ -891,6 +935,9 @@ function useAppDataState(
         manager: "",
         startDate: todayISO(),
         durationDays: "",
+        clientName: "",
+        address: "",
+        contractValue: "",
       });
       setShowBuild(false);
 
@@ -911,6 +958,30 @@ function useAppDataState(
       }
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać budowy.");
+    }
+  };
+  // Przypisanie technologii do budowy (Faza 2) — atomowo w RPC: zapisuje
+  // m², zamraża snapshot receptury, przelicza plan materiałowy. Bezpieczne
+  // do wywołania wielokrotnie (Admin poprawia metraż / zmienia technologię),
+  // dopóki budowa nie weszła w kolejne fazy (raporty/rozliczenie).
+  const assignBuildTechnology = async (
+    buildId: string,
+    technologyId: number,
+    areaM2: number,
+  ) => {
+    try {
+      await assignTechnologyMutation.mutateAsync({
+        buildId: Number(buildId),
+        technologyId,
+        areaM2,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["builds", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["buildTechnologySnapshots", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["buildMaterialPlans", "list"] }),
+      ]);
+    } catch (error) {
+      reportMutationError(error, "Nie udało się przypisać technologii.");
     }
   };
   const saveWorkdayHours = () => {
@@ -1395,6 +1466,11 @@ function useAppDataState(
     materialBatches,
     buildMaterialActualCost,
     builds,
+    technologies: (technologiesQuery.data ?? []) as TechnologyRow[],
+    buildTechnologySnapshots: (buildTechnologySnapshotsQuery.data ??
+      []) as BuildTechnologySnapshotRow[],
+    buildMaterialPlans: (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[],
+    assignBuildTechnology,
     assignments,
     query,
     showMaterial,

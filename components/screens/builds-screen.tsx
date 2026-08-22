@@ -20,6 +20,10 @@ export function BuildsScreen() {
   const {
     materials,
     builds,
+    technologies,
+    buildTechnologySnapshots,
+    buildMaterialPlans,
+    assignBuildTechnology,
     assignments,
     savedReports,
     employees,
@@ -73,6 +77,12 @@ export function BuildsScreen() {
     string | null
   >(null);
   const [photosUrlInput, setPhotosUrlInput] = useState("");
+  // Przypisanie/zmiana technologii (Faza 2) — jeden picker na raz, ten
+  // sam wzorzec co edycja linku do zdjęć powyżej.
+  const [techEditBuildId, setTechEditBuildId] = useState<string | null>(null);
+  const [techPickerId, setTechPickerId] = useState<number | null>(null);
+  const [techAreaInput, setTechAreaInput] = useState("");
+  const [techBusy, setTechBusy] = useState(false);
   // Aktywne/Archiwum: zamknięte budowy trafiają do osobnego widoku, żeby
   // lista roboczych budów nie rosła bezterminowo o rozliczone pozycje.
   // Stan (buildsView) żyje w kontekście, bo na desktopie steruje nim
@@ -118,6 +128,31 @@ export function BuildsScreen() {
           value={newBuild.manager}
           onChangeText={(v: string) =>
             setNewBuild({ ...newBuild, manager: v })
+          }
+        />
+        <Field
+          placeholder="Klient (opcjonalnie)"
+          value={newBuild.clientName}
+          onChangeText={(v: string) =>
+            setNewBuild({ ...newBuild, clientName: v })
+          }
+          style={{ marginTop: 10 }}
+        />
+        <Field
+          placeholder="Adres (opcjonalnie)"
+          value={newBuild.address}
+          onChangeText={(v: string) =>
+            setNewBuild({ ...newBuild, address: v })
+          }
+          style={{ marginTop: 10 }}
+        />
+        <Text className="text-xs text-muted uppercase mt-4 mb-2">
+          Wartość kontraktu (PLN, opcjonalnie)
+        </Text>
+        <QuantityStepper
+          value={newBuild.contractValue}
+          onChangeText={(v: string) =>
+            setNewBuild({ ...newBuild, contractValue: v })
           }
         />
         <Text className="text-xs text-muted uppercase mt-4">
@@ -516,6 +551,192 @@ export function BuildsScreen() {
             Materiały przypisane:{" "}
             {assignments.filter((a) => a.buildId === b.id).length}
           </Text>
+
+          {/* Technologia (Faza 2) — plan materiałowy = m² budowy × zużycie
+              z receptury, zamrożony w momencie przypisania (patrz
+              build_technology_snapshot). Późniejsza zmiana/nowa wersja
+              technologii NIE rusza już przypisanego planu. */}
+          {(() => {
+            const snapshot = buildTechnologySnapshots.find(
+              (s) => s.buildId === Number(b.id),
+            );
+            const plan = buildMaterialPlans.filter(
+              (p) => p.buildId === Number(b.id),
+            );
+            const stageOrder: string[] = [];
+            const planByStage: Record<string, typeof plan> = {};
+            for (const row of plan) {
+              if (!planByStage[row.stageName]) {
+                planByStage[row.stageName] = [];
+                stageOrder.push(row.stageName);
+              }
+              planByStage[row.stageName].push(row);
+            }
+            const pickerOpen = techEditBuildId === b.id;
+            return (
+              <View
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: COLORS.border,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                      TECHNOLOGIA
+                    </Text>
+                    {snapshot ? (
+                      <Text
+                        style={{
+                          color: COLORS.foreground,
+                          fontWeight: "700",
+                          fontSize: 13,
+                          marginTop: 2,
+                        }}
+                      >
+                        {snapshot.technologyName} · v{snapshot.technologyVersion} ·{" "}
+                        {b.areaM2 ?? "?"} m²
+                      </Text>
+                    ) : (
+                      <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                        Brak przypisanej technologii.
+                      </Text>
+                    )}
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      if (pickerOpen) {
+                        setTechEditBuildId(null);
+                        return;
+                      }
+                      setTechEditBuildId(b.id);
+                      setTechPickerId(null);
+                      setTechAreaInput(b.areaM2 ?? "");
+                    }}
+                  >
+                    <Text
+                      style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}
+                    >
+                      {pickerOpen ? "Zwiń" : snapshot ? "Zmień" : "Przypisz"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {pickerOpen && (
+                  <View style={{ marginTop: 10 }}>
+                    {technologies.length === 0 ? (
+                      <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                        Brak technologii — dodaj ją najpierw w Zespół → Technologie.
+                      </Text>
+                    ) : (
+                      <>
+                        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                          {technologies.map((t) => (
+                            <Pressable
+                              key={t.id}
+                              onPress={() => setTechPickerId(t.id)}
+                              style={{
+                                backgroundColor:
+                                  techPickerId === t.id ? COLORS.primary : COLORS.background,
+                                borderRadius: 8,
+                                paddingHorizontal: 9,
+                                paddingVertical: 7,
+                                borderWidth: 1,
+                                borderColor:
+                                  techPickerId === t.id ? COLORS.primary : COLORS.border,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color:
+                                    techPickerId === t.id
+                                      ? COLORS.background
+                                      : COLORS.foreground,
+                                  fontWeight: "700",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {t.name} · v{t.version}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                        <Text className="text-xs text-muted uppercase mb-2 mt-3">
+                          Powierzchnia (m²)
+                        </Text>
+                        <QuantityStepper value={techAreaInput} onChangeText={setTechAreaInput} />
+                        <View style={{ marginTop: 10 }}>
+                          {techBusy ? (
+                            <Text style={{ color: COLORS.muted, fontSize: 12 }}>Zapisywanie…</Text>
+                          ) : (
+                            <Button
+                              label="Zapisz plan materiałowy"
+                              onPress={async () => {
+                                if (!techPickerId || !Number(techAreaInput)) return;
+                                setTechBusy(true);
+                                try {
+                                  await assignBuildTechnology(
+                                    b.id,
+                                    techPickerId,
+                                    Number(techAreaInput),
+                                  );
+                                  setTechEditBuildId(null);
+                                } finally {
+                                  setTechBusy(false);
+                                }
+                              }}
+                            />
+                          )}
+                        </View>
+                      </>
+                    )}
+                  </View>
+                )}
+
+                {!pickerOpen && plan.length > 0 && (
+                  <View style={{ marginTop: 10 }}>
+                    {stageOrder.map((stageName) => (
+                      <View key={stageName} style={{ marginBottom: 8 }}>
+                        <Text
+                          style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700" }}
+                        >
+                          {stageName.toUpperCase()}
+                        </Text>
+                        {planByStage[stageName].map((row) => (
+                          <View
+                            key={row.id}
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              marginTop: 3,
+                            }}
+                          >
+                            <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                              {row.materialName}
+                            </Text>
+                            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                              {row.consumptionPerM2} {row.unit}/m² ·{" "}
+                              <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
+                                {row.plannedQuantity} {row.unit}
+                              </Text>
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })()}
 
           {/* Zdjęcia budowy — na razie zwykły link (np. do udostępnionego
               folderu na Google Drive), wklejany ręcznie. Kliknięcie

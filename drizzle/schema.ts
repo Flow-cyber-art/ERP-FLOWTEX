@@ -444,6 +444,42 @@ export const technologyMaterials = pgTable("technology_materials", {
 });
 
 /* ============================================================
+ * PLAN MATERIAŁOWY BUDOWY — Faza 2. Przypisanie technologii do budowy
+ * zamraża jej treść tu (snapshot_json) i przelicza plan (m² × zużycie).
+ * Zapisywane wyłącznie przez RPC `assign_technology_to_build()` — patrz
+ * supabase/sql/006_faza2_plan_budowy.sql.
+ * ============================================================ */
+
+export const buildTechnologySnapshot = pgTable("build_technology_snapshot", {
+  buildId: integer("build_id")
+    .primaryKey()
+    .references(() => builds.id, { onDelete: "cascade" }),
+  sourceTechnologyId: integer("source_technology_id").references(() => technologies.id, {
+    onDelete: "set null",
+  }),
+  technologyCode: text("technology_code").notNull(),
+  technologyName: text("technology_name").notNull(),
+  technologyVersion: integer("technology_version").notNull(),
+  snapshotJson: text("snapshot_json").notNull(), // jsonb — brak natywnego typu jsonb w tym pliku dotąd, patrz SQL
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const buildMaterialPlan = pgTable("build_material_plan", {
+  id: serial("id").primaryKey(),
+  buildId: integer("build_id")
+    .notNull()
+    .references(() => builds.id, { onDelete: "cascade" }),
+  stageName: text("stage_name").notNull(),
+  materialName: text("material_name").notNull(),
+  unit: text("unit").notNull(),
+  consumptionPerM2: decimal("consumption_per_m2", { precision: 10, scale: 4 }).notNull(),
+  plannedQuantity: decimal("planned_quantity", { precision: 12, scale: 3 }).notNull(),
+  linkedMaterialId: integer("linked_material_id").references(() => materials.id, {
+    onDelete: "set null",
+  }),
+});
+
+/* ============================================================
  * TYPY INFEROWANE
  * ============================================================ */
 
@@ -494,3 +530,9 @@ export type InsertTechnologyStage = typeof technologyStages.$inferInsert;
 
 export type TechnologyMaterial = typeof technologyMaterials.$inferSelect;
 export type InsertTechnologyMaterial = typeof technologyMaterials.$inferInsert;
+
+export type BuildTechnologySnapshot = typeof buildTechnologySnapshot.$inferSelect;
+export type InsertBuildTechnologySnapshot = typeof buildTechnologySnapshot.$inferInsert;
+
+export type BuildMaterialPlan = typeof buildMaterialPlan.$inferSelect;
+export type InsertBuildMaterialPlan = typeof buildMaterialPlan.$inferInsert;

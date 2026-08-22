@@ -80,6 +80,11 @@ type Build = {
   status: BuildStatus;
   photosUrl?: string | null;
   settlement?: BuildSettlement;
+  // Faza 0/2 modułu Technologia.
+  clientName?: string | null;
+  address?: string | null;
+  areaM2?: string | null;
+  contractValue?: string | null;
 };
 
 // Single source of truth for colors — mirrors theme.config.js tokens.

@@ -54,6 +54,16 @@ import {
   type BuildMaterialPlanRow,
   type BuildTechnologySnapshotRow,
 } from "@/lib/data/build-technology";
+import {
+  cancelBuildOrder as cancelBuildOrderRemote,
+  generateOrderFromPlan as generateOrderFromPlanRemote,
+  listBuildOrders,
+  markBuildOrderOrdered as markBuildOrderOrderedRemote,
+  receiveBuildOrder as receiveBuildOrderRemote,
+  updateOrderItemQuantity as updateOrderItemQuantityRemote,
+  type BuildOrderRow,
+  type ReceiveBuildOrderItemInput,
+} from "@/lib/data/build-orders";
 export type SavedReportStatus = "submitted" | "approved";
 
 export type SavedReport = {
@@ -404,6 +414,14 @@ function useAppDataState(
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  // Zamówienia jako nagłówek+pozycje (Faza 3) — dla WSZYSTKICH budów naraz,
+  // filtrowane po buildId w UI, ten sam wzorzec co plan materiałowy wyżej.
+  const buildOrdersQuery = useQuery({
+    queryKey: ["buildOrders", "list"],
+    queryFn: listBuildOrders,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (!buildsQuery.data?.length) return;
@@ -619,6 +637,23 @@ function useAppDataState(
       receivedQuantity: number;
       receivedUnitPrice?: number;
     }) => receiveOrderRemote(vars.orderId, vars.receivedQuantity, vars.receivedUnitPrice),
+  });
+  const generateOrderFromPlanMutation = useMutation({
+    mutationFn: (vars: { buildId: number }) => generateOrderFromPlanRemote(vars.buildId),
+  });
+  const updateOrderItemQuantityMutation = useMutation({
+    mutationFn: (vars: { itemId: number; orderedQuantity: number }) =>
+      updateOrderItemQuantityRemote(vars.itemId, vars.orderedQuantity),
+  });
+  const markBuildOrderOrderedMutation = useMutation({
+    mutationFn: (vars: { orderId: number }) => markBuildOrderOrderedRemote(vars.orderId),
+  });
+  const cancelBuildOrderMutation = useMutation({
+    mutationFn: (vars: { orderId: number }) => cancelBuildOrderRemote(vars.orderId),
+  });
+  const receiveBuildOrderMutation = useMutation({
+    mutationFn: (vars: { orderId: number; items: ReceiveBuildOrderItemInput[] }) =>
+      receiveBuildOrderRemote(vars.orderId, vars.items),
   });
   const approveReportMutation = useMutation({
     mutationFn: (vars: { buildId: number; date: string; status: "approved" | "do_poprawy" }) =>
@@ -989,6 +1024,54 @@ function useAppDataState(
       ]);
     } catch (error) {
       reportMutationError(error, "Nie udało się przypisać technologii.");
+    }
+  };
+  // Zamówienia z planu materiałowego (Faza 3) — agregacja
+  // `build_material_plan` w jedno zamówienie ze statusem "robocze".
+  const generateOrderFromPlan = async (buildId: string) => {
+    try {
+      await generateOrderFromPlanMutation.mutateAsync({ buildId: Number(buildId) });
+      await invalidate("buildOrders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się wygenerować zamówienia z planu.");
+    }
+  };
+  const updateOrderItemQuantity = async (itemId: number, orderedQuantity: number) => {
+    if (!orderedQuantity || orderedQuantity <= 0) return;
+    try {
+      await updateOrderItemQuantityMutation.mutateAsync({ itemId, orderedQuantity });
+      await invalidate("buildOrders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać ilości zamawianej.");
+    }
+  };
+  const markBuildOrderOrdered = async (orderId: number) => {
+    try {
+      await markBuildOrderOrderedMutation.mutateAsync({ orderId });
+      await invalidate("buildOrders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się oznaczyć zamówienia jako złożone.");
+    }
+  };
+  const cancelBuildOrder = async (orderId: number) => {
+    try {
+      await cancelBuildOrderMutation.mutateAsync({ orderId });
+      await invalidate("buildOrders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się anulować zamówienia.");
+    }
+  };
+  // Przyjęcie dostawy: każda pozycja z osobną ilością/ceną dopisuje własną
+  // partię (patrz receive_order w 007_faza3_zamowienia.sql) — dlatego po
+  // sukcesie odświeżamy też magazyn, nie tylko listę zamówień.
+  const receiveBuildOrder = async (orderId: number, items: ReceiveBuildOrderItemInput[]) => {
+    const valid = items.filter((i) => i.receivedQuantity > 0);
+    if (valid.length === 0) return;
+    try {
+      await receiveBuildOrderMutation.mutateAsync({ orderId, items: valid });
+      await Promise.all([invalidate("buildOrders"), invalidate("materials")]);
+    } catch (error) {
+      reportMutationError(error, "Nie udało się przyjąć dostawy.");
     }
   };
   const saveWorkdayHours = () => {
@@ -1478,6 +1561,12 @@ function useAppDataState(
       []) as BuildTechnologySnapshotRow[],
     buildMaterialPlans: (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[],
     assignBuildTechnology,
+    buildOrders: (buildOrdersQuery.data ?? []) as BuildOrderRow[],
+    generateOrderFromPlan,
+    updateOrderItemQuantity,
+    markBuildOrderOrdered,
+    cancelBuildOrder,
+    receiveBuildOrder,
     assignments,
     query,
     showMaterial,

@@ -480,6 +480,54 @@ export const buildMaterialPlan = pgTable("build_material_plan", {
 });
 
 /* ============================================================
+ * ZAMÓWIENIA (NAGŁÓWEK + POZYCJE) — Faza 3. Generowane wprost z
+ * `build_material_plan` (Faza 2), RPC `generate_order_from_plan()` /
+ * `receive_order()` — patrz supabase/sql/007_faza3_zamowienia.sql.
+ * Zastępuje (dla budów z przypisaną technologią) dzisiejsze
+ * `material_orders` powyżej — ten flow zostaje bez zmian, dalej działa
+ * dla zamówień spoza planu materiałowego.
+ * ============================================================ */
+
+export const orderStatusV2Enum = pgEnum("order_status", [
+  "robocze",
+  "zamówione",
+  "przyjęte",
+  "anulowane",
+]);
+
+export const buildOrders = pgTable("orders", {
+  id: serial("id").primaryKey(),
+  buildId: integer("build_id")
+    .notNull()
+    .references(() => builds.id, { onDelete: "cascade" }),
+  orderNumber: text("order_number").notNull().unique(),
+  status: orderStatusV2Enum("status").notNull().default("robocze"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  createdBy: text("createdBy"), // uuid (auth.users.id)
+});
+
+export const buildOrderItems = pgTable("order_items", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id")
+    .notNull()
+    .references(() => buildOrders.id, { onDelete: "cascade" }),
+  materialName: text("material_name").notNull(),
+  linkedMaterialId: integer("linked_material_id").references(() => materials.id, {
+    onDelete: "set null",
+  }),
+  plannedQuantity: decimal("planned_quantity", { precision: 12, scale: 3 })
+    .notNull()
+    .default("0"),
+  orderedQuantity: decimal("ordered_quantity", { precision: 12, scale: 3 })
+    .notNull()
+    .default("0"),
+  unit: text("unit").notNull().default("kg"),
+  receivedQuantity: decimal("received_quantity", { precision: 12, scale: 3 }),
+  receivedUnitPrice: decimal("received_unit_price", { precision: 12, scale: 2 }),
+});
+
+/* ============================================================
  * TYPY INFEROWANE
  * ============================================================ */
 
@@ -536,3 +584,9 @@ export type InsertBuildTechnologySnapshot = typeof buildTechnologySnapshot.$infe
 
 export type BuildMaterialPlan = typeof buildMaterialPlan.$inferSelect;
 export type InsertBuildMaterialPlan = typeof buildMaterialPlan.$inferInsert;
+
+export type BuildOrder = typeof buildOrders.$inferSelect;
+export type InsertBuildOrder = typeof buildOrders.$inferInsert;
+
+export type BuildOrderItem = typeof buildOrderItems.$inferSelect;
+export type InsertBuildOrderItem = typeof buildOrderItems.$inferInsert;

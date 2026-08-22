@@ -156,6 +156,21 @@ przypisania** (RPC `assign_technology_to_build()`), więc późniejsza
 zmiana/nowa wersja technologii już nie rusza tej budowy. Nowe tabele:
 `build_technology_snapshot`, `build_material_plan`.
 
+**Faza 3 (gotowa)** — [`supabase/sql/007_faza3_zamowienia.sql`](./supabase/sql/007_faza3_zamowienia.sql).
+Uruchom PO `006`. W karcie budowy — sekcja **Zamówienia**: przycisk
+"+ Z planu" agreguje `build_material_plan` (po materiale, jednostce i
+ewentualnym powiązaniu z magazynem) w jedno zamówienie ze statusem
+"robocze" (RPC `generate_order_from_plan()`); ilość zamawianą można
+poprawić względem planowanej (zaokrąglenia do opakowań), dopóki
+zamówienie jest robocze. "Złożono u dostawcy" → status "zamówione";
+"Dostawa dotarła" → RPC `receive_order()` dopisuje osobną partię per
+pozycja (własna cena, tak jak przy pojedynczych zamówieniach) i
+zamyka zamówienie statusem "przyjęte". Nowe tabele: `orders`
+(nagłówek), `order_items` (pozycje) — **nie zastępują** istniejącego
+`material_orders`/`lib/data/orders.ts` (zamówienia pojedynczego
+materiału spoza planu, np. przy brakach magazynowych) — oba flow
+działają obok siebie.
+
 ## 6. Co jest zaimplementowane
 
 `lib/data/*.ts` — warstwa danych (cały serwer Express/tRPC —
@@ -170,8 +185,12 @@ patrz uwaga w punkcie 7) i endpoint do Google Drive):
 - `lib/data/materials.ts` — magazyn: lista, nowy materiał (+ partia
   startowa), zmiana ceny, korekta stanu (FIFO).
 - `lib/data/employees.ts` — pracownicy: lista, nowy, stawka godzinowa.
-- `lib/data/orders.ts` — zamówienia materiałów: lista, nowe, oznaczenie
-  jako złożone, przyjęcie dostawy (dopisuje partię).
+- `lib/data/orders.ts` — zamówienia materiałów (pojedynczy materiał,
+  spoza planu): lista, nowe, oznaczenie jako złożone, przyjęcie
+  dostawy (dopisuje partię).
+- `lib/data/build-orders.ts` — zamówienia z planu materiałowego (Faza
+  3): generowanie z `build_material_plan`, edycja ilości zamawianej,
+  złożenie u dostawcy, przyjęcie dostawy wielopozycyjnej.
 - `lib/data/build-materials.ts` — przypisania materiałów do budów.
 - `lib/data/reports.ts` — zapis raportu dziennego (FIFO + upsert po
   buildId+date), zatwierdzanie/odsyłanie do poprawy, **`listReports()`**

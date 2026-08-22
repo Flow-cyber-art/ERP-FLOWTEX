@@ -1,0 +1,27 @@
+--- app/_layout.tsx  (ROOT layout) — zastąp CAŁY blok providerInitialMetrics
++++ nowa wersja
+
+  const providerInitialMetrics = useMemo(() => {
+    const metrics = initialWindowMetrics ?? {
+      insets: initialInsets,
+      frame: initialFrame,
+    };
+
+    // WEB: nie zgadujemy insetów. app/+html.tsx ma już
+    // `viewport-fit=cover`, więc webowa implementacja
+    // SafeAreaProvider odczytuje prawdziwe env(safe-area-inset-*).
+    // Wcześniejsze Math.max(insets.bottom, 12) dokładało 12 px na
+    // sztywno, a dolny pasek w index.tsx dodawał kolejne 12 —
+    // margines liczony dwa razy.
+    if (Platform.OS === "web") return metrics;
+
+    // NATIVE: minimum tylko u góry (notch). Dół zostawiamy systemowi,
+    // bo inset dolny konsumuje wyłącznie pasek nawigacji z index.tsx.
+    return {
+      ...metrics,
+      insets: {
+        ...metrics.insets,
+        top: Math.max(metrics.insets.top, 12),
+      },
+    };
+  }, [initialInsets, initialFrame]);

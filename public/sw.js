@@ -1,0 +1,108 @@
+// Service worker aplikacji Budowy — offline dla statycznych assetów
+// (JS/CSS/obrazki/fonty), NIE dla API i NIE dla version.json.
+//
+// Nazwa cache'a zawiera CACHE_VERSION — ta wartość jest podbijana ręcznie
+// tylko gdy zmienia się LOGIKA tego service workera (np. inna strategia
+// cache'owania). Nie trzeba jej ruszać przy zwykłych wdrożeniach appki —
+// od tego jest osobny mechanizm: app/version.json + BUILD_VERSION,
+// patrz lib/pwa/useVersionCheck.ts.
+const CACHE_VERSION = "v1";
+const CACHE_NAME = `budowy-static-${CACHE_VERSION}`;
+
+// Ścieżki, które NIGDY nie mają trafić do cache'a — zawsze świeże z
+// sieci. To m.in. dane biznesowe (tRPC/API) i plik wersji, który służy
+// właśnie do wykrywania nowego builda (gdyby był cache'owany, apka
+// nigdy nie zauważyłaby aktualizacji).
+const NEVER_CACHE_PATTERNS = [
+  /\/api\//,
+  /\/trpc\b/,
+  /\/version\.json(\?.*)?$/,
+  /\/manus-storage\//,
+];
+
+function shouldBypassCache(url) {
+  return NEVER_CACHE_PATTERNS.some((re) => re.test(url.pathname));
+}
+
+// Tylko GET-y do własnego origin trafiają do cache'a — nie cache'ujemy
+// requestów cross-origin (fonty/CDN mają własne reguły przeglądarki) ani
+// mutacji.
+function isCacheableStaticAsset(request, url) {
+  return (
+    request.method === "GET" &&
+    url.origin === self.location.origin &&
+    !shouldBypassCache(url)
+  );
+}
+
+self.addEventListener("install", () => {
+  // Nie czekamy na zamknięcie starych tabów — nowy SW przejmuje kontrolę
+  // dopiero gdy dostanie komunikat SKIP_WAITING (patrz niżej), żeby nie
+  // podmieniać assetów pod użytkownikiem w trakcie pracy bez ostrzeżenia.
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key.startsWith("budowy-static-") && key !== CACHE_NAME)
+          .map((key) => caches.delete(key)),
+      );
+      await self.clients.claim();
+    })(),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  if (!isCacheableStaticAsset(request, url)) {
+    // Sieć bez pytania cache'a — API/tRPC/version.json mają być zawsze
+    // aktualne. Jeśli sieci nie ma, request po prostu failuje (offline
+    // = brak danych z serwera, ale statyczna powłoka appki dalej działa).
+    return;
+  }
+
+  // Stale-while-revalidate: od razu oddajemy to co w cache'u (szybko,
+  // działa offline), a w tle dociągamy świeżą wersję i podmieniamy wpis
+  // na przyszłość. Dzięki temu zwykłe odświeżenie assetów (np. po
+  // deployu, zanim useVersionCheck zdąży wymusić pełny reset cache'a)
+  // dzieje się samo, bez migania/białego ekranu.
+  event.respondWith(
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request);
+      const networkPromise = fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        })
+        .catch(() => undefined);
+      return cached || (await networkPromise) || Response.error();
+    })(),
+  );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+  if (event.data?.type === "CLEAR_CACHE") {
+    event.waitUntil(
+      (async () => {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter((key) => key.startsWith("budowy-static-"))
+            .map((key) => caches.delete(key)),
+        );
+      })(),
+    );
+  }
+});

@@ -1,0 +1,1541 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert } from "react-native";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { enqueueReport } from "@/lib/offline-outbox";
+import {
+  closeBuild as closeBuildRemote,
+  createBuild,
+  listBuilds,
+  reopenBuild as reopenBuildRemote,
+  updateBuildPhotosUrl as updateBuildPhotosUrlRemote,
+} from "@/lib/data/builds";
+import {
+  adjustMaterialStock as adjustMaterialStockRemote,
+  createMaterial,
+  listMaterials,
+  updateMaterialPrice as updateMaterialPriceRemote,
+} from "@/lib/data/materials";
+import {
+  createEmployee,
+  listEmployees,
+  updateEmployeeRate as updateEmployeeRateRemote,
+} from "@/lib/data/employees";
+import {
+  createOrder as createOrderRemote,
+  listOrders,
+  markOrderOrdered as markOrderOrderedRemote,
+  receiveOrder as receiveOrderRemote,
+} from "@/lib/data/orders";
+import {
+  commitBuildMaterials,
+  listBuildMaterials,
+} from "@/lib/data/build-materials";
+import {
+  listReports,
+  submitDailyReport,
+  updateReportStatus,
+  type ReportRow,
+} from "@/lib/data/reports";
+import { useRealtimeSync } from "@/lib/data/use-realtime-sync";
+import { createBuildDriveFolder } from "@/lib/data/drive";
+export type SavedReportStatus = "submitted" | "approved";
+
+export type SavedReport = {
+  id: string;
+  date: string;
+  buildId: string;
+  buildNumber: string;
+  buildName: string;
+  materialValues: Record<string, string>;
+  // Rzeczywisty koszt FIFO doliczony w TYM raporcie, per materiał —
+  // niezależny od skumulowanego buildMaterialActualCost (ten sumuje
+  // wszystkie raporty budowy razem). Bez tego ReportCard nie ma jak
+  // pokazać kwoty przy pojedynczej pozycji materiałowej raportu.
+  // Kumulatywny w obrębie edycji tego samego raportu, tak samo jak
+  // buildMaterialActualCost: zmniejszenie zużycia nie odejmuje kosztu.
+  materialCosts: Record<string, number>;
+  reasons: Record<string, string>;
+  people: { employeeId: string; start: string; end: string }[];
+  extraCosts: ExtraCost[];
+  status: SavedReportStatus;
+  updatedAt: string;
+};
+
+import {
+  todayISO,
+  initialMaterials,
+  initialBuilds,
+  initialAssignments,
+  initialEmployees,
+  initialTimeEntries,
+  type MaterialOrder,
+  type MaterialBatch,
+  type ExtraCost,
+  type Build,
+  type BuildSettlement,
+  type Material,
+  type Assignment,
+  type Employee,
+} from "@/components/report-ui";
+
+// Mapuje wiersz z bazy (reports + zagnieżdżone report_materials/
+// report_people/report_extra_costs/builds, patrz lib/data/reports.ts)
+// na kształt SavedReport używany w całej reszcie apki — żeby ekrany
+// (ReportCard, "Moje raporty", "Raporty") nie musiały wiedzieć, czy
+// dany raport przyszedł z serwera, czy jest jeszcze lokalny/offline.
+function mapReportRowToSavedReport(row: ReportRow): SavedReport {
+  const materialValues: Record<string, string> = {};
+  const materialCosts: Record<string, number> = {};
+  const reasons: Record<string, string> = {};
+  for (const m of row.report_materials) {
+    const key = String(m.materialId);
+    materialValues[key] = m.usedQuantity;
+    materialCosts[key] = Number(m.cost);
+    if (m.reason) reasons[key] = m.reason;
+  }
+  return {
+    id: String(row.id),
+    date: row.date,
+    buildId: String(row.buildId),
+    buildNumber: row.builds?.number ?? "",
+    buildName: row.builds?.name ?? "",
+    materialValues,
+    materialCosts,
+    reasons,
+    people: row.report_people.map((p) => ({
+      employeeId: String(p.employeeId),
+      start: p.start.slice(0, 5),
+      end: p.end.slice(0, 5),
+    })),
+    extraCosts: row.report_extra_costs.map((c) => ({
+      id: String(c.id),
+      label: c.label,
+      amount: Number(c.amount),
+      note: c.note ?? undefined,
+    })),
+    status: row.status === "approved" ? "approved" : "submitted",
+    updatedAt: row.updatedAt,
+  };
+}
+
+// Central store for every piece of app data (materials, builds,
+// assignments, employees, time entries, orders, and all of the draft/
+// form state that feeds the report/warehouse/admin screens). Screens
+// consume this via useAppData() instead of holding their own local
+// state, so each screen can be code-split (and role-gated) without
+// losing access to shared data.
+function useAppDataState(
+  initialRole: "Admin" | "Brygadzista" | "Pracownik" = "Brygadzista",
+) {
+  const [tab, setTab] = useState(
+    initialRole === "Pracownik"
+      ? "worker"
+      : initialRole === "Admin"
+        ? "warehouse"
+        : "report",
+  );
+  const [devRole, setDevRole] = useState<"Admin" | "Brygadzista" | "Pracownik">(
+    initialRole,
+  );
+  const [workerPeriod, setWorkerPeriod] = useState<
+    "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
+  >("Dzień");
+  const [teamPeriod, setTeamPeriod] = useState<
+    "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
+  >("Dzień");
+  const [supervisedEmployeeIds, setSupervisedEmployeeIds] = useState(
+    initialEmployees
+      .filter((employee) => employee.role === "Pracownik")
+      .map((employee) => employee.id),
+  );
+  const [supervisorPickerOpen, setSupervisorPickerOpen] = useState(false);
+  const [workerEmployeeId, setWorkerEmployeeId] = useState(
+    initialEmployees.find((employee) => employee.role === "Pracownik")?.id ||
+      initialEmployees[0].id,
+  );
+  const [materials, setMaterials] = useState(initialMaterials);
+  // Partie zakupowe — źródło prawdy dla stanu i ceny. `materials[].stock`
+  // i `.unitPrice` zostają jako pola pochodne (suma / średnia ważona
+  // partii), przeliczane przy każdej zmianie, żeby reszta aplikacji
+  // (braki, koszty budów, listy) mogła dalej z nich korzystać bez zmian.
+  const [materialBatches, setMaterialBatches] = useState<MaterialBatch[]>(
+    () =>
+      initialMaterials
+        .filter((m) => m.stock > 0)
+        .map((m) => ({
+          id: `batch-init-${m.id}`,
+          materialId: m.id,
+          quantity: m.stock,
+          unitPrice: m.unitPrice,
+          receivedAt: todayISO(),
+          source: "stan początkowy",
+        })),
+  );
+  // --- Poniższe to CZYSTE funkcje (biorą tablicę partii, zwracają nową) ---
+  // celowo nie czytają stanu z domknięcia — inaczej kilka wywołań pod rząd
+  // w jednym handlerze (np. raport z kilkoma materiałami) nadpisywałoby się
+  // nawzajem, bo każde bazowałoby na tym samym, nieodświeżonym stanie.
+
+  // Przelicza stock/unitPrice materiałów na podstawie ich partii (suma
+  // ilości, cena = średnia ważona).
+  const recalcMaterialsFromBatches = (
+    prevMaterials: Material[],
+    batches: MaterialBatch[],
+    affectedIds: Set<string>,
+  ) =>
+    prevMaterials.map((m) => {
+      if (!affectedIds.has(m.id)) return m;
+      const rows = batches.filter((b) => b.materialId === m.id);
+      const stock = rows.reduce((sum, b) => sum + b.quantity, 0);
+      const value = rows.reduce((sum, b) => sum + b.quantity * b.unitPrice, 0);
+      return { ...m, stock, unitPrice: stock > 0 ? value / stock : 0 };
+    });
+  const addBatchPure = (
+    batches: MaterialBatch[],
+    batch: Omit<MaterialBatch, "id">,
+  ) => [
+    ...batches,
+    {
+      ...batch,
+      id: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    },
+  ];
+  // Zdejmuje ilość metodą FIFO — najpierw z najstarszych partii, żeby
+  // koszt zużycia odzwierciedlał realną cenę zakupu tego towaru.
+  const consumeFIFOPure = (
+    batches: MaterialBatch[],
+    materialId: string,
+    amount: number,
+  ) => {
+    let remaining = amount;
+    const sorted = batches
+      .filter((b) => b.materialId === materialId)
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id));
+    const consumedIds: Record<string, number> = {};
+    for (const b of sorted) {
+      if (remaining <= 0) break;
+      const take = Math.min(b.quantity, remaining);
+      consumedIds[b.id] = take;
+      remaining -= take;
+    }
+    return batches
+      .map((b) =>
+        consumedIds[b.id] !== undefined
+          ? { ...b, quantity: b.quantity - consumedIds[b.id] }
+          : b,
+      )
+      .filter((b) => b.quantity > 0.0001);
+  };
+  // Jak consumeFIFOPure, ale dodatkowo zwraca faktyczny koszt (PLN) tego
+  // konkretnego zdjęcia — sumę quantity×unitPrice partii, z których
+  // realnie zeszła ilość. To jest podstawa realnego kosztu budowy,
+  // niezależna od jednej uśrednionej ceny materiału.
+  const consumeFIFOWithCostPure = (
+    batches: MaterialBatch[],
+    materialId: string,
+    amount: number,
+  ) => {
+    let remaining = amount;
+    let cost = 0;
+    const sorted = batches
+      .filter((b) => b.materialId === materialId)
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id));
+    const consumedIds: Record<string, number> = {};
+    for (const b of sorted) {
+      if (remaining <= 0) break;
+      const take = Math.min(b.quantity, remaining);
+      consumedIds[b.id] = take;
+      cost += take * b.unitPrice;
+      remaining -= take;
+    }
+    const nextBatches = batches
+      .map((b) =>
+        consumedIds[b.id] !== undefined
+          ? { ...b, quantity: b.quantity - consumedIds[b.id] }
+          : b,
+      )
+      .filter((b) => b.quantity > 0.0001);
+    return { batches: nextBatches, cost };
+  };
+  // (przyjęcie zamówienia, ręczna korekta stanu — nie ma ryzyka utraty
+  // zmian z kilku wywołań pod rząd).
+  const addMaterialBatch = (batch: Omit<MaterialBatch, "id">) => {
+    const nextBatches = addBatchPure(materialBatches, batch);
+    setMaterialBatches(nextBatches);
+    setMaterials((prev) =>
+      recalcMaterialsFromBatches(prev, nextBatches, new Set([batch.materialId])),
+    );
+  };
+  const consumeMaterialBatchesFIFO = (materialId: string, amount: number) => {
+    const nextBatches = consumeFIFOPure(materialBatches, materialId, amount);
+    setMaterialBatches(nextBatches);
+    setMaterials((prev) =>
+      recalcMaterialsFromBatches(prev, nextBatches, new Set([materialId])),
+    );
+  };
+  const [builds, setBuilds] = useState(initialBuilds);
+  // Skumulowany, RZECZYWISTY koszt materiału zużytego na danej budowie —
+  // klucz `${buildId}:${materialId}`. Rośnie przy każdym raporcie
+  // brygadzisty o realny koszt FIFO tej konkretnej partii, którą zdjął.
+  // Niezależny od Assignment.unitPrice (to tylko cena szacunkowa z
+  // momentu planowania budowy).
+  const [buildMaterialActualCost, setBuildMaterialActualCost] = useState<
+    Record<string, number>
+  >({});
+  const [assignments, setAssignments] = useState(initialAssignments);
+  const [query, setQuery] = useState("");
+  const [showMaterial, setShowMaterial] = useState(false);
+  const [showBuild, setShowBuild] = useState(false);
+  const [showAssignment, setShowAssignment] = useState(false);
+  // Aktywne/Archiwum na ekranie Budowy. Trzymane tu (nie lokalnie w
+  // BuildsScreen), bo na desktopie steruje tym osobna pozycja menu w
+  // sidebarze (app/(tabs)/index.tsx), a na mobile — powtórne wciśnięcie
+  // przycisku "Budowy" w dolnym pasku.
+  const [buildsView, setBuildsView] = useState<"active" | "archive">(
+    "active",
+  );
+  const [selectedBuildId, setSelectedBuildId] = useState(initialBuilds[0].id);
+  const [selectedMaterialId, setSelectedMaterialId] = useState(
+    initialMaterials[0].id,
+  );
+  const [plannedAmount, setPlannedAmount] = useState("");
+  const [picker, setPicker] = useState<"build" | "material" | null>(null);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [draftAssignments, setDraftAssignments] = useState<
+    { materialId: string; planned: number }[]
+  >([]);
+  const [newMaterial, setNewMaterial] = useState({
+    name: "",
+    index: "",
+    unit: "szt.",
+    stock: "0",
+    unitPrice: "0",
+  });
+  const [newBuild, setNewBuild] = useState({
+    number: "",
+    name: "",
+    manager: "",
+    startDate: todayISO(),
+    durationDays: "",
+  });
+  const [workdayHours, setWorkdayHours] = useState(8);
+  const [workdayHoursInput, setWorkdayHoursInput] = useState("8");
+  const [reportValues, setReportValues] = useState<Record<string, string>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [reportSaved, setReportSaved] = useState(false);
+  const [reportStep, setReportStep] = useState<1 | 2 | 3>(1);
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [employees, setEmployees] = useState(initialEmployees);
+  const [timeEntries, setTimeEntries] = useState(initialTimeEntries);
+
+  // --- Supabase jako źródło prawdy dla budów/materiałów/pracowników/
+  // zamówień/przypisań/raportów — bezpośrednio, anon key + RLS, bez
+  // pośredniczącego serwera Express/tRPC (Railway). Nie zastępuje
+  // mechanizmu AsyncStorage poniżej (efekt "budowy-simulator") — ten
+  // zostaje jako lokalny cache do odczytu offline (brygadzista bez
+  // zasięgu wciąż widzi ostatnio pobrany stan budowy/materiałów, żeby móc
+  // wypełnić raport). Gdy jest sieć, świeże dane z bazy nadpisują ten cache.
+  const queryClient = useQueryClient();
+  useRealtimeSync(queryClient);
+  const buildsQuery = useQuery({
+    queryKey: ["builds", "list"],
+    queryFn: listBuilds,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  const materialsQuery = useQuery({
+    queryKey: ["materials", "list"],
+    queryFn: listMaterials,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  const employeesQuery = useQuery({
+    queryKey: ["employees", "list"],
+    queryFn: listEmployees,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (!buildsQuery.data?.length) return;
+    setBuilds((previous) =>
+      buildsQuery.data.map((b) => {
+        // Zachowaj lokalnie policzony snapshot rozliczenia (settlement),
+        // bo dziś żyje tylko w AsyncStorage, nie w Supabase.
+        const existing = previous.find((p) => p.id === String(b.id));
+        return {
+          id: String(b.id),
+          number: b.number,
+          name: b.name,
+          manager: b.manager ?? "",
+          startDate: b.startDate,
+          durationDays: b.durationDays,
+          status: b.status,
+          photosUrl: b.photosUrl,
+          settlement: existing?.settlement,
+        };
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildsQuery.data]);
+
+  useEffect(() => {
+    if (!materialsQuery.data?.length) return;
+    const rows = materialsQuery.data.map((m) => ({
+      id: String(m.id),
+      name: m.name,
+      index: m.index,
+      unit: m.unit,
+      stock: Number(m.stock),
+      min: Number(m.min),
+      unitPrice: Number(m.unitPrice),
+    })) satisfies Material[];
+    setMaterials(rows);
+    // Partie nie są jeszcze pobierane z material_batches (osobny krok) —
+    // do tego czasu odtwarzamy jedną partię "stan początkowy" per
+    // materiał na bazie stock/unitPrice z bazy, tak jak dotychczas dla
+    // danych lokalnych, żeby FIFO w raportach miało z czego zdejmować.
+    setMaterialBatches(
+      rows
+        .filter((m) => m.stock > 0)
+        .map((m) => ({
+          id: `batch-init-${m.id}`,
+          materialId: m.id,
+          quantity: m.stock,
+          unitPrice: m.unitPrice,
+          receivedAt: todayISO(),
+          source: "stan początkowy",
+        })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [materialsQuery.data]);
+
+  useEffect(() => {
+    if (!employeesQuery.data?.length) return;
+    setEmployees(
+      employeesQuery.data.map((e) => ({
+        id: String(e.id),
+        name: e.name,
+        role: e.role,
+        hourlyRate: Number(e.hourlyRate),
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employeesQuery.data]);
+
+  const ordersQuery = useQuery({
+    queryKey: ["orders", "list"],
+    queryFn: listOrders,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    if (!ordersQuery.data) return;
+    setOrders(
+      ordersQuery.data.map((o) => ({
+        id: String(o.id),
+        materialId: o.materialId ? String(o.materialId) : undefined,
+        materialName: o.materialName,
+        quantity: Number(o.quantity),
+        unit: o.unit,
+        status: o.status,
+        createdAt: o.createdAt.slice(0, 10),
+        orderedAt: o.orderedAt ? o.orderedAt.slice(0, 10) : undefined,
+        receivedQuantity: o.receivedQuantity
+          ? Number(o.receivedQuantity)
+          : undefined,
+        receivedUnitPrice: o.receivedUnitPrice
+          ? Number(o.receivedUnitPrice)
+          : undefined,
+        receivedAt: o.receivedAt ? o.receivedAt.slice(0, 10) : undefined,
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordersQuery.data]);
+
+  const buildMaterialsQuery = useQuery({
+    queryKey: ["buildMaterials", "list"],
+    queryFn: listBuildMaterials,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    if (!buildMaterialsQuery.data) return;
+    setAssignments(
+      buildMaterialsQuery.data.map((a) => ({
+        buildId: String(a.buildId),
+        materialId: String(a.materialId),
+        planned: Number(a.planned),
+        used: Number(a.used),
+        unitPrice: Number(a.unitPrice),
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildMaterialsQuery.data]);
+
+  // Raporty: dawniej WYŁĄCZNIE lokalny stan (savedReports), nigdy nie
+  // odpytywany z bazy — admin logujący się z innego urządzenia niż to,
+  // z którego brygadzista wysłał raport, nie widział go w ogóle. Teraz
+  // pobierane z Supabase i SCALANE z lokalnym stanem: wersja z serwera
+  // (ma autorytatywny koszt FIFO policzony w RPC, patrz
+  // lib/data/reports.ts) nadpisuje lokalny wpis o tym samym
+  // buildId+date, a wpisy, które jeszcze nie zdążyły się zsynchronizować
+  // (kolejka offline) zostają bez zmian, dopóki nie dotrą do bazy.
+  const reportsQuery = useQuery({
+    queryKey: ["reports", "list"],
+    queryFn: listReports,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    if (!reportsQuery.data) return;
+    const serverReports = reportsQuery.data.map(mapReportRowToSavedReport);
+    const serverKeys = new Set(
+      serverReports.map((r) => `${r.buildId}:${r.date}`),
+    );
+    setSavedReports((previous) => {
+      const localOnly = previous.filter(
+        (r) => !serverKeys.has(`${r.buildId}:${r.date}`),
+      );
+      return [...serverReports, ...localOnly].sort((a, b) =>
+        b.updatedAt.localeCompare(a.updatedAt),
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportsQuery.data]);
+  // Do plakietek nawigacji (patrz app/(tabs)/index.tsx): ile raportów
+  // czeka na admina, ile wróciło "do poprawy" do brygadzisty. Liczone z
+  // SUROWEGO statusu z bazy (nie ze zwężonego SavedReportStatus, który
+  // ma tylko submitted/approved), żeby odróżnić te dwa przypadki.
+  const reportsPendingApprovalCount = (reportsQuery.data ?? []).filter(
+    (r) => r.status !== "approved",
+  ).length;
+  const reportsNeedingFixCount = (reportsQuery.data ?? []).filter(
+    (r) => r.status === "do_poprawy",
+  ).length;
+
+  // --- Mutacje online (materiały/budowy/pracownicy/zamówienia/przypisania).
+  // W przeciwieństwie do raportu dziennego, te NIE przechodzą przez kolejkę
+  // offline — to typowe operacje panelu Admina/Magazynu/HR wykonywane przy
+  // biurku, z założeniem że jest sieć. Brak połączenia kończy się czytelnym
+  // komunikatem zamiast cichego, potencjalnie niespójnego zapisu lokalnego.
+  const invalidate = (key: string) =>
+    queryClient.invalidateQueries({ queryKey: [key, "list"] });
+  const createMaterialMutation = useMutation({ mutationFn: createMaterial });
+  const updateMaterialPriceMutation = useMutation({
+    mutationFn: (vars: { materialId: number; unitPrice: number }) =>
+      updateMaterialPriceRemote(vars.materialId, vars.unitPrice),
+  });
+  const adjustMaterialStockMutation = useMutation({
+    mutationFn: (vars: { materialId: number; newStock: number }) =>
+      adjustMaterialStockRemote(vars.materialId, vars.newStock),
+  });
+  const createBuildMutation = useMutation({ mutationFn: createBuild });
+  const closeBuildMutation = useMutation({
+    mutationFn: (vars: { buildId: number }) => closeBuildRemote(vars.buildId),
+  });
+  const reopenBuildMutation = useMutation({
+    mutationFn: (vars: { buildId: number }) => reopenBuildRemote(vars.buildId),
+  });
+  const updateBuildPhotosUrlMutation = useMutation({
+    mutationFn: (vars: { buildId: number; photosUrl: string }) =>
+      updateBuildPhotosUrlRemote(vars.buildId, vars.photosUrl),
+  });
+  const commitAssignmentsMutation = useMutation({
+    mutationFn: (vars: {
+      buildId: number;
+      items: { materialId: number; planned: number }[];
+    }) => commitBuildMaterials(vars.buildId, vars.items),
+  });
+  const createEmployeeMutation = useMutation({ mutationFn: createEmployee });
+  const updateEmployeeRateMutation = useMutation({
+    mutationFn: (vars: { employeeId: number; hourlyRate: number }) =>
+      updateEmployeeRateRemote(vars.employeeId, vars.hourlyRate),
+  });
+  const createOrderMutation = useMutation({ mutationFn: createOrderRemote });
+  const markOrderOrderedMutation = useMutation({
+    mutationFn: (vars: { orderId: number }) => markOrderOrderedRemote(vars.orderId),
+  });
+  const receiveOrderMutation = useMutation({
+    mutationFn: (vars: {
+      orderId: number;
+      receivedQuantity: number;
+      receivedUnitPrice?: number;
+    }) => receiveOrderRemote(vars.orderId, vars.receivedQuantity, vars.receivedUnitPrice),
+  });
+  const approveReportMutation = useMutation({
+    mutationFn: (vars: { buildId: number; date: string; status: "approved" | "do_poprawy" }) =>
+      updateReportStatus(vars.buildId, vars.date, vars.status),
+  });
+
+  function reportMutationError(error: unknown, fallback: string) {
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message?: unknown }).message)
+        : fallback;
+    Alert.alert("Nie udało się zapisać", message || fallback);
+  }
+
+  const [newEmployee, setNewEmployee] = useState({
+    name: "",
+    role: "Pracownik",
+    hourlyRate: "",
+  });
+  const [hrSaved, setHrSaved] = useState(false);
+  const [reportStatus, setReportStatus] = useState<
+    "roboczy" | "wysłany" | "do poprawy" | "zatwierdzony"
+  >("roboczy");
+  const [adminComment, setAdminComment] = useState("");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(
+    initialEmployees[0].id,
+  );
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
+  const [personStart, setPersonStart] = useState("07:00");
+  const [personEnd, setPersonEnd] = useState("15:00");
+  useEffect(() => {
+    AsyncStorage.getItem("lastPersonTime").then((raw) => {
+      if (!raw) return;
+      try {
+        const saved = JSON.parse(raw);
+        if (saved.start) setPersonStart(saved.start);
+        if (saved.end) setPersonEnd(saved.end);
+      } catch {}
+    });
+  }, []);
+  const [timePicker, setTimePicker] = useState<"start" | "end" | null>(null);
+  const [draftPeople, setDraftPeople] = useState<
+    { employeeId: string; start: string; end: string }[]
+  >([]);
+  const [draftExtraCosts, setDraftExtraCosts] = useState<ExtraCost[]>([]);
+  const [orders, setOrders] = useState<MaterialOrder[]>([]);
+  const [orderMaterialName, setOrderMaterialName] = useState("");
+  const [orderQuantity, setOrderQuantity] = useState("");
+  const [orderSaved, setOrderSaved] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem("budowy-simulator").then((raw) => {
+      if (raw) {
+        const d = JSON.parse(raw);
+        setMaterials(
+          (d.materials || initialMaterials).map((m: Material) => ({
+            ...m,
+            unitPrice: m.unitPrice || 0,
+          })),
+        );
+        setBuilds(
+          (d.builds || initialBuilds).map((b: Build) => ({
+            ...b,
+            status: b.status || "aktywna",
+          })),
+        );
+        setAssignments(
+          (d.assignments || initialAssignments).map((a: Assignment) => ({
+            ...a,
+            unitPrice: a.unitPrice || 0,
+          })),
+        );
+        setEmployees(
+          (d.employees || initialEmployees).map((e: Employee) => ({
+            ...e,
+            hourlyRate: e.hourlyRate || 0,
+          })),
+        );
+        setTimeEntries(d.timeEntries || initialTimeEntries);
+        setOrders(d.orders || []);
+        setSavedReports(d.savedReports || []);
+        if (d.workdayHours) {
+          setWorkdayHours(d.workdayHours);
+          setWorkdayHoursInput(String(d.workdayHours));
+        }
+      }
+    });
+  }, []);
+  useEffect(() => {
+    AsyncStorage.setItem(
+      "budowy-simulator",
+      JSON.stringify({
+        materials,
+        builds,
+        assignments,
+        employees,
+        timeEntries,
+        orders,
+        workdayHours,
+        savedReports,
+      }),
+    );
+  }, [
+    materials,
+    builds,
+    assignments,
+    employees,
+    timeEntries,
+    orders,
+    workdayHours,
+    savedReports,
+  ]);
+  const filtered = useMemo(
+    () =>
+      materials.filter((m) =>
+        `${m.name} ${m.index}`.toLowerCase().includes(query.toLowerCase()),
+      ),
+    [materials, query],
+  );
+  const workerEntries = useMemo(() => {
+    const today = new Date();
+    return timeEntries.filter((entry) => {
+      if (entry.employeeId !== workerEmployeeId) return false;
+      const date = new Date(`${entry.date}T12:00:00`);
+      if (workerPeriod === "Dzień") return entry.date === todayISO();
+      if (workerPeriod === "Rok")
+        return date.getFullYear() === today.getFullYear();
+      if (workerPeriod === "Miesiąc")
+        return (
+          date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth()
+        );
+      const difference = Math.round(
+        (today.getTime() - date.getTime()) / 86400000,
+      );
+      return difference >= 0 && difference < 7;
+    });
+  }, [timeEntries, workerEmployeeId, workerPeriod]);
+  const workerChart = useMemo(() => {
+    const grouped = new Map<string, number>();
+    workerEntries.forEach((entry) =>
+      grouped.set(entry.date, (grouped.get(entry.date) || 0) + entry.hours),
+    );
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-7)
+      .map(([date, hours]) => ({ date, hours }));
+  }, [workerEntries]);
+  const teamEntries = useMemo(() => {
+    const today = new Date();
+    return timeEntries.filter((entry) => {
+      if (!supervisedEmployeeIds.includes(entry.employeeId)) return false;
+      const date = new Date(`${entry.date}T12:00:00`);
+      if (teamPeriod === "Dzień") return entry.date === todayISO();
+      if (teamPeriod === "Rok")
+        return date.getFullYear() === today.getFullYear();
+      if (teamPeriod === "Miesiąc")
+        return (
+          date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth()
+        );
+      const difference = Math.round(
+        (today.getTime() - date.getTime()) / 86400000,
+      );
+      return difference >= 0 && difference < 7;
+    });
+  }, [timeEntries, supervisedEmployeeIds, teamPeriod]);
+  const teamChart = useMemo(() => {
+    const grouped = new Map<string, number>();
+    teamEntries.forEach((entry) =>
+      grouped.set(entry.date, (grouped.get(entry.date) || 0) + entry.hours),
+    );
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-7)
+      .map(([date, hours]) => ({ date, hours }));
+  }, [teamEntries]);
+  const activeBuild = builds.find((b) => b.id === selectedBuildId) || builds[0];
+  const buildAssignments = assignments.filter(
+    (a) => a.buildId === activeBuild?.id,
+  );
+  const shortages = useMemo(() => {
+    const needed = new Map<string, number>();
+    assignments.forEach((a) =>
+      needed.set(a.materialId, (needed.get(a.materialId) || 0) + a.planned),
+    );
+    return materials
+      .map((m) => ({
+        material: m,
+        needed: needed.get(m.id) || 0,
+        missing: Math.max(0, (needed.get(m.id) || 0) - m.stock),
+      }))
+      .filter((row) => row.missing > 0);
+  }, [materials, assignments]);
+  const addToDraft = () => {
+    const amount = Number(plannedAmount);
+    if (!selectedBuildId || !selectedMaterialId || !amount || amount <= 0)
+      return;
+    const existing = draftAssignments.find(
+      (a) => a.materialId === selectedMaterialId,
+    );
+    if (existing)
+      setDraftAssignments(
+        draftAssignments.map((a) =>
+          a.materialId === selectedMaterialId
+            ? { ...a, planned: a.planned + amount }
+            : a,
+        ),
+      );
+    else
+      setDraftAssignments([
+        ...draftAssignments,
+        { materialId: selectedMaterialId, planned: amount },
+      ]);
+    setPlannedAmount("");
+  };
+  const commitAssignments = async () => {
+    if (!draftAssignments.length) return;
+    const targetBuild = builds.find((b) => b.id === selectedBuildId);
+    if (targetBuild?.status === "zamknięta") {
+      Alert.alert(
+        "Budowa zamknięta",
+        "Ta budowa została zamknięta i rozliczona — nie można już przypisywać do niej materiałów.",
+      );
+      return;
+    }
+    const numericBuildId = Number(selectedBuildId);
+    const items = draftAssignments
+      .map((d) => ({
+        materialId: Number(d.materialId),
+        planned: d.planned,
+      }))
+      .filter((i) => !Number.isNaN(i.materialId));
+    if (Number.isNaN(numericBuildId) || !items.length) {
+      Alert.alert(
+        "Poczekaj na synchronizację",
+        "Budowa lub materiał jeszcze się nie zsynchronizowały z serwerem — spróbuj ponownie za chwilę.",
+      );
+      return;
+    }
+    try {
+      await commitAssignmentsMutation.mutateAsync({
+        buildId: numericBuildId,
+        items,
+      });
+      await invalidate("buildMaterials");
+      setDraftAssignments([]);
+      setShowAssignment(false);
+    } catch (error) {
+      reportMutationError(error, "Nie udało się przypisać materiałów do budowy.");
+    }
+  };
+  const saveMaterial = async () => {
+    // Był tu cichy `return` bez żadnej informacji dla użytkownika — z
+    // zewnątrz wyglądało jak "przycisk nic nie robi" (najczęściej dlatego,
+    // że pole "Ilość początkowa" zostaje puste, jeśli nikt go nie dotknie —
+    // QuantityStepper startuje bez wartości, nie od "0").
+    if (!newMaterial.name || !newMaterial.index || !newMaterial.stock) {
+      Alert.alert(
+        "Brakuje danych",
+        "Uzupełnij nazwę, indeks i ilość początkową (może być 0), żeby zapisać materiał.",
+      );
+      return;
+    }
+    if (
+      materials.some(
+        (m) =>
+          m.index.trim().toLowerCase() ===
+          newMaterial.index.trim().toLowerCase(),
+      )
+    ) {
+      Alert.alert(
+        "Indeks już istnieje",
+        `Materiał z indeksem "${newMaterial.index}" jest już w magazynie.`,
+      );
+      return;
+    }
+    const stock = Number(newMaterial.stock);
+    const unitPrice = Number(newMaterial.unitPrice) || 0;
+    try {
+      await createMaterialMutation.mutateAsync({
+        name: newMaterial.name,
+        index: newMaterial.index,
+        unit: newMaterial.unit || "szt.",
+        stock,
+        min: 5,
+        unitPrice,
+      });
+      await invalidate("materials");
+      setNewMaterial({ name: "", index: "", unit: "szt.", stock: "0", unitPrice: "0" });
+      setShowMaterial(false);
+    } catch (error) {
+      reportMutationError(error, "Nie udało się dodać materiału.");
+    }
+  };
+  const saveBuild = async () => {
+    const duration = Number(newBuild.durationDays);
+    if (
+      !newBuild.number ||
+      !newBuild.name ||
+      !newBuild.manager ||
+      !newBuild.startDate ||
+      !duration ||
+      duration <= 0
+    )
+      return;
+    try {
+      const build = await createBuildMutation.mutateAsync({
+        number: newBuild.number,
+        name: newBuild.name,
+        manager: newBuild.manager,
+        startDate: newBuild.startDate,
+        durationDays: duration,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      setNewBuild({
+        number: "",
+        name: "",
+        manager: "",
+        startDate: todayISO(),
+        durationDays: "",
+      });
+      setShowBuild(false);
+
+      // Automatyczny podfolder ze zdjęciami w Google Drive, nazwany jak
+      // budowa. Best-effort: budowa jest już zapisana, więc błąd tutaj
+      // (np. serwer niedostępny, zła konfiguracja Drive) nie cofa
+      // zapisu — po prostu link do zdjęć zostaje pusty i można go
+      // dodać ręcznie później.
+      try {
+        const folder = await createBuildDriveFolder(newBuild.name);
+        await updateBuildPhotosUrlMutation.mutateAsync({
+          buildId: build.id,
+          photosUrl: folder.webViewLink,
+        });
+        await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      } catch (driveError) {
+        console.error("[Drive] Nie udało się utworzyć folderu:", driveError);
+      }
+    } catch (error) {
+      reportMutationError(error, "Nie udało się dodać budowy.");
+    }
+  };
+  const saveWorkdayHours = () => {
+    const hours = Number(workdayHoursInput);
+    if (!hours || hours <= 0) return;
+    setWorkdayHours(hours);
+  };
+  const saveDailyReport = () => {
+    const buildId = activeBuild?.id || selectedBuildId;
+    if (activeBuild?.status === "zamknięta") {
+      Alert.alert(
+        "Budowa zamknięta",
+        "Ta budowa została zamknięta i rozliczona — nie można już dodawać do niej raportów.",
+      );
+      return;
+    }
+    const date = todayISO();
+    const existingReport = savedReports.find(
+      (report) =>
+        report.id === editingReportId ||
+        (!editingReportId && report.date === date && report.buildId === buildId),
+    );
+    if (existingReport?.status === "approved") {
+      Alert.alert(
+        "Raport zatwierdzony",
+        "Zatwierdzonego raportu nie można już edytować.",
+      );
+      return;
+    }
+    const relevantAssignments = assignments.filter(
+      (a) => a.buildId === buildId,
+    );
+    // Zużycie zdejmowane jest metodą FIFO z partii materiału, więc koszt
+    // budowy odzwierciedla realną cenę zakupu zużytego towaru, a nie
+    // jedną, uśrednioną cenę magazynową. Liczone kumulatywnie na jednej
+    // tablicy partii (nie przez osobne wywołania per materiał), bo raport
+    // zwykle dotyczy kilku materiałów naraz. Liczone PRZED złożeniem
+    // reportSnapshot, żeby móc dołączyć koszt per materiał do samego
+    // raportu (materialCosts), nie tylko do skumulowanego buildMaterialActualCost.
+    let nextBatches = materialBatches;
+    const affectedMaterialIds = new Set<string>();
+    const costDeltas: Record<string, number> = {}; // `${buildId}:${materialId}` -> PLN
+    const reportMaterialCosts: Record<string, number> = {
+      ...(existingReport?.materialCosts || {}),
+    };
+    relevantAssignments.forEach((assignment) => {
+      if (reportValues[assignment.materialId] === undefined) return;
+      const newUsed = Number(reportValues[assignment.materialId] || 0);
+      const delta = newUsed - assignment.used;
+      if (delta > 0) {
+        const result = consumeFIFOWithCostPure(
+          nextBatches,
+          assignment.materialId,
+          delta,
+        );
+        nextBatches = result.batches;
+        affectedMaterialIds.add(assignment.materialId);
+        const key = `${buildId}:${assignment.materialId}`;
+        costDeltas[key] = (costDeltas[key] || 0) + result.cost;
+        reportMaterialCosts[assignment.materialId] =
+          (reportMaterialCosts[assignment.materialId] || 0) + result.cost;
+      }
+      // Zmniejszenie zużycia (korekta raportu w dół) nie "oddaje" partii ani
+      // nie odejmuje wcześniej doliczonego kosztu — nie wiemy z której
+      // partii realnie towar wrócił; ewentualny zwrot trafia do magazynu
+      // jako zwykła korekta stanu.
+    });
+
+    const reportSnapshot: SavedReport = {
+      id: existingReport?.id || `report-${Date.now()}`,
+      date,
+      buildId,
+      buildNumber: activeBuild?.number || "",
+      buildName: activeBuild?.name || "",
+      materialValues: { ...reportValues },
+      materialCosts: reportMaterialCosts,
+      reasons: { ...reasons },
+      people: [...draftPeople],
+      extraCosts: [...draftExtraCosts],
+      status: existingReport?.status || "submitted",
+      updatedAt: new Date().toISOString(),
+    };
+    setSavedReports((previous) =>
+      existingReport
+        ? previous.map((report) =>
+            report.id === reportSnapshot.id ? reportSnapshot : report,
+          )
+        : [reportSnapshot, ...previous],
+    );
+    setEditingReportId(reportSnapshot.id);
+    if (Object.keys(costDeltas).length) {
+      setBuildMaterialActualCost((prev) => {
+        const next = { ...prev };
+        for (const key in costDeltas) {
+          next[key] = (next[key] || 0) + costDeltas[key];
+        }
+        return next;
+      });
+    }
+    if (affectedMaterialIds.size) {
+      setMaterialBatches(nextBatches);
+      const finalBatches = nextBatches;
+      setMaterials((prev) =>
+        recalcMaterialsFromBatches(prev, finalBatches, affectedMaterialIds),
+      );
+    }
+    setAssignments((prevAssignments) =>
+      prevAssignments.map((a) => {
+        if (a.buildId !== buildId || reportValues[a.materialId] === undefined)
+          return a;
+        return { ...a, used: Number(reportValues[a.materialId] || 0) };
+      }),
+    );
+    if (draftPeople.length) {
+      const entries = draftPeople.map((person) => {
+        const [sh, sm] = person.start.split(":").map(Number);
+        const [eh, em] = person.end.split(":").map(Number);
+        return {
+          id: `${date}-${buildId}-${person.employeeId}`,
+          date,
+          buildId,
+          employeeId: person.employeeId,
+          hours: (eh * 60 + em - sh * 60 - sm) / 60,
+          start: person.start,
+          end: person.end,
+        };
+      });
+      setTimeEntries((prev) => [
+        ...prev.filter(
+          (entry) => !(entry.date === date && entry.buildId === buildId),
+        ),
+        ...entries,
+      ]);
+      setDraftPeople([]);
+    }
+    setDraftExtraCosts([]);
+    setHrSaved(true);
+    setReportSaved(true);
+    setReportStatus("wysłany");
+    setReportStep(1);
+
+    // Wyślij do Supabase (offline-safe): reportSnapshot.id jest generowane
+    // raz i trzymane przez cały cykl edycji (patrz editingReportId) — to
+    // ten sam string służy jako `clientId`, więc ponowne wciśnięcie
+    // "Wyślij" (poprawka raportu) nadpisuje ten sam wiersz w bazie
+    // zamiast tworzyć duplikat. Jeśli buildId/materialId nie są jeszcze
+    // prawdziwymi ID z Supabase (np. pierwsze uruchomienie offline, zanim
+    // budowy/materiały/pracownicy zdążyli się zsynchronizować) — pomijamy
+    // wysyłkę po cichu; raport zostaje bezpiecznie zapisany lokalnie
+    // (savedReports powyżej) i brygadzista nic nie traci, tylko wyśle go
+    // ponownie, gdy dane referencyjne się zsynchronizują.
+    const numericBuildId = Number(buildId);
+    const materialsPayload = Object.entries(reportSnapshot.materialValues)
+      .map(([materialId, usedQuantityRaw]) => ({
+        materialId: Number(materialId),
+        usedQuantity: Number(usedQuantityRaw) || 0,
+        reason: reasons[materialId],
+      }))
+      .filter((m) => !Number.isNaN(m.materialId));
+    const peoplePayload = draftPeople
+      .map((p) => ({
+        employeeId: Number(p.employeeId),
+        start: p.start,
+        end: p.end,
+      }))
+      .filter((p) => !Number.isNaN(p.employeeId));
+    const extraCostsPayload = reportSnapshot.extraCosts.map((c) => ({
+      label: c.label,
+      amount: c.amount,
+      note: c.note,
+    }));
+    if (!Number.isNaN(numericBuildId)) {
+      enqueueReport({
+        buildId: numericBuildId,
+        date,
+        people: peoplePayload,
+        materials: materialsPayload,
+        extraCosts: extraCostsPayload,
+      }).then(({ sent }) => {
+        if (!sent) {
+          Alert.alert(
+            "Raport zapisany lokalnie",
+            "Brak połączenia z serwerem — raport wyśle się automatycznie, gdy pojawi się internet.",
+          );
+        }
+      });
+    }
+  };
+  const saveEmployee = async () => {
+    if (!newEmployee.name || !newEmployee.role) return;
+    // Kartoteka pracowników zna tylko dwie role (Brygadzista/Pracownik) —
+    // "Admin" w wyborze na ekranie Administratora to rola aplikacyjna
+    // (devRole), nie rola pracownika w bazie.
+    if (newEmployee.role !== "Brygadzista" && newEmployee.role !== "Pracownik") {
+      Alert.alert("Nieprawidłowa rola", "Wybierz Brygadzista lub Pracownik.");
+      return;
+    }
+    try {
+      await createEmployeeMutation.mutateAsync({
+        name: newEmployee.name,
+        role: newEmployee.role,
+        hourlyRate: Number(newEmployee.hourlyRate) || 0,
+      });
+      await invalidate("employees");
+      setNewEmployee({ name: "", role: "Pracownik", hourlyRate: "" });
+    } catch (error) {
+      reportMutationError(error, "Nie udało się dodać pracownika.");
+    }
+  };
+  // Edycja stawki godzinowej istniejącego pracownika (panel administratora).
+  const updateEmployeeRate = async (employeeId: string, rate: number) => {
+    const numericId = Number(employeeId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await updateEmployeeRateMutation.mutateAsync({
+        employeeId: numericId,
+        hourlyRate: rate,
+      });
+      await invalidate("employees");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać stawki.");
+    }
+  };
+  // Edycja ceny jednostkowej materiału w magazynie. Nie wpływa wstecz na
+  // już przypisane do budów ilości — te mają cenę zamrożoną na Assignment.
+  // Ręczna zmiana ceny to korekta pomyłki (np. źle wpisana cena), nie nowy
+  // zakup — nadpisuje średnią ważoną wprost, nie tworzy nowej partii.
+  // Historia partii (i ich realne ceny) zostaje nienaruszona.
+  const updateMaterialPrice = async (materialId: string, price: number) => {
+    const numericId = Number(materialId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await updateMaterialPriceMutation.mutateAsync({
+        materialId: numericId,
+        unitPrice: price,
+      });
+      await invalidate("materials");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać ceny.");
+    }
+  };
+  // Korekta stanu magazynowego materiału — np. pomyłka przy dodawaniu lub
+  // ręczna inwentaryzacja. W górę: dopisuje partię "korekta" po aktualnej
+  // średniej cenie. W dół: zdejmuje FIFO tak jak realne zużycie.
+  const updateMaterialStock = async (materialId: string, stock: number) => {
+    const numericId = Number(materialId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await adjustMaterialStockMutation.mutateAsync({
+        materialId: numericId,
+        newStock: stock,
+      });
+      await invalidate("materials");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się skorygować stanu magazynowego.");
+    }
+  };
+  const createOrder = async () => {
+    const quantity = Number(orderQuantity);
+    if (!orderMaterialName.trim() || !quantity || quantity <= 0) return;
+    const matched = materials.find(
+      (m) =>
+        m.name.trim().toLowerCase() ===
+        orderMaterialName.trim().toLowerCase(),
+    );
+    try {
+      await createOrderMutation.mutateAsync({
+        materialId: matched ? Number(matched.id) : undefined,
+        materialName: orderMaterialName.trim(),
+        quantity,
+        unit: matched?.unit || "szt.",
+      });
+      await invalidate("orders");
+      setOrderMaterialName("");
+      setOrderQuantity("");
+      setOrderSaved(true);
+    } catch (error) {
+      reportMutationError(error, "Nie udało się złożyć zamówienia.");
+    }
+  };
+  // Jedno tapnięcie z listy braków magazynowych: materiał (i jego jednostka)
+  // są już znane, więc od razu tworzymy w pełni powiązane zamówienie —
+  // bez przepisywania nazwy/ilości do osobnego formularza.
+  const createOrderFromShortage = async (materialId: string, quantity: number) => {
+    const material = materials.find((m) => m.id === materialId);
+    if (!material || quantity <= 0) return;
+    try {
+      await createOrderMutation.mutateAsync({
+        materialId: Number(material.id),
+        materialName: material.name,
+        quantity,
+        unit: material.unit,
+      });
+      await invalidate("orders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się złożyć zamówienia.");
+    }
+  };
+  // Krok 2: zamówienie zostało faktycznie złożone u dostawcy.
+  const markOrderOrdered = async (orderId: string) => {
+    const numericId = Number(orderId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await markOrderOrderedMutation.mutateAsync({ orderId: numericId });
+      await invalidate("orders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się oznaczyć zamówienia jako złożone.");
+    }
+  };
+  // Krok 3: dostawa dotarła. Ilość jest edytowalna w tym miejscu, bo dostawca
+  // może przywieźć inaczej niż zamówiono — to ta wartość trafia na stan
+  // magazynowy, nie pierwotnie zamówiona. Jeśli zamówienie nie było powiązane
+  // z istniejącym materiałem (dopisane ręcznie), serwer zakłada nową pozycję
+  // magazynową zamiast po cichu gubić dostawę.
+  const receiveOrder = async (
+    orderId: string,
+    receivedQuantity: number,
+    receivedUnitPrice?: number,
+  ) => {
+    const numericId = Number(orderId);
+    if (Number.isNaN(numericId) || receivedQuantity <= 0) return;
+    try {
+      await receiveOrderMutation.mutateAsync({
+        orderId: numericId,
+        receivedQuantity,
+        receivedUnitPrice,
+      });
+      await Promise.all([
+        invalidate("orders"),
+        invalidate("materials"),
+      ]);
+    } catch (error) {
+      reportMutationError(error, "Nie udało się przyjąć dostawy.");
+    }
+  };
+  const addPersonToDraft = () => {
+    if (!selectedEmployeeId || !personStart || !personEnd) return;
+    const [sh, sm] = personStart.split(":").map(Number);
+    const [eh, em] = personEnd.split(":").map(Number);
+    if (
+      !Number.isFinite(sh) ||
+      !Number.isFinite(sm) ||
+      !Number.isFinite(eh) ||
+      !Number.isFinite(em) ||
+      eh * 60 + em <= sh * 60 + sm
+    ) {
+      Alert.alert(
+        "Nieprawidłowy czas",
+        "Godzina końca musi być późniejsza niż godzina rozpoczęcia.",
+      );
+      return;
+    }
+    if (
+      draftPeople.some((person) => person.employeeId === selectedEmployeeId)
+    ) {
+      Alert.alert(
+        "Osoba już dodana",
+        "Ta osoba znajduje się już w koszyku raportu.",
+      );
+      return;
+    }
+    setDraftPeople([
+      ...draftPeople,
+      { employeeId: selectedEmployeeId, start: personStart, end: personEnd },
+    ]);
+    AsyncStorage.setItem(
+      "lastPersonTime",
+      JSON.stringify({ start: personStart, end: personEnd }),
+    );
+  };
+  const addExtraCostToDraft = (
+    label: string,
+    amount: number,
+    note?: string,
+  ) => {
+    setDraftExtraCosts([
+      ...draftExtraCosts,
+      { id: `cost-${Date.now()}`, label, amount, note },
+    ]);
+  };
+  const removeExtraCostFromDraft = (id: string) => {
+    setDraftExtraCosts(draftExtraCosts.filter((c) => c.id !== id));
+  };
+  const openSavedReport = (reportId: string) => {
+    const report = savedReports.find((item) => item.id === reportId);
+    if (!report) return;
+    setEditingReportId(report.id);
+    setSelectedBuildId(report.buildId);
+    setReportValues({ ...report.materialValues });
+    setReasons({ ...report.reasons });
+    setDraftPeople([...report.people]);
+    setDraftExtraCosts([...(report.extraCosts || [])]);
+    setReportSaved(false);
+    setReportStep(1);
+    setTab("report");
+  };
+  const approveReport = (reportId: string) => {
+    const report = savedReports.find((r) => r.id === reportId);
+    setSavedReports((previous) =>
+      previous.map((report) =>
+        report.id === reportId
+          ? { ...report, status: "approved", updatedAt: new Date().toISOString() }
+          : report,
+      ),
+    );
+    // W Supabase raport jest identyfikowany przez (buildId, date) — nie ma
+    // osobnej kolumny clientId (patrz submitDailyReport w lib/data/reports.ts).
+    // Best-effort: jeśli offline, lokalny status i tak już jest ustawiony
+    // powyżej — admin pracuje zwykle online, więc rzadki brak sieci tutaj
+    // nie uzasadnia osobnej kolejki jak przy raportach brygadzisty.
+    const numericBuildId = report ? Number(report.buildId) : NaN;
+    if (!report || Number.isNaN(numericBuildId)) return;
+    approveReportMutation.mutate(
+      { buildId: numericBuildId, date: report.date, status: "approved" },
+      {
+        onError: (error) =>
+          reportMutationError(
+            error,
+            "Zatwierdzenie zapisało się lokalnie, ale nie wysłało do serwera — spróbuj ponownie, gdy będzie sieć.",
+          ),
+      },
+    );
+  };
+  // Zamyka budowę i zapisuje snapshot finalnego rozliczenia (godziny,
+  // materiały plan/zużycie, koszty dodatkowe). Wymaga, żeby wszystkie
+  // raporty tej budowy były już zatwierdzone — inaczej rozliczenie
+  // opierałoby się na niezweryfikowanych danych.
+  const closeBuild = async (buildId: string) => {
+    const build = builds.find((b) => b.id === buildId);
+    if (!build || build.status === "zamknięta") return;
+    const numericId = Number(buildId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await closeBuildMutation.mutateAsync({ buildId: numericId });
+      await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+    } catch (error) {
+      reportMutationError(
+        error,
+        "Nie udało się zamknąć budowy — sprawdź, czy wszystkie raporty są zatwierdzone.",
+      );
+    }
+  };
+  // Wznawia zamkniętą budowę: przywraca status "aktywna". Zapisany
+  // snapshot rozliczenia w Supabase zostaje (nadpisze go dopiero kolejne
+  // `closeBuild`), więc jeśli budowa zostanie zamknięta ponownie bez
+  // zmian, ostatnie rozliczenie wciąż jest dostępne do wglądu.
+  const reopenBuild = async (buildId: string) => {
+    const numericId = Number(buildId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await reopenBuildMutation.mutateAsync({ buildId: numericId });
+      await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+    } catch (error) {
+      reportMutationError(error, "Nie udało się wznowić budowy.");
+    }
+  };
+  // Zapisuje/zmienia link do folderu ze zdjęciami budowy (np. Google
+  // Drive). Dostępne z ekranu Budowy (Admin) i z ekranu Raportu
+  // (Brygadzista) — każdy z dostępem do danej budowy.
+  const updateBuildPhotosUrl = async (buildId: string, photosUrl: string) => {
+    const numericId = Number(buildId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await updateBuildPhotosUrlMutation.mutateAsync({
+        buildId: numericId,
+        photosUrl,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać linku do zdjęć.");
+    }
+  };
+  return {
+    tab,
+    devRole,
+    workerPeriod,
+    teamPeriod,
+    supervisedEmployeeIds,
+    supervisorPickerOpen,
+    workerEmployeeId,
+    materials,
+    materialBatches,
+    buildMaterialActualCost,
+    builds,
+    assignments,
+    query,
+    showMaterial,
+    showBuild,
+    showAssignment,
+    buildsView,
+    selectedBuildId,
+    selectedMaterialId,
+    plannedAmount,
+    picker,
+    pickerQuery,
+    draftAssignments,
+    newMaterial,
+    newBuild,
+    workdayHours,
+    workdayHoursInput,
+    reportValues,
+    reasons,
+    reportSaved,
+    reportStep,
+    savedReports,
+    editingReportId,
+    employees,
+    timeEntries,
+    newEmployee,
+    hrSaved,
+    reportStatus,
+    adminComment,
+    selectedEmployeeId,
+    employeePickerOpen,
+    personStart,
+    personEnd,
+    timePicker,
+    draftPeople,
+    draftExtraCosts,
+    orders,
+    orderMaterialName,
+    orderQuantity,
+    orderSaved,
+    setTab,
+    setDevRole,
+    setWorkerPeriod,
+    setTeamPeriod,
+    setSupervisedEmployeeIds,
+    setSupervisorPickerOpen,
+    setWorkerEmployeeId,
+    setMaterials,
+    setBuilds,
+    setAssignments,
+    setQuery,
+    setShowMaterial,
+    setShowBuild,
+    setShowAssignment,
+    setBuildsView,
+    setSelectedBuildId,
+    setSelectedMaterialId,
+    setPlannedAmount,
+    setPicker,
+    setPickerQuery,
+    setDraftAssignments,
+    setNewMaterial,
+    setNewBuild,
+    setWorkdayHours,
+    setWorkdayHoursInput,
+    setReportValues,
+    setReasons,
+    setReportSaved,
+    setReportStep,
+    setEditingReportId,
+    openSavedReport,
+    approveReport,
+    closeBuild,
+    reopenBuild,
+    updateBuildPhotosUrl,
+    setEmployees,
+    setTimeEntries,
+    setNewEmployee,
+    setHrSaved,
+    setReportStatus,
+    setAdminComment,
+    setSelectedEmployeeId,
+    setEmployeePickerOpen,
+    setPersonStart,
+    setPersonEnd,
+    setTimePicker,
+    setDraftPeople,
+    setDraftExtraCosts,
+    setOrders,
+    setOrderMaterialName,
+    setOrderQuantity,
+    setOrderSaved,
+    filtered,
+    workerEntries,
+    workerChart,
+    teamEntries,
+    teamChart,
+    activeBuild,
+    buildAssignments,
+    shortages,
+    addToDraft,
+    commitAssignments,
+    saveMaterial,
+    saveBuild,
+    saveWorkdayHours,
+    saveDailyReport,
+    saveEmployee,
+    updateEmployeeRate,
+    updateMaterialPrice,
+    updateMaterialStock,
+    createOrder,
+    createOrderFromShortage,
+    markOrderOrdered,
+    receiveOrder,
+    addPersonToDraft,
+    addExtraCostToDraft,
+    removeExtraCostFromDraft,
+    reportsPendingApprovalCount,
+    reportsNeedingFixCount,
+  };
+}
+
+type AppData = ReturnType<typeof useAppDataState>;
+const AppDataContext = createContext<AppData | null>(null);
+
+export function AppDataProvider({
+  children,
+  initialRole,
+}: {
+  children: ReactNode;
+  initialRole?: "Admin" | "Brygadzista" | "Pracownik";
+}) {
+  const value = useAppDataState(initialRole);
+  return (
+    <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
+  );
+}
+
+export function useAppData() {
+  const ctx = useContext(AppDataContext);
+  if (!ctx) {
+    throw new Error("useAppData must be used within an AppDataProvider");
+  }
+  return ctx;
+}

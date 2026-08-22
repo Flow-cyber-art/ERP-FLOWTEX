@@ -69,7 +69,7 @@ declare
   v_material_id integer;
   v_price decimal;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_order from material_orders where id = p_order_id for update;
   if not found then
@@ -136,7 +136,7 @@ declare
   v_price decimal;
   v_qty decimal;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_order from orders where id = p_order_id for update;
   if not found then

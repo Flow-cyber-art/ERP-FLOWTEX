@@ -51,9 +51,6 @@ export function ReportScreen() {
     activeBuild,
     buildAssignments,
     buildMaterialPlans,
-    buildStageStatuses,
-    completeBuildStage,
-    reopenBuildStage,
     saveDailyReport,
     addPersonToDraft,
     addExtraCostToDraft,
@@ -83,28 +80,25 @@ export function ReportScreen() {
     : [];
   const stageNameByMaterialName = new Map<string, string>();
   const stageOrder: string[] = [];
+  const planByStage = new Map<string, typeof planForActiveBuild>();
   for (const p of planForActiveBuild) {
     const key = p.materialName.trim().toLowerCase();
     if (!stageNameByMaterialName.has(key)) stageNameByMaterialName.set(key, p.stageName);
     if (!stageOrder.includes(p.stageName)) stageOrder.push(p.stageName);
+    if (!planByStage.has(p.stageName)) planByStage.set(p.stageName, []);
+    planByStage.get(p.stageName)!.push(p);
   }
-  const assignmentsByStage = new Map<string, typeof buildAssignments>();
+  const assignmentByMaterialName = new Map<string, (typeof buildAssignments)[number]>();
+  for (const a of buildAssignments) {
+    const name = materials.find((m) => m.id === a.materialId)?.name?.trim().toLowerCase();
+    if (name) assignmentByMaterialName.set(name, a);
+  }
   const pomocniczeAssignments: typeof buildAssignments = [];
   for (const a of buildAssignments) {
     const materialName = materials.find((m) => m.id === a.materialId)?.name?.trim().toLowerCase();
     const stage = materialName ? stageNameByMaterialName.get(materialName) : undefined;
-    if (stage) {
-      if (!assignmentsByStage.has(stage)) assignmentsByStage.set(stage, []);
-      assignmentsByStage.get(stage)!.push(a);
-    } else {
-      pomocniczeAssignments.push(a);
-    }
+    if (!stage) pomocniczeAssignments.push(a);
   }
-  const completedStageNames = new Set(
-    (activeBuild ? buildStageStatuses.filter((s) => s.buildId === Number(activeBuild.id)) : []).map(
-      (s) => s.stageName,
-    ),
-  );
   const filteredPomocnicze = pomocniczeAssignments.filter((a) => {
     if (!pomocniczeQuery.trim()) return true;
     const m = materials.find((x) => x.id === a.materialId);
@@ -418,14 +412,16 @@ export function ReportScreen() {
               )}
             </View>
 
-            {/* Etapy technologii (Faza 6) — rozwijana lista, plan/przypisano/
-                zużyto per etap, "Zakończ etap" ręcznie przez brygadzistę. */}
+            {/* Etapy technologii (Faza 6) — rozwijana lista, materiały etapu
+                z pełnego planu (nie tylko już dostarczone), plan vs
+                zużyto dzisiaj. Bez oznaczania "zakończenia" etapu — to
+                raportowanie zużycia, nie postępu; budowę zamyka Admin
+                (Faza 9). */}
             {stageOrder.length > 0 && (
               <View className="border-t border-border p-4">
                 <Text className="text-xs text-muted uppercase mb-2">Technologia</Text>
                 {stageOrder.map((stageName) => {
-                  const stageAssignments = assignmentsByStage.get(stageName) ?? [];
-                  const isCompleted = completedStageNames.has(stageName);
+                  const stagePlan = planByStage.get(stageName) ?? [];
                   const isCollapsed = collapsedStages[stageName] ?? true;
                   return (
                     <View
@@ -450,40 +446,46 @@ export function ReportScreen() {
                           justifyContent: "space-between",
                         }}
                       >
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                          <Text style={{ fontSize: 14 }}>{isCompleted ? "🟢" : "🟡"}</Text>
-                          <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
-                            {stageName}
-                          </Text>
-                        </View>
+                        <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+                          {stageName}
+                        </Text>
                         <Text style={{ color: COLORS.primary }}>{isCollapsed ? "▼" : "▲"}</Text>
                       </Pressable>
 
                       {!isCollapsed && (
-                        <>
-                          <View style={{ marginTop: 8 }}>
-                            {stageAssignments.map((a, i) => renderMaterialRow(a, i))}
-                            {stageAssignments.length === 0 && (
-                              <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                                Brak przypisanych materiałów tego etapu.
-                              </Text>
-                            )}
-                          </View>
-                          {!reportApproved && (
-                            <View style={{ marginTop: 10 }}>
-                              <Button
-                                label={isCompleted ? "Wznów etap" : "Zakończ etap"}
-                                secondary={isCompleted}
-                                onPress={() =>
-                                  activeBuild &&
-                                  (isCompleted
-                                    ? reopenBuildStage(activeBuild.id, stageName)
-                                    : completeBuildStage(activeBuild.id, stageName))
-                                }
-                              />
-                            </View>
-                          )}
-                        </>
+                        <View style={{ marginTop: 8 }}>
+                          {stagePlan.map((p, i) => {
+                            const assignment = assignmentByMaterialName.get(
+                              p.materialName.trim().toLowerCase(),
+                            );
+                            if (assignment) return renderMaterialRow(assignment, i);
+                            return (
+                              <View
+                                key={p.id}
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  paddingVertical: 12,
+                                  borderTopWidth: i > 0 ? 1 : 0,
+                                  borderTopColor: COLORS.border,
+                                }}
+                              >
+                                <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                                  <Text
+                                    className="text-sm font-semibold text-foreground"
+                                    numberOfLines={2}
+                                  >
+                                    {p.materialName}
+                                  </Text>
+                                  <Text className="text-xs text-muted mt-0.5">
+                                    plan {p.plannedQuantity} {p.unit} · oczekuje na dostawę
+                                  </Text>
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
                       )}
                     </View>
                   );

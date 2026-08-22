@@ -65,11 +65,15 @@ export async function receiveOrder(
   orderId: number,
   receivedQuantity: number,
   receivedUnitPrice?: number,
+  documentNumber?: string,
+  supplier?: string,
 ): Promise<void> {
   const { error } = await supabase.rpc("receive_material_order", {
     p_order_id: orderId,
     p_received_quantity: receivedQuantity,
     p_received_unit_price: receivedUnitPrice ?? null,
+    p_document_number: documentNumber?.trim() || null,
+    p_supplier: supplier?.trim() || null,
   });
   if (error) throw new Error(error.message);
 }

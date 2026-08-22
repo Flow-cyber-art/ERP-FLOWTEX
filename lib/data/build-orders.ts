@@ -99,6 +99,8 @@ export type ReceiveBuildOrderItemInput = {
 export async function receiveBuildOrder(
   orderId: number,
   items: ReceiveBuildOrderItemInput[],
+  documentNumber?: string,
+  supplier?: string,
 ): Promise<void> {
   const { error } = await supabase.rpc("receive_order", {
     p_order_id: orderId,
@@ -107,6 +109,8 @@ export async function receiveBuildOrder(
       receivedQuantity: i.receivedQuantity,
       receivedUnitPrice: i.receivedUnitPrice ?? null,
     })),
+    p_document_number: documentNumber?.trim() || null,
+    p_supplier: supplier?.trim() || null,
   });
   if (error) throw new Error(error.message);
 }

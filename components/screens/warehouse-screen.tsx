@@ -24,7 +24,7 @@ export function WarehouseScreen() {
     setShowMaterial,
     setNewMaterial,
     filtered,
-    materialBatches,
+    warehouseBatches,
     saveMaterial,
     updateMaterialPrice,
     updateMaterialStock,
@@ -133,8 +133,8 @@ export function WarehouseScreen() {
     />
     <View className="mt-4 rounded-2xl border border-border overflow-hidden">
       {filtered.map((m, i) => {
-        const batchCount = materialBatches.filter(
-          (b) => b.materialId === m.id,
+        const batchCount = warehouseBatches.filter(
+          (b) => String(b.materialId) === m.id,
         ).length;
         return (
         <View
@@ -172,52 +172,71 @@ export function WarehouseScreen() {
           {editingId === m.id && (
             <View className="px-4 pb-4">
               {(() => {
-                const batches = materialBatches
-                  .filter((b) => b.materialId === m.id)
+                // Faza 4 — realne partie z bazy (data, ilość dostępna,
+                // cena, dokument, dostawca), zamiast wcześniejszej
+                // odtworzonej z samego stanu jednej fikcyjnej pozycji.
+                const batches = warehouseBatches
+                  .filter((b) => String(b.materialId) === m.id)
                   .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
-                if (batches.length <= 1) return null;
-                const minPrice = Math.min(...batches.map((b) => b.unitPrice));
+                if (batches.length === 0) return null;
+                const prices = batches.map((b) => Number(b.unitPrice));
+                const minPrice = Math.min(...prices);
                 return (
                   <View style={{ marginBottom: 14 }}>
                     <Text className="text-xs text-muted uppercase mb-2">
-                      Partie w magazynie (różne ceny zakupu)
+                      Partie w magazynie ({batches.length})
                     </Text>
-                    {batches.map((b) => (
-                      <View
-                        key={b.id}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          paddingVertical: 6,
-                        }}
-                      >
-                        <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
-                          {b.quantity} {m.unit} · {b.source} · {b.receivedAt}
-                        </Text>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                          {b.unitPrice > minPrice && (
-                            <View
-                              style={{
-                                width: 6,
-                                height: 6,
-                                borderRadius: 3,
-                                backgroundColor: COLORS.warning,
-                              }}
-                            />
-                          )}
-                          <Text
+                    {batches.map((b) => {
+                      const price = Number(b.unitPrice);
+                      return (
+                        <View
+                          key={b.id}
+                          style={{
+                            paddingVertical: 6,
+                            borderBottomWidth: 1,
+                            borderBottomColor: COLORS.border,
+                          }}
+                        >
+                          <View
                             style={{
-                              color: b.unitPrice > minPrice ? COLORS.warning : COLORS.muted,
-                              fontWeight: "700",
-                              fontSize: 13,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
                             }}
                           >
-                            {formatPLN(b.unitPrice)}
-                          </Text>
+                            <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
+                              {b.quantity} {m.unit} · {b.source} · {b.receivedAt}
+                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                              {price > minPrice && (
+                                <View
+                                  style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: 3,
+                                    backgroundColor: COLORS.warning,
+                                  }}
+                                />
+                              )}
+                              <Text
+                                style={{
+                                  color: price > minPrice ? COLORS.warning : COLORS.muted,
+                                  fontWeight: "700",
+                                  fontSize: 13,
+                                }}
+                              >
+                                {formatPLN(price)}
+                              </Text>
+                            </View>
+                          </View>
+                          {(b.documentNumber || b.supplier) && (
+                            <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                              {[b.documentNumber, b.supplier].filter(Boolean).join(" · ")}
+                            </Text>
+                          )}
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 );
               })()}

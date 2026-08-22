@@ -1194,6 +1194,20 @@ function useAppDataState(
     setWorkdayHours(hours);
   };
   const saveDailyReport = () => {
+    try {
+      saveDailyReportUnsafe();
+    } catch (error) {
+      // Bez tego wyjątek w tej funkcji (synchronicznej, wołanej wprost z
+      // onPress) kończył się CISZĄ — przycisk "wyglądał" jakby nic nie
+      // robił: żadnego alertu, żadnego requestu, żadnego błędu w konsoli
+      // widocznego dla użytkownika (choć technicznie wyjątek trafiał do
+      // konsoli deweloperskiej, brygadzista jej nie widzi). Teraz zawsze
+      // widać komunikat, nawet jeśli przyczyna wymaga dalszej diagnozy.
+      console.error("[saveDailyReport] wyjątek:", error);
+      reportMutationError(error, "Nie udało się zapisać raportu dziennego.");
+    }
+  };
+  const saveDailyReportUnsafe = () => {
     const buildId = activeBuild?.id || selectedBuildId;
     if (activeBuild?.status === "zamknięta") {
       Alert.alert(

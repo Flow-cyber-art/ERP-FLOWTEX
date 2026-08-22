@@ -95,6 +95,12 @@ export function BuildsScreen() {
   // ilości/ceny per pozycja trzymane w mapie po id pozycji.
   const [orderGenerating, setOrderGenerating] = useState<string | null>(null);
   const [orderGeneratedFor, setOrderGeneratedFor] = useState<string | null>(null);
+  // Lista zamówień z planu (Faza 3) w karcie budowy potrafi urosnąć —
+  // zwinięta domyślnie, rozwijana pojedynczo per budowa, ten sam wzorzec
+  // co reszta akordeonów na tym ekranie.
+  const [expandedOrdersBuildId, setExpandedOrdersBuildId] = useState<string | null>(
+    null,
+  );
   const [orderReceivingId, setOrderReceivingId] = useState<number | null>(null);
   const [orderReceiveDrafts, setOrderReceiveDrafts] = useState<
     Record<number, { qty: string; price: string }>
@@ -812,7 +818,24 @@ export function BuildsScreen() {
                     alignItems: "center",
                   }}
                 >
-                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>ZAMÓWIENIA</Text>
+                  <Pressable
+                    disabled={buildOrdersForBuild.length === 0}
+                    onPress={() =>
+                      setExpandedOrdersBuildId(
+                        expandedOrdersBuildId === b.id ? null : b.id,
+                      )
+                    }
+                    style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                  >
+                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                      ZAMÓWIENIA{buildOrdersForBuild.length > 0 ? ` (${buildOrdersForBuild.length})` : ""}
+                    </Text>
+                    {buildOrdersForBuild.length > 0 && (
+                      <Text style={{ color: COLORS.primary, fontSize: 11 }}>
+                        {expandedOrdersBuildId === b.id ? "▲" : "▼"}
+                      </Text>
+                    )}
+                  </Pressable>
                   {hasPlan && (
                     <Pressable
                       disabled={orderGenerating === b.id}
@@ -822,6 +845,7 @@ export function BuildsScreen() {
                         try {
                           await generateOrderFromPlan(b.id);
                           setOrderGeneratedFor(b.id);
+                          setExpandedOrdersBuildId(b.id);
                         } finally {
                           setOrderGenerating(null);
                         }
@@ -847,7 +871,7 @@ export function BuildsScreen() {
                   </Text>
                 )}
 
-                {buildOrdersForBuild.map((order) => {
+                {expandedOrdersBuildId === b.id && buildOrdersForBuild.map((order) => {
                   const isReceiving = orderReceivingId === order.id;
                   return (
                     <View

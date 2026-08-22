@@ -402,6 +402,48 @@ export const settings = pgTable("settings", {
 });
 
 /* ============================================================
+ * TECHNOLOGIE (RECEPTURY) — Faza 1 modułu Technologia. Wersjonowane:
+ * "edycja" zawsze tworzy nowy wiersz w `technologies` (ten sam `code`,
+ * `version`+1), stary dostaje `isActive=false` — patrz funkcja SQL
+ * `save_technology()` w supabase/sql/005_faza1_technologie.sql, jedyne
+ * miejsce, które powinno tu pisać. Nowe tabele = snake_case (kolumny),
+ * poza `createdAt`/`createdBy`, które z premedytacją zostają camelCase,
+ * żeby pasować do reszty schematu przy odczycie z klienta.
+ * ============================================================ */
+
+export const technologies = pgTable("technologies", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  version: integer("version").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  createdBy: text("createdBy"), // uuid (auth.users/profiles.id) — brak natywnego typu uuid w tym pliku dotąd, patrz SQL
+});
+
+export const technologyStages = pgTable("technology_stages", {
+  id: serial("id").primaryKey(),
+  technologyId: integer("technology_id")
+    .notNull()
+    .references(() => technologies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  orderIndex: integer("order_index").notNull().default(0),
+});
+
+export const technologyMaterials = pgTable("technology_materials", {
+  id: serial("id").primaryKey(),
+  stageId: integer("stage_id")
+    .notNull()
+    .references(() => technologyStages.id, { onDelete: "cascade" }),
+  materialName: text("material_name").notNull(),
+  unit: text("unit").notNull().default("kg"),
+  consumptionPerM2: decimal("consumption_per_m2", { precision: 10, scale: 4 }).notNull(),
+  linkedMaterialId: integer("linked_material_id").references(() => materials.id, {
+    onDelete: "set null",
+  }),
+});
+
+/* ============================================================
  * TYPY INFEROWANE
  * ============================================================ */
 
@@ -443,3 +485,12 @@ export type InsertBuildSettlement = typeof buildSettlements.$inferInsert;
 
 export type Settings = typeof settings.$inferSelect;
 export type InsertSettings = typeof settings.$inferInsert;
+
+export type Technology = typeof technologies.$inferSelect;
+export type InsertTechnology = typeof technologies.$inferInsert;
+
+export type TechnologyStage = typeof technologyStages.$inferSelect;
+export type InsertTechnologyStage = typeof technologyStages.$inferInsert;
+
+export type TechnologyMaterial = typeof technologyMaterials.$inferSelect;
+export type InsertTechnologyMaterial = typeof technologyMaterials.$inferInsert;

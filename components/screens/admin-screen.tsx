@@ -12,6 +12,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
+import { TechnologiesSection } from "@/components/screens/technologies-screen";
 import type { AppRole } from "@/lib/data/auth";
 import {
   type AdminUser,
@@ -22,14 +23,22 @@ import {
   setAdminUserRole,
 } from "@/lib/data/admin-users";
 
-// Panel administracyjny i HR były wcześniej dwiema osobnymi zakładkami
-// nawigacji, mimo że oba dotyczą tego samego zespołu (kto pracuje, ile
-// kosztuje jego godzina, ile faktycznie przepracował) — logicznie to
-// jeden obszar "Zespół", tylko dwa różne widoki na te same dane.
-// Połączone w jeden ekran z wewnętrznym przełącznikiem, żeby nie trzeba
-// było skakać między dwiema pozycjami menu, żeby np. dodać pracownika,
-// a potem od razu sprawdzić jego godziny.
-type AdminTab = "team" | "hours" | "accounts";
+// Panel administracyjny, HR, technologie i konta logowania były wcześniej
+// (albo w koncepcji, albo w kodzie) osobnymi zakładkami nawigacji, mimo że
+// wszystkie dotyczą tego samego: jak firma jest skonfigurowana, nie
+// codziennej pracy na budowie. Jeden ekran z wewnętrznym przełącznikiem,
+// żeby nie trzeba było skakać między pozycjami menu.
+type AdminTab = "team" | "hours" | "technologies" | "accounts";
+
+const TAB_META: Record<AdminTab, { title: string; description: string }> = {
+  team: { title: "Zespół", description: "Pracownicy, dniówka i stawki." },
+  hours: { title: "Rozliczenie godzin", description: "Godziny przepracowane per pracownik." },
+  technologies: {
+    title: "Technologie",
+    description: "Receptury posadzek — etapy, materiały, zużycie na m².",
+  },
+  accounts: { title: "Konta logowania", description: "Dostęp do aplikacji per osoba." },
+};
 
 export function AdminScreen() {
   const [section, setSection] = useState<AdminTab>("team");
@@ -38,16 +47,17 @@ export function AdminScreen() {
     <>
       <ScreenHeader
         eyebrow="ADMINISTRACJA"
-        title="Zespół"
-        description="Pracownicy, dniówka i rozliczenie godzin."
+        title={TAB_META[section].title}
+        description={TAB_META[section].description}
       />
 
       <View className="bg-surface border border-border rounded-2xl p-2 mb-5">
-        <View style={{ flexDirection: "row", gap: 6 }}>
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
           {(
             [
               ["team", "Zespół i dniówka"],
               ["hours", "Rozliczenie godzin"],
+              ["technologies", "Technologie"],
               ["accounts", "Konta logowania"],
             ] as const
           ).map(([value, label]) => (
@@ -81,6 +91,8 @@ export function AdminScreen() {
         <AdminTeamSection />
       ) : section === "hours" ? (
         <HrSection />
+      ) : section === "technologies" ? (
+        <TechnologiesSection />
       ) : (
         <AdminAccountsSection />
       )}

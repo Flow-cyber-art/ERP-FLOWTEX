@@ -17,15 +17,21 @@
 -- `technologies` w 005_faza1_technologie.sql.
 -- ============================================================
 
+-- Nazwa NIE może być "order_status" — ten typ już istnieje (status
+-- starego material_orders.status: 'do realizacji'/'zamówione'/
+-- 'dostarczone', patrz drizzle/schema.ts orderStatusEnum). Gdyby
+-- kolidowała, `create type ... exception when duplicate_object`
+-- po cichu nic by nie zrobił i tabela `orders` dostałaby STARY enum
+-- bez wartości 'robocze'/'przyjęte'/'anulowane' — stąd osobna nazwa.
 do $$ begin
-  create type order_status as enum ('robocze', 'zamówione', 'przyjęte', 'anulowane');
+  create type order_header_status as enum ('robocze', 'zamówione', 'przyjęte', 'anulowane');
 exception when duplicate_object then null; end $$;
 
 create table if not exists orders (
   id serial primary key,
   build_id integer not null references builds(id) on delete cascade,
   order_number text not null unique,
-  status order_status not null default 'robocze',
+  status order_header_status not null default 'robocze',
   notes text,
   "createdAt" timestamp not null default now(),
   "createdBy" uuid references auth.users(id) on delete set null

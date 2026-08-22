@@ -493,7 +493,7 @@ export const buildMaterialPlan = pgTable("build_material_plan", {
  * dla zamówień spoza planu materiałowego.
  * ============================================================ */
 
-export const orderStatusV2Enum = pgEnum("order_status", [
+export const orderStatusV2Enum = pgEnum("order_header_status", [
   "robocze",
   "zamówione",
   "przyjęte",

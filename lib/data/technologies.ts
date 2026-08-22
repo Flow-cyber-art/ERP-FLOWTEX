@@ -34,15 +34,20 @@ export type TechnologyRow = {
   technology_stages: TechnologyStageRow[];
 };
 
+// Tabele nowe (Faza 1) = snake_case w bazie (patrz 005_faza1_technologie.sql),
+// ale JS/TS trzyma się camelCase — aliasy "camelCase:snake_case" w select
+// tłumaczą jedno na drugie, żeby reszta kodu nie musiała znać realnych nazw kolumn.
 const TECHNOLOGY_SELECT =
-  "id, code, name, version, isActive, createdAt, technology_stages(id, name, orderIndex, technology_materials(id, materialName, unit, consumptionPerM2, linkedMaterialId))";
+  "id, code, name, version, isActive:is_active, createdAt, " +
+  "technology_stages(id, name, orderIndex:order_index, " +
+  "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, linkedMaterialId:linked_material_id))";
 
 /** Tylko aktywne (najnowsza wersja każdej rodziny) — to, co widać przy zakładaniu budowy. */
 export async function listActiveTechnologies(): Promise<TechnologyRow[]> {
   const { data, error } = await supabase
     .from("technologies")
     .select(TECHNOLOGY_SELECT)
-    .eq("isActive", true)
+    .eq("is_active", true)
     .order("name");
   if (error) throw new Error(error.message);
   return (data ?? []) as unknown as TechnologyRow[];

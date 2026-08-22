@@ -56,6 +56,11 @@ export const orderStatusEnum = pgEnum("order_status", [
   "dostarczone",
 ]);
 
+export const materialCategoryEnum = pgEnum("material_category", [
+  "technologiczny",
+  "pomocniczy",
+]);
+
 export const reportStatusEnum = pgEnum("report_status", [
   "roboczy",
   "oczekuje_na_synchronizacje",
@@ -121,6 +126,7 @@ export const materials = pgTable("materials", {
   unitPrice: decimal("unitPrice", { precision: 12, scale: 2 })
     .notNull()
     .default("0"),
+  category: materialCategoryEnum("category").notNull().default("pomocniczy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -153,6 +159,13 @@ export const builds = pgTable("builds", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   photosUrl: text("photosUrl"),
   teamId: integer("teamId").references(() => teams.id, { onDelete: "set null" }),
+  // Faza 0 modułu Technologia (patrz plan wdrożenia) — dane klienta/
+  // kontraktu i metraż, potrzebne do planu materiałowego i marży.
+  // "technologyId" dochodzi dopiero w Fazie 1, razem z tabelą technologies.
+  clientName: text("clientName"),
+  address: text("address"),
+  areaM2: decimal("areaM2", { precision: 10, scale: 2 }),
+  contractValue: decimal("contractValue", { precision: 12, scale: 2 }),
 });
 
 export const buildMaterials = pgTable(
@@ -244,6 +257,12 @@ export const reports = pgTable("reports", {
   adminComment: text("adminComment"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  // Kilometrówka (Faza 0/7 modułu Technologia) — km i stawka zamrożone w
+  // momencie wysyłki raportu, żeby późniejsza zmiana stawki w ustawieniach
+  // nie ruszała już wysłanych raportów.
+  km: decimal("km", { precision: 10, scale: 2 }),
+  kmRateApplied: decimal("kmRateApplied", { precision: 10, scale: 2 }),
+  kmCost: decimal("kmCost", { precision: 12, scale: 2 }),
 });
 
 export const reportMaterials = pgTable(
@@ -294,6 +313,7 @@ export const reportExtraCosts = pgTable("report_extra_costs", {
   label: text("label").notNull(),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   note: text("note"),
+  category: text("category"),
 });
 
 export const timeEntries = pgTable("time_entries", {
@@ -369,6 +389,19 @@ export const buildSettlementMaterials = pgTable(
 );
 
 /* ============================================================
+ * USTAWIENIA — Faza 0 modułu Technologia. Jednowierszowa tabela
+ * ("singleton table": id typu boolean z check(id), drugi wiersz nie
+ * może fizycznie powstać). Nowa tabela, więc snake_case (ustalona
+ * decyzja) — w odróżnieniu od reszty schematu powyżej, camelCase.
+ * ============================================================ */
+
+export const settings = pgTable("settings", {
+  id: boolean("id").primaryKey().default(true),
+  kmRate: decimal("km_rate", { precision: 10, scale: 2 }).notNull().default("0"),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+/* ============================================================
  * TYPY INFEROWANE
  * ============================================================ */
 
@@ -407,3 +440,6 @@ export type InsertMaterialOrder = typeof materialOrders.$inferInsert;
 
 export type BuildSettlement = typeof buildSettlements.$inferSelect;
 export type InsertBuildSettlement = typeof buildSettlements.$inferInsert;
+
+export type Settings = typeof settings.$inferSelect;
+export type InsertSettings = typeof settings.$inferInsert;

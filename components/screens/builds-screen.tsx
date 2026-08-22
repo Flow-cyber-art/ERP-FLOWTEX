@@ -38,7 +38,8 @@ export function BuildsScreen() {
     showBuild,
     showAssignment,
     selectedBuildId,
-    selectedMaterialId,
+    selectedBatchId,
+    warehouseBatches,
     plannedAmount,
     picker,
     pickerQuery,
@@ -48,7 +49,7 @@ export function BuildsScreen() {
     setShowBuild,
     setShowAssignment,
     setSelectedBuildId,
-    setSelectedMaterialId,
+    setSelectedBatchId,
     setPlannedAmount,
     setPicker,
     setPickerQuery,
@@ -316,106 +317,116 @@ export function BuildsScreen() {
             </ScrollView>
           </View>
         )}
+        {/* Ręczny wybór partii (Faza 5) — wyszukiwarka po nazwie pokazuje
+            KAŻDĄ partię osobno (różne daty/ceny tej samej pozycji), nie
+            zblendowany materiał; admin wybiera konkretną i ile z niej. */}
         <Text className="text-xs text-muted uppercase mt-4">
-          Materiał
+          Materiał / partia
         </Text>
-        <Pressable
-          onPress={() => {
-            setPicker(picker === "material" ? null : "material");
-            setPickerQuery("");
-          }}
-          style={{
-            backgroundColor: COLORS.background,
-            borderRadius: 10,
-            padding: 13,
-            marginTop: 8,
-            flexDirection: "row",
-            justifyContent: "space-between",
-          }}
-        >
-          <View>
-            <Text
-              style={{ color: COLORS.foreground, fontWeight: "700" }}
-            >
-              {materials.find((m) => m.id === selectedMaterialId)
-                ?.name || "Wybierz materiał"}
-            </Text>
-            <Text
-              style={{
-                color: COLORS.muted,
-                fontSize: 12,
-                marginTop: 3,
-              }}
-            >
-              {
-                materials.find((m) => m.id === selectedMaterialId)
-                  ?.index
-              }
-            </Text>
-          </View>
-          <Text style={{ color: COLORS.primary }}>
-            {picker === "material" ? "▲" : "▼"}
-          </Text>
-        </Pressable>
-        {picker === "material" && (
-          <View
-            style={{
-              backgroundColor: COLORS.background,
-              borderRadius: 10,
-              padding: 10,
-              marginTop: 6,
-            }}
-          >
-            <Field
-              placeholder="Szukaj po nazwie lub indeksie"
-              value={pickerQuery}
-              onChangeText={setPickerQuery}
-            />
-            <ScrollView style={{ maxHeight: 220 }}>
-              {materials
-                .filter((m) =>
-                  `${m.name} ${m.index}`
-                    .toLowerCase()
-                    .includes(pickerQuery.toLowerCase()),
-                )
-                .map((m) => (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => {
-                      setSelectedMaterialId(m.id);
-                      setPicker(null);
-                      setPickerQuery("");
-                    }}
-                    style={{
-                      paddingVertical: 12,
-                      borderBottomWidth: 1,
-                      borderBottomColor: COLORS.border,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: COLORS.foreground,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {m.name}
+        {(() => {
+          const selectedBatch = warehouseBatches.find(
+            (b) => String(b.id) === selectedBatchId,
+          );
+          const selectedMaterial = selectedBatch
+            ? materials.find((m) => m.id === String(selectedBatch.materialId))
+            : undefined;
+          return (
+            <>
+              <Pressable
+                onPress={() => {
+                  setPicker(picker === "material" ? null : "material");
+                  setPickerQuery("");
+                }}
+                style={{
+                  backgroundColor: COLORS.background,
+                  borderRadius: 10,
+                  padding: 13,
+                  marginTop: 8,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                <View>
+                  <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+                    {selectedMaterial?.name || "Wybierz partię"}
+                  </Text>
+                  {selectedBatch && (
+                    <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
+                      {selectedBatch.receivedAt} · {formatPLN(Number(selectedBatch.unitPrice))} ·
+                      dostępne {selectedBatch.quantity} {selectedMaterial?.unit}
                     </Text>
-                    <Text
-                      style={{
-                        color: COLORS.muted,
-                        fontSize: 12,
-                        marginTop: 3,
-                      }}
-                    >
-                      {m.index} · stan: {m.stock} {m.unit}
-                    </Text>
-                  </Pressable>
-                ))}
-            </ScrollView>
-          </View>
-        )}
+                  )}
+                </View>
+                <Text style={{ color: COLORS.primary }}>
+                  {picker === "material" ? "▲" : "▼"}
+                </Text>
+              </Pressable>
+              {picker === "material" && (
+                <View
+                  style={{
+                    backgroundColor: COLORS.background,
+                    borderRadius: 10,
+                    padding: 10,
+                    marginTop: 6,
+                  }}
+                >
+                  <Field
+                    placeholder="Szukaj po nazwie lub indeksie"
+                    value={pickerQuery}
+                    onChangeText={setPickerQuery}
+                  />
+                  <ScrollView style={{ maxHeight: 260 }}>
+                    {warehouseBatches
+                      .map((b) => ({
+                        batch: b,
+                        material: materials.find((m) => m.id === String(b.materialId)),
+                      }))
+                      .filter(({ material }) => material)
+                      .filter(({ material }) =>
+                        `${material!.name} ${material!.index}`
+                          .toLowerCase()
+                          .includes(pickerQuery.toLowerCase()),
+                      )
+                      .sort((a, b) => a.material!.name.localeCompare(b.material!.name))
+                      .map(({ batch, material }) => (
+                        <Pressable
+                          key={batch.id}
+                          onPress={() => {
+                            setSelectedBatchId(String(batch.id));
+                            setPicker(null);
+                            setPickerQuery("");
+                          }}
+                          style={{
+                            paddingVertical: 12,
+                            borderBottomWidth: 1,
+                            borderBottomColor: COLORS.border,
+                          }}
+                        >
+                          <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+                            {material!.name}
+                          </Text>
+                          <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
+                            {material!.index} · {batch.receivedAt} ·{" "}
+                            {formatPLN(Number(batch.unitPrice))} · dostępne {batch.quantity}{" "}
+                            {material!.unit}
+                            {batch.documentNumber ? ` · ${batch.documentNumber}` : ""}
+                            {batch.supplier ? ` · ${batch.supplier}` : ""}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    {warehouseBatches.length === 0 && (
+                      <Text style={{ color: COLORS.muted, fontSize: 12, padding: 10 }}>
+                        Brak partii w magazynie.
+                      </Text>
+                    )}
+                  </ScrollView>
+                </View>
+              )}
+            </>
+          );
+        })()}
         <Text className="text-xs text-muted uppercase mt-4">
-          Ilość planowana
+          Ilość z tej partii
         </Text>
         <QuantityStepper
           style={{ marginTop: 8 }}
@@ -441,9 +452,12 @@ export function BuildsScreen() {
               const material = materials.find(
                 (m) => m.id === draft.materialId,
               );
+              const batch = warehouseBatches.find(
+                (b) => String(b.id) === draft.batchId,
+              );
               return (
                 <View
-                  key={draft.materialId}
+                  key={draft.batchId}
                   style={{
                     flexDirection: "row",
                     justifyContent: "space-between",
@@ -452,11 +466,16 @@ export function BuildsScreen() {
                     borderBottomColor: COLORS.border,
                   }}
                 >
-                  <Text className="text-xs text-foreground">
-                    {material?.name}
-                  </Text>
+                  <View>
+                    <Text className="text-xs text-foreground">{material?.name}</Text>
+                    {batch && (
+                      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                        {batch.receivedAt} · {formatPLN(Number(batch.unitPrice))}
+                      </Text>
+                    )}
+                  </View>
                   <Text className="text-xs text-primary font-bold">
-                    {draft.planned} {material?.unit}
+                    {draft.quantity} {material?.unit}
                   </Text>
                 </View>
               );

@@ -27,6 +27,12 @@ export async function listBuildMaterials(): Promise<BuildMaterialRow[]> {
 
 export type CommitBuildMaterialsItem = { materialId: number; planned: number };
 
+// Wcześniejszy flow (Admin wpisywał tylko ilość planowaną, bez wyboru
+// partii — magazyn rozliczał się sam, automatycznym FIFO, dopiero przy
+// raporcie dziennym). Zastąpiony w Fazie 5 przez
+// `assignMaterialBatchesToBuild` poniżej; RPC `commit_build_materials`
+// zostaje w bazie nieużywana (nikt jej już stąd nie woła), żeby nie
+// ryzykować dropowania czegoś, co mogło zostać wywołane gdzie indziej.
 export async function commitBuildMaterials(
   buildId: number,
   items: CommitBuildMaterialsItem[],
@@ -36,4 +42,44 @@ export async function commitBuildMaterials(
     p_items: items,
   });
   if (error) throw new Error(error.message);
+}
+
+export type AssignMaterialBatchItem = { batchId: number; quantity: number };
+
+/**
+ * Ręczny wybór partii (Faza 5) — dla materiałów SPOZA planu technologii.
+ * Admin wskazuje konkretną partię (z jej realną ceną/datą) i ile z niej
+ * trafia na budowę; jedno wywołanie może objąć wiele partii/materiałów
+ * naraz (odpowiednik dawnego koszyka "+ Dodaj do listy"). Materiały Z
+ * planu technologii nie przechodzą przez to — przypisanie następuje
+ * automatycznie przy przyjęciu zamówienia (receive_order, Faza 3/4).
+ */
+export async function assignMaterialBatchesToBuild(
+  buildId: number,
+  items: AssignMaterialBatchItem[],
+): Promise<void> {
+  const { error } = await supabase.rpc("assign_material_batches_to_build", {
+    p_build_id: buildId,
+    p_items: items,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export type BuildMaterialLotRow = {
+  id: number;
+  buildId: number;
+  materialId: number;
+  sourceBatchId: number | null;
+  quantity: string;
+  unitPrice: string;
+  issuedAt: string;
+};
+
+/** Partie faktycznie przypisane do budów (Faza 5) — do rozbicia "z jakiej partii" w raporcie/rozliczeniu. */
+export async function listBuildMaterialLots(): Promise<BuildMaterialLotRow[]> {
+  const { data, error } = await supabase
+    .from("build_material_lots")
+    .select("id, buildId, materialId, sourceBatchId, quantity, unitPrice, issuedAt");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BuildMaterialLotRow[];
 }

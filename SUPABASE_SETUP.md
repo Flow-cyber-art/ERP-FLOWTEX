@@ -185,6 +185,26 @@ jednej fikcyjnej partii odtworzonej z samego stanu — patrz
 symulacji FIFO pod offline/optymistyczny raport dzienny — ta zostaje
 nietknięta).
 
+**Faza 5 (gotowa)** — [`supabase/sql/009_faza5_reczny_wybor_partii.sql`](./supabase/sql/009_faza5_reczny_wybor_partii.sql).
+Uruchom PO `008`. **Jedyna faza, która zmienia już działający kod**
+(`submit_daily_report`) zamiast tylko dodawać nowy — patrz ustalenie z
+rozmowy: materiały **technologiczne** (z planu, Faza 2) nie mają
+osobnego ręcznego kroku — samo przyjęcie zamówienia (Faza 3/4, zawsze
+powiązane z konkretną budową przez `orders.build_id`) automatycznie
+zapisuje przyjętą partię do `build_material_lots` tej budowy
+(`receive_order` rozszerzone). Ręczny wybór partii (przeszukiwarka po
+nazwie, różne partie/ceny do wyboru — ekran "+ Przypisz materiał")
+dotyczy tylko materiałów **spoza** planu: nowa RPC
+`assign_material_batches_to_build()` zastępuje dawną
+`commit_build_materials()` (ta zostaje w bazie nieużywana). Zużycie w
+raporcie dziennym (`submit_daily_report`) rozlicza się teraz z partii
+przypisanych do TEJ budowy (`fn_consume_build_lot_fifo`, FIFO po
+`build_material_lots`), nie z całego magazynu jak dotychczas
+(`fn_consume_fifo`) — więc materiał można rozliczyć tylko z tego, co
+faktycznie przypisano do budowy. `build_material_lots` i
+`build_materials.issued` istniały w schemacie od dawna, nieużywane —
+przygotowane dokładnie pod tę fazę.
+
 ## 6. Co jest zaimplementowane
 
 `lib/data/*.ts` — warstwa danych (cały serwer Express/tRPC —

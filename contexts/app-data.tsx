@@ -35,8 +35,11 @@ import {
   receiveOrder as receiveOrderRemote,
 } from "@/lib/data/orders";
 import {
-  commitBuildMaterials,
+  assignMaterialBatchesToBuild,
+  listBuildMaterialLots as listBuildMaterialLotsRemote,
   listBuildMaterials,
+  type AssignMaterialBatchItem,
+  type BuildMaterialLotRow,
 } from "@/lib/data/build-materials";
 import {
   listReports,
@@ -335,11 +338,16 @@ function useAppDataState(
   const [selectedMaterialId, setSelectedMaterialId] = useState(
     initialMaterials[0].id,
   );
+  // Ręczny wybór partii (Faza 5) — dla materiałów spoza planu technologii
+  // wyszukiwarka pokazuje partie (nie same materiały): różne daty/ceny tej
+  // samej pozycji do wyboru. `selectedMaterialId` zostaje (nadal potrzebny
+  // np. gdzie indziej), ale koszyk przypisania działa teraz na batchId.
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [plannedAmount, setPlannedAmount] = useState("");
   const [picker, setPicker] = useState<"build" | "material" | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [draftAssignments, setDraftAssignments] = useState<
-    { materialId: string; planned: number }[]
+    { batchId: string; materialId: string; quantity: number }[]
   >([]);
   const [newMaterial, setNewMaterial] = useState({
     name: "",
@@ -432,6 +440,15 @@ function useAppDataState(
   const warehouseBatchesQuery = useQuery({
     queryKey: ["warehouseBatches", "list"],
     queryFn: listWarehouseBatchesRemote,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  const warehouseBatches = (warehouseBatchesQuery.data ?? []) as WarehouseBatchRow[];
+  // Partie faktycznie przypisane do budów (Faza 5) — czysty odczyt,
+  // przydatny do pokazania "z jakiej partii" w raporcie/rozliczeniu.
+  const buildMaterialLotsQuery = useQuery({
+    queryKey: ["buildMaterialLots", "list"],
+    queryFn: listBuildMaterialLotsRemote,
     retry: 1,
     refetchOnWindowFocus: false,
   });
@@ -629,11 +646,13 @@ function useAppDataState(
     mutationFn: (vars: { buildId: number; technologyId: number; areaM2: number }) =>
       assignTechnologyToBuild(vars.buildId, vars.technologyId, vars.areaM2),
   });
-  const commitAssignmentsMutation = useMutation({
-    mutationFn: (vars: {
-      buildId: number;
-      items: { materialId: number; planned: number }[];
-    }) => commitBuildMaterials(vars.buildId, vars.items),
+  // Ręczny wybór partii (Faza 5) — zastępuje dawny commitBuildMaterials
+  // (materiał + ilość planowana, bez partii) dla materiałów spoza planu
+  // technologii. commitBuildMaterials/commitBuildMaterialsMutation zostają
+  // nieużywane (patrz komentarz w lib/data/build-materials.ts).
+  const assignBatchesMutation = useMutation({
+    mutationFn: (vars: { buildId: number; items: AssignMaterialBatchItem[] }) =>
+      assignMaterialBatchesToBuild(vars.buildId, vars.items),
   });
   const createEmployeeMutation = useMutation({ mutationFn: createEmployee });
   const updateEmployeeRateMutation = useMutation({
@@ -874,25 +893,28 @@ function useAppDataState(
       }))
       .filter((row) => row.missing > 0);
   }, [materials, assignments]);
+  // Ręczny wybór partii (Faza 5) — admin wybiera KONKRETNĄ partię
+  // (wyszukiwarka pokazuje różne daty/ceny tej samej pozycji, patrz
+  // warehouseBatches) i ile z niej trafia na budowę, zamiast tylko
+  // wpisywać ilość planowaną i zdawać się na automatyczny FIFO.
   const addToDraft = () => {
     const amount = Number(plannedAmount);
-    if (!selectedBuildId || !selectedMaterialId || !amount || amount <= 0)
-      return;
-    const existing = draftAssignments.find(
-      (a) => a.materialId === selectedMaterialId,
-    );
+    if (!selectedBuildId || !selectedBatchId || !amount || amount <= 0) return;
+    const batch = warehouseBatches.find((b) => String(b.id) === selectedBatchId);
+    if (!batch) return;
+    const existing = draftAssignments.find((a) => a.batchId === selectedBatchId);
     if (existing)
       setDraftAssignments(
         draftAssignments.map((a) =>
-          a.materialId === selectedMaterialId
-            ? { ...a, planned: a.planned + amount }
+          a.batchId === selectedBatchId
+            ? { ...a, quantity: a.quantity + amount }
             : a,
         ),
       );
     else
       setDraftAssignments([
         ...draftAssignments,
-        { materialId: selectedMaterialId, planned: amount },
+        { batchId: selectedBatchId, materialId: String(batch.materialId), quantity: amount },
       ]);
     setPlannedAmount("");
   };
@@ -909,23 +931,28 @@ function useAppDataState(
     const numericBuildId = Number(selectedBuildId);
     const items = draftAssignments
       .map((d) => ({
-        materialId: Number(d.materialId),
-        planned: d.planned,
+        batchId: Number(d.batchId),
+        quantity: d.quantity,
       }))
-      .filter((i) => !Number.isNaN(i.materialId));
+      .filter((i) => !Number.isNaN(i.batchId));
     if (Number.isNaN(numericBuildId) || !items.length) {
       Alert.alert(
         "Poczekaj na synchronizację",
-        "Budowa lub materiał jeszcze się nie zsynchronizowały z serwerem — spróbuj ponownie za chwilę.",
+        "Budowa lub partia jeszcze się nie zsynchronizowały z serwerem — spróbuj ponownie za chwilę.",
       );
       return;
     }
     try {
-      await commitAssignmentsMutation.mutateAsync({
+      await assignBatchesMutation.mutateAsync({
         buildId: numericBuildId,
         items,
       });
-      await invalidate("buildMaterials");
+      await Promise.all([
+        invalidate("buildMaterials"),
+        invalidate("materials"),
+        invalidate("warehouseBatches"),
+        invalidate("buildMaterialLots"),
+      ]);
       setDraftAssignments([]);
       setShowAssignment(false);
     } catch (error) {
@@ -1110,6 +1137,8 @@ function useAppDataState(
         invalidate("buildOrders"),
         invalidate("materials"),
         invalidate("warehouseBatches"),
+        invalidate("buildMaterials"),
+        invalidate("buildMaterialLots"),
       ]);
     } catch (error) {
       reportMutationError(error, "Nie udało się przyjąć dostawy.");
@@ -1613,7 +1642,10 @@ function useAppDataState(
     markBuildOrderOrdered,
     cancelBuildOrder,
     receiveBuildOrder,
-    warehouseBatches: (warehouseBatchesQuery.data ?? []) as WarehouseBatchRow[],
+    warehouseBatches,
+    buildMaterialLots: (buildMaterialLotsQuery.data ?? []) as BuildMaterialLotRow[],
+    selectedBatchId,
+    setSelectedBatchId,
     assignments,
     query,
     showMaterial,

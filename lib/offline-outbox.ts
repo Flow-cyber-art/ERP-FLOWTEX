@@ -39,6 +39,7 @@ export type PendingReportSubmission = {
     materialId: number;
     usedQuantity: number;
     reason?: string;
+    stageName?: string;
   }[];
   extraCosts: { label: string; amount: number; note?: string }[];
   /** Kiedy dodane do kolejki lokalnie — do sortowania i debugowania. */

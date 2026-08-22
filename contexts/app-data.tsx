@@ -62,6 +62,12 @@ import {
   type MaterialBatchRow as WarehouseBatchRow,
 } from "@/lib/data/material-batches";
 import {
+  completeBuildStage as completeBuildStageRemote,
+  listBuildStageStatuses,
+  reopenBuildStage as reopenBuildStageRemote,
+  type BuildStageStatusRow,
+} from "@/lib/data/build-stages";
+import {
   cancelBuildOrder as cancelBuildOrderRemote,
   generateOrderFromPlan as generateOrderFromPlanRemote,
   listBuildOrders,
@@ -426,6 +432,7 @@ function useAppDataState(
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  const buildMaterialPlans = (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[];
   // Zamówienia jako nagłówek+pozycje (Faza 3) — dla WSZYSTKICH budów naraz,
   // filtrowane po buildId w UI, ten sam wzorzec co plan materiałowy wyżej.
   const buildOrdersQuery = useQuery({
@@ -449,6 +456,14 @@ function useAppDataState(
   const buildMaterialLotsQuery = useQuery({
     queryKey: ["buildMaterialLots", "list"],
     queryFn: listBuildMaterialLotsRemote,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  // Statusy etapów technologii (Faza 6) — wszystkie budowy naraz, ten sam
+  // wzorzec co plan materiałowy/zamówienia wyżej.
+  const buildStageStatusesQuery = useQuery({
+    queryKey: ["buildStageStatuses", "list"],
+    queryFn: listBuildStageStatuses,
     retry: 1,
     refetchOnWindowFocus: false,
   });
@@ -653,6 +668,14 @@ function useAppDataState(
   const assignBatchesMutation = useMutation({
     mutationFn: (vars: { buildId: number; items: AssignMaterialBatchItem[] }) =>
       assignMaterialBatchesToBuild(vars.buildId, vars.items),
+  });
+  const completeBuildStageMutation = useMutation({
+    mutationFn: (vars: { buildId: number; stageName: string }) =>
+      completeBuildStageRemote(vars.buildId, vars.stageName),
+  });
+  const reopenBuildStageMutation = useMutation({
+    mutationFn: (vars: { buildId: number; stageName: string }) =>
+      reopenBuildStageRemote(vars.buildId, vars.stageName),
   });
   const createEmployeeMutation = useMutation({ mutationFn: createEmployee });
   const updateEmployeeRateMutation = useMutation({
@@ -957,6 +980,27 @@ function useAppDataState(
       setShowAssignment(false);
     } catch (error) {
       reportMutationError(error, "Nie udało się przypisać materiałów do budowy.");
+    }
+  };
+  // Status etapu technologii (Faza 6) — wyłącznie brygadzista/admin, ręcznie.
+  const completeBuildStage = async (buildId: string, stageName: string) => {
+    const numericBuildId = Number(buildId);
+    if (Number.isNaN(numericBuildId)) return;
+    try {
+      await completeBuildStageMutation.mutateAsync({ buildId: numericBuildId, stageName });
+      await invalidate("buildStageStatuses");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zakończyć etapu.");
+    }
+  };
+  const reopenBuildStage = async (buildId: string, stageName: string) => {
+    const numericBuildId = Number(buildId);
+    if (Number.isNaN(numericBuildId)) return;
+    try {
+      await reopenBuildStageMutation.mutateAsync({ buildId: numericBuildId, stageName });
+      await invalidate("buildStageStatuses");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się wznowić etapu.");
     }
   };
   const saveMaterial = async () => {
@@ -1294,11 +1338,24 @@ function useAppDataState(
     // (savedReports powyżej) i brygadzista nic nie traci, tylko wyśle go
     // ponownie, gdy dane referencyjne się zsynchronizują.
     const numericBuildId = Number(buildId);
+    // Etap technologii (Faza 6) — wyłącznie informacyjne (report_materials
+    // .stage_name), dopasowane po nazwie materiału do build_material_plan
+    // tej budowy; materiały pomocnicze (spoza planu) zostają bez etapu.
+    const planForBuild = buildMaterialPlans.filter(
+      (p) => p.buildId === numericBuildId,
+    );
+    const stageNameForMaterial = (materialId: string) => {
+      const name = materials.find((m) => m.id === materialId)?.name?.trim().toLowerCase();
+      if (!name) return undefined;
+      return planForBuild.find((p) => p.materialName.trim().toLowerCase() === name)
+        ?.stageName;
+    };
     const materialsPayload = Object.entries(reportSnapshot.materialValues)
       .map(([materialId, usedQuantityRaw]) => ({
         materialId: Number(materialId),
         usedQuantity: Number(usedQuantityRaw) || 0,
         reason: reasons[materialId],
+        stageName: stageNameForMaterial(materialId),
       }))
       .filter((m) => !Number.isNaN(m.materialId));
     const peoplePayload = draftPeople
@@ -1634,7 +1691,7 @@ function useAppDataState(
     technologies: (technologiesQuery.data ?? []) as TechnologyRow[],
     buildTechnologySnapshots: (buildTechnologySnapshotsQuery.data ??
       []) as BuildTechnologySnapshotRow[],
-    buildMaterialPlans: (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[],
+    buildMaterialPlans,
     assignBuildTechnology,
     buildOrders: (buildOrdersQuery.data ?? []) as BuildOrderRow[],
     generateOrderFromPlan,
@@ -1644,6 +1701,9 @@ function useAppDataState(
     receiveBuildOrder,
     warehouseBatches,
     buildMaterialLots: (buildMaterialLotsQuery.data ?? []) as BuildMaterialLotRow[],
+    buildStageStatuses: (buildStageStatusesQuery.data ?? []) as BuildStageStatusRow[],
+    completeBuildStage,
+    reopenBuildStage,
     selectedBatchId,
     setSelectedBatchId,
     assignments,

@@ -205,6 +205,21 @@ faktycznie przypisano do budowy. `build_material_lots` i
 `build_materials.issued` istniały w schemacie od dawna, nieużywane —
 przygotowane dokładnie pod tę fazę.
 
+**Faza 6 (gotowa)** — [`supabase/sql/010_faza6_raport_dzienny.sql`](./supabase/sql/010_faza6_raport_dzienny.sql).
+Uruchom PO `009`. Największa zmiana w codziennej pracy brygadzisty, ale
+schemat zostaje płytki — bez zmiany klucza głównego `report_materials`
+ani logiki FIFO z Fazy 5. Raport dzienny dzieli teraz materiały na
+sekcję **Technologia** (rozwijana lista etapów, materiał dopasowany do
+etapu po nazwie względem `build_material_plan`, przycisk "Zakończ
+etap"/"Wznów etap") i **Materiały pomocnicze** (spoza planu, z
+wyszukiwarką gdy lista urośnie). `report_materials` dostaje `stage_name`
+— wyłącznie informacyjne, wysyłane przez klienta, nie wpływa na FIFO/
+koszt. Status etapu (🟡 w trakcie / 🟢 zakończony) to nowa tabela
+`build_stage_status` (jeden wiersz = jeden zakończony etap danej budowy;
+brak wiersza = w trakcie/nierozpoczęty, rozstrzyga to samo UI); zapis
+wprost z klienta (insert/delete), bez RPC — RLS pozwala Adminowi i
+Brygadziście, tak jak `submit_daily_report`.
+
 ## 6. Co jest zaimplementowane
 
 `lib/data/*.ts` — warstwa danych (cały serwer Express/tRPC —
@@ -228,7 +243,10 @@ patrz uwaga w punkcie 7) i endpoint do Google Drive):
 - `lib/data/material-batches.ts` — realne partie magazynowe (Faza 4):
   czysty odczyt `material_batches` (ilość dostępna, cena, dokument,
   dostawca) do wyświetlenia na ekranie magazynu.
-- `lib/data/build-materials.ts` — przypisania materiałów do budów.
+- `lib/data/build-materials.ts` — przypisania materiałów do budów, w
+  tym ręczny wybór partii (Faza 5) i odczyt `build_material_lots`.
+- `lib/data/build-stages.ts` — status etapów technologii na budowie
+  (Faza 6): zakończenie/wznowienie etapu.
 - `lib/data/reports.ts` — zapis raportu dziennego (FIFO + upsert po
   buildId+date), zatwierdzanie/odsyłanie do poprawy, **`listReports()`**
   — realna lista z bazy (wcześniej `savedReports` było czysto lokalnym

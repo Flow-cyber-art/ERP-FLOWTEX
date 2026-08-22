@@ -50,6 +50,10 @@ export function ReportScreen() {
     setDraftExtraCosts,
     activeBuild,
     buildAssignments,
+    buildMaterialPlans,
+    buildStageStatuses,
+    completeBuildStage,
+    reopenBuildStage,
     saveDailyReport,
     addPersonToDraft,
     addExtraCostToDraft,
@@ -67,6 +71,135 @@ export function ReportScreen() {
   // brygadzisty przy budowie, na której właśnie raportuje.
   const [editingPhotos, setEditingPhotos] = useState(false);
   const [photosUrlInput, setPhotosUrlInput] = useState("");
+
+  // Etapy technologii (Faza 6) — materiały budowy grupowane po etapie, na
+  // podstawie dopasowania nazwy do build_material_plan (Faza 2); to samo
+  // dopasowanie robi saveDailyReport w contexts/app-data.tsx przy zapisie
+  // stage_name. Materiał bez dopasowania = "materiały pomocnicze".
+  const [pomocniczeQuery, setPomocniczeQuery] = useState("");
+  const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
+  const planForActiveBuild = activeBuild
+    ? buildMaterialPlans.filter((p) => p.buildId === Number(activeBuild.id))
+    : [];
+  const stageNameByMaterialName = new Map<string, string>();
+  const stageOrder: string[] = [];
+  for (const p of planForActiveBuild) {
+    const key = p.materialName.trim().toLowerCase();
+    if (!stageNameByMaterialName.has(key)) stageNameByMaterialName.set(key, p.stageName);
+    if (!stageOrder.includes(p.stageName)) stageOrder.push(p.stageName);
+  }
+  const assignmentsByStage = new Map<string, typeof buildAssignments>();
+  const pomocniczeAssignments: typeof buildAssignments = [];
+  for (const a of buildAssignments) {
+    const materialName = materials.find((m) => m.id === a.materialId)?.name?.trim().toLowerCase();
+    const stage = materialName ? stageNameByMaterialName.get(materialName) : undefined;
+    if (stage) {
+      if (!assignmentsByStage.has(stage)) assignmentsByStage.set(stage, []);
+      assignmentsByStage.get(stage)!.push(a);
+    } else {
+      pomocniczeAssignments.push(a);
+    }
+  }
+  const completedStageNames = new Set(
+    (activeBuild ? buildStageStatuses.filter((s) => s.buildId === Number(activeBuild.id)) : []).map(
+      (s) => s.stageName,
+    ),
+  );
+  const filteredPomocnicze = pomocniczeAssignments.filter((a) => {
+    if (!pomocniczeQuery.trim()) return true;
+    const m = materials.find((x) => x.id === a.materialId);
+    return `${m?.name ?? ""} ${m?.index ?? ""}`
+      .toLowerCase()
+      .includes(pomocniczeQuery.trim().toLowerCase());
+  });
+
+  const renderMaterialRow = (a: (typeof buildAssignments)[number], i: number) => {
+    const m = materials.find((x) => x.id === a.materialId);
+    const currentValue = Number(reportValues[a.materialId] || 0);
+    const different =
+      devRole === "Admin" &&
+      reportValues[a.materialId] !== undefined &&
+      currentValue !== a.planned;
+    return (
+      <View key={a.materialId}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingVertical: 12,
+            borderTopWidth: i > 0 ? 1 : 0,
+            borderTopColor: COLORS.border,
+          }}
+        >
+          {/* lewa kolumna — elastyczna, może się zwężać */}
+          <View
+            style={{
+              flex: 1,
+              minWidth: 0,
+              flexDirection: "row",
+              alignItems: "center",
+              paddingRight: 8,
+            }}
+          >
+            <IconBadge name="layers" size={16} badgeSize={32} />
+            <View
+              style={{
+                marginLeft: 8,
+                flex: 1,
+                minWidth: 0,
+              }}
+            >
+              <Text className="text-sm font-semibold text-foreground" numberOfLines={2}>
+                {m?.name || "Materiał usunięty z magazynu"}
+              </Text>
+              <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>
+                {!m
+                  ? `ID: ${a.materialId}`
+                  : devRole === "Admin"
+                    ? `plan ${a.planned} ${m.unit} · pozostało ${Math.max(0, a.planned - currentValue)} ${m.unit}`
+                    : "Materiał przypisany do budowy"}
+              </Text>
+            </View>
+          </View>
+
+          {/* prawa kolumna — sztywna szerokość steppera */}
+          <QuantityStepper
+            disabled={reportApproved}
+            value={reportValues[a.materialId] || "0"}
+            onChangeText={(v) =>
+              setReportValues({
+                ...reportValues,
+                [a.materialId]: v,
+              })
+            }
+          />
+        </View>
+        {currentValue > a.planned && (
+          // Ostrzeżenie PRZED wysłaniem raportu, nie dopiero przy
+          // rozliczeniu budowy — brygadzista widzi na bieżąco, że
+          // wpisana ilość przekracza to, co zaplanowano.
+          <Text
+            style={{
+              color: COLORS.warning,
+              fontSize: 11,
+              marginTop: -4,
+              marginBottom: 8,
+            }}
+          >
+            ⚠ Przekracza plan o {(currentValue - a.planned).toFixed(2)} {m?.unit}
+          </Text>
+        )}
+        {different && (
+          <Field
+            editable={!reportApproved}
+            placeholder="Dlaczego wystąpiła różnica?"
+            value={reasons[a.materialId] || ""}
+            onChangeText={(v: string) => setReasons({ ...reasons, [a.materialId]: v })}
+          />
+        )}
+      </View>
+    );
+  };
 
   return (
     <>
@@ -285,106 +418,100 @@ export function ReportScreen() {
               )}
             </View>
 
-            <View className="border-t border-border p-4">
-              <Text className="text-xs text-muted uppercase mb-2">
-                Materiały
-              </Text>
-              {buildAssignments.map((a, i) => {
-                const m = materials.find((x) => x.id === a.materialId);
-                const currentValue = Number(reportValues[a.materialId] || 0);
-                const different =
-                  devRole === "Admin" &&
-                  reportValues[a.materialId] !== undefined &&
-                  currentValue !== a.planned;
-                return (
-                  <View key={a.materialId}>
+            {/* Etapy technologii (Faza 6) — rozwijana lista, plan/przypisano/
+                zużyto per etap, "Zakończ etap" ręcznie przez brygadzistę. */}
+            {stageOrder.length > 0 && (
+              <View className="border-t border-border p-4">
+                <Text className="text-xs text-muted uppercase mb-2">Technologia</Text>
+                {stageOrder.map((stageName) => {
+                  const stageAssignments = assignmentsByStage.get(stageName) ?? [];
+                  const isCompleted = completedStageNames.has(stageName);
+                  const isCollapsed = collapsedStages[stageName] ?? true;
+                  return (
                     <View
+                      key={stageName}
                       style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        paddingVertical: 12,
-                        borderTopWidth: i > 0 ? 1 : 0,
-                        borderTopColor: COLORS.border,
+                        backgroundColor: COLORS.background,
+                        borderRadius: 12,
+                        padding: 12,
+                        marginTop: 8,
                       }}
                     >
-                      {/* lewa kolumna — elastyczna, może się zwężać */}
-                      <View
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          paddingRight: 8,
-                        }}
-                      >
-                        <IconBadge name="layers" size={16} badgeSize={32} />
-                        <View
-                          style={{
-                            marginLeft: 8,
-                            flex: 1,
-                            minWidth: 0,
-                          }}
-                        >
-                          <Text
-                            className="text-sm font-semibold text-foreground"
-                            numberOfLines={2}
-                          >
-                            {m?.name || "Materiał usunięty z magazynu"}
-                          </Text>
-                          <Text
-                            className="text-xs text-muted mt-0.5"
-                            numberOfLines={2}
-                          >
-                            {!m
-                              ? `ID: ${a.materialId}`
-                              : devRole === "Admin"
-                                ? `plan ${a.planned} ${m.unit} · pozostało ${Math.max(0, a.planned - currentValue)} ${m.unit}`
-                                : "Materiał przypisany do budowy"}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* prawa kolumna — sztywna szerokość steppera */}
-                      <QuantityStepper
-                        disabled={reportApproved}
-                        value={reportValues[a.materialId] || "0"}
-                        onChangeText={(v) =>
-                          setReportValues({
-                            ...reportValues,
-                            [a.materialId]: v,
+                      <Pressable
+                        onPress={() =>
+                          setCollapsedStages({
+                            ...collapsedStages,
+                            [stageName]: !isCollapsed,
                           })
                         }
-                      />
-                    </View>
-                    {currentValue > a.planned && (
-                      // Ostrzeżenie PRZED wysłaniem raportu, nie dopiero przy
-                      // rozliczeniu budowy — brygadzista widzi na bieżąco, że
-                      // wpisana ilość przekracza to, co zaplanowano.
-                      <Text
                         style={{
-                          color: COLORS.warning,
-                          fontSize: 11,
-                          marginTop: -4,
-                          marginBottom: 8,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
                         }}
                       >
-                        ⚠ Przekracza plan o {(currentValue - a.planned).toFixed(2)}{" "}
-                        {m?.unit}
-                      </Text>
-                    )}
-                    {different && (
-                      <Field
-                        editable={!reportApproved}
-                        placeholder="Dlaczego wystąpiła różnica?"
-                        value={reasons[a.materialId] || ""}
-                        onChangeText={(v: string) =>
-                          setReasons({ ...reasons, [a.materialId]: v })
-                        }
-                      />
-                    )}
-                  </View>
-                );
-              })}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Text style={{ fontSize: 14 }}>{isCompleted ? "🟢" : "🟡"}</Text>
+                          <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+                            {stageName}
+                          </Text>
+                        </View>
+                        <Text style={{ color: COLORS.primary }}>{isCollapsed ? "▼" : "▲"}</Text>
+                      </Pressable>
+
+                      {!isCollapsed && (
+                        <>
+                          <View style={{ marginTop: 8 }}>
+                            {stageAssignments.map((a, i) => renderMaterialRow(a, i))}
+                            {stageAssignments.length === 0 && (
+                              <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                                Brak przypisanych materiałów tego etapu.
+                              </Text>
+                            )}
+                          </View>
+                          {!reportApproved && (
+                            <View style={{ marginTop: 10 }}>
+                              <Button
+                                label={isCompleted ? "Wznów etap" : "Zakończ etap"}
+                                secondary={isCompleted}
+                                onPress={() =>
+                                  activeBuild &&
+                                  (isCompleted
+                                    ? reopenBuildStage(activeBuild.id, stageName)
+                                    : completeBuildStage(activeBuild.id, stageName))
+                                }
+                              />
+                            </View>
+                          )}
+                        </>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Materiały pomocnicze — spoza planu technologii (przypisane
+                ręcznie, Faza 5); wyszukiwarka przydaje się, gdy lista
+                urośnie. */}
+            <View className="border-t border-border p-4">
+              <Text className="text-xs text-muted uppercase mb-2">
+                {stageOrder.length > 0 ? "Materiały pomocnicze" : "Materiały"}
+              </Text>
+              {pomocniczeAssignments.length > 3 && (
+                <Field
+                  placeholder="Szukaj po nazwie lub indeksie"
+                  value={pomocniczeQuery}
+                  onChangeText={setPomocniczeQuery}
+                  style={{ marginBottom: 8 }}
+                />
+              )}
+              {filteredPomocnicze.map((a, i) => renderMaterialRow(a, i))}
+              {pomocniczeAssignments.length === 0 && (
+                <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                  Brak materiałów pomocniczych przypisanych do budowy.
+                </Text>
+              )}
             </View>
 
             <View className="border-t border-border p-4">

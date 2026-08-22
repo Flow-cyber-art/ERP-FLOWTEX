@@ -19,7 +19,16 @@ export type ReportStatus =
   | "konflikt";
 
 export type SubmitReportPerson = { employeeId: number; start: string; end: string };
-export type SubmitReportMaterial = { materialId: number; usedQuantity: number; reason?: string };
+export type SubmitReportMaterial = {
+  materialId: number;
+  usedQuantity: number;
+  reason?: string;
+  // Faza 6 — nazwa etapu technologii (z build_material_plan), do którego
+  // ten materiał należy; puste dla materiałów pomocniczych spoza planu.
+  // Wyłącznie informacyjne (report_materials.stage_name) — nie wpływa na
+  // FIFO/koszt, patrz submit_daily_report w supabase/sql.
+  stageName?: string;
+};
 export type SubmitReportExtraCost = { label: string; amount: number; note?: string };
 
 export type SubmitDailyReportInput = {

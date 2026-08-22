@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import {
   COLORS,
   Button,
+  confirmAction,
   Field,
   IconBadge,
   QuantityStepper,
@@ -10,6 +11,13 @@ import {
   StatusBadge,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+
+const BUILD_ORDER_STATUS_LABEL: Record<string, string> = {
+  robocze: "Robocze",
+  zamówione: "Zamówione",
+  przyjęte: "Przyjęte",
+  anulowane: "Anulowane",
+};
 
 type Filter = "aktywne" | "braki" | "wdrodze" | "dostarczone";
 
@@ -47,11 +55,34 @@ export function OrdersScreen() {
     setOrderSaved,
     shortages,
     materials,
+    builds,
+    buildOrders,
+    updateOrderItemQuantity,
+    markBuildOrderOrdered,
+    cancelBuildOrder,
+    receiveBuildOrder,
     createOrder,
     createOrderFromShortage,
     markOrderOrdered,
     receiveOrder,
   } = useAppData();
+
+  // Zamówienia z planu materiałowego budowy (Faza 3) — te same akcje co
+  // w karcie budowy, tylko zebrane w jednym miejscu razem ze statusami,
+  // zamiast być rozproszone po poszczególnych budowach.
+  const [buildOrderReceivingId, setBuildOrderReceivingId] = useState<number | null>(
+    null,
+  );
+  const [buildOrderReceiveDrafts, setBuildOrderReceiveDrafts] = useState<
+    Record<number, { qty: string; price: string }>
+  >({});
+  const [buildOrderReceiveDocument, setBuildOrderReceiveDocument] = useState("");
+  const [buildOrderReceiveSupplier, setBuildOrderReceiveSupplier] = useState("");
+  const [buildOrderReceiveBusy, setBuildOrderReceiveBusy] = useState(false);
+  const [editingBuildOrderItemId, setEditingBuildOrderItemId] = useState<
+    number | null
+  >(null);
+  const [buildOrderQtyDraft, setBuildOrderQtyDraft] = useState("");
 
   const [manualFormOpen, setManualFormOpen] = useState(false);
   // Podpowiedzi z magazynu podczas wpisywania nazwy w formularzu "Zamów
@@ -207,6 +238,266 @@ export function OrdersScreen() {
           </Pressable>
         }
       />
+
+      {/* Zamówienia z planu materiałowego budowy (Faza 3) — generowane z
+          karty budowy przyciskiem "+ Z planu", ale statusy i przyjęcie
+          dostawy obsługujemy tu, w jednym miejscu ze wszystkimi
+          zamówieniami, zamiast rozproszone po poszczególnych budowach. */}
+      {buildOrders.length > 0 && (
+        <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
+          <Text className="text-xs text-muted uppercase mb-3">
+            Zamówienia z planu budów
+          </Text>
+          {buildOrders.map((order) => {
+            const build = builds.find((b) => b.id === String(order.buildId));
+            const isReceiving = buildOrderReceivingId === order.id;
+            return (
+              <View
+                key={order.id}
+                style={{
+                  backgroundColor: COLORS.background,
+                  borderRadius: 10,
+                  padding: 10,
+                  marginBottom: 10,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+                      {order.orderNumber}
+                    </Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                      {build ? `${build.number} · ${build.name}` : `budowa #${order.buildId}`}
+                    </Text>
+                  </View>
+                  <StatusBadge
+                    status={
+                      order.status === "przyjęte"
+                        ? "ok"
+                        : order.status === "anulowane"
+                          ? "danger"
+                          : "warning"
+                    }
+                    label={BUILD_ORDER_STATUS_LABEL[order.status]}
+                  />
+                </View>
+
+                {order.order_items.map((item) => (
+                  <View
+                    key={item.id}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: 6,
+                    }}
+                  >
+                    <Text style={{ color: COLORS.foreground, fontSize: 12, flex: 1 }}>
+                      {item.materialName}
+                    </Text>
+                    {order.status === "robocze" && editingBuildOrderItemId === item.id ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <View style={{ width: 90 }}>
+                          <QuantityStepper
+                            value={buildOrderQtyDraft}
+                            onChangeText={setBuildOrderQtyDraft}
+                          />
+                        </View>
+                        <Pressable
+                          onPress={async () => {
+                            const qty = Number(buildOrderQtyDraft);
+                            if (qty > 0) await updateOrderItemQuantity(item.id, qty);
+                            setEditingBuildOrderItemId(null);
+                          }}
+                        >
+                          <Text style={{ color: COLORS.success, fontSize: 12, fontWeight: "700" }}>
+                            OK
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        disabled={order.status !== "robocze"}
+                        onPress={() => {
+                          setEditingBuildOrderItemId(item.id);
+                          setBuildOrderQtyDraft(item.orderedQuantity);
+                        }}
+                      >
+                        <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                          {item.orderedQuantity} {item.unit}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ))}
+
+                {order.status === "robocze" && (
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label="Złożono u dostawcy"
+                        fullWidth
+                        onPress={() => markBuildOrderOrdered(order.id)}
+                      />
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        confirmAction(
+                          "Anulować zamówienie?",
+                          `${order.orderNumber} zostanie oznaczone jako anulowane.`,
+                          "Anuluj zamówienie",
+                          () => cancelBuildOrder(order.id),
+                        )
+                      }
+                      style={{ justifyContent: "center", paddingHorizontal: 10 }}
+                    >
+                      <Text style={{ color: COLORS.danger, fontSize: 12, fontWeight: "700" }}>
+                        Anuluj
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {order.status === "zamówione" && !isReceiving && (
+                  <View style={{ marginTop: 10 }}>
+                    <Button
+                      label="Dostawa dotarła"
+                      fullWidth
+                      onPress={() => {
+                        const drafts: Record<number, { qty: string; price: string }> = {};
+                        for (const item of order.order_items) {
+                          const material = materials.find(
+                            (m) => m.id === String(item.linkedMaterialId ?? ""),
+                          );
+                          drafts[item.id] = {
+                            qty: item.orderedQuantity,
+                            price: material ? String(material.unitPrice ?? "") : "",
+                          };
+                        }
+                        setBuildOrderReceiveDrafts(drafts);
+                        setBuildOrderReceiveDocument("");
+                        setBuildOrderReceiveSupplier("");
+                        setBuildOrderReceivingId(order.id);
+                      }}
+                    />
+                  </View>
+                )}
+
+                {order.status === "zamówione" && isReceiving && (
+                  <View style={{ marginTop: 10 }}>
+                    {order.order_items.map((item) => (
+                      <View key={item.id} style={{ marginTop: 8 }}>
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                          {item.materialName}
+                        </Text>
+                        <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: COLORS.muted, fontSize: 10 }}>
+                              Ilość ({item.unit})
+                            </Text>
+                            <QuantityStepper
+                              value={buildOrderReceiveDrafts[item.id]?.qty ?? ""}
+                              onChangeText={(v: string) =>
+                                setBuildOrderReceiveDrafts({
+                                  ...buildOrderReceiveDrafts,
+                                  [item.id]: { ...buildOrderReceiveDrafts[item.id], qty: v },
+                                })
+                              }
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: COLORS.muted, fontSize: 10 }}>
+                              Cena (PLN)
+                            </Text>
+                            <QuantityStepper
+                              value={buildOrderReceiveDrafts[item.id]?.price ?? ""}
+                              onChangeText={(v: string) =>
+                                setBuildOrderReceiveDrafts({
+                                  ...buildOrderReceiveDrafts,
+                                  [item.id]: { ...buildOrderReceiveDrafts[item.id], price: v },
+                                })
+                              }
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                    <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: COLORS.muted, fontSize: 10 }}>
+                          Nr dokumentu (PZ)
+                        </Text>
+                        <Field
+                          style={{ marginTop: 4 }}
+                          placeholder="opcjonalnie"
+                          value={buildOrderReceiveDocument}
+                          onChangeText={setBuildOrderReceiveDocument}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: COLORS.muted, fontSize: 10 }}>Dostawca</Text>
+                        <Field
+                          style={{ marginTop: 4 }}
+                          placeholder="opcjonalnie"
+                          value={buildOrderReceiveSupplier}
+                          onChangeText={setBuildOrderReceiveSupplier}
+                        />
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                      <View style={{ flex: 1 }}>
+                        <Button
+                          label="Anuluj"
+                          secondary
+                          fullWidth
+                          onPress={() => setBuildOrderReceivingId(null)}
+                        />
+                      </View>
+                      <View style={{ flex: 2 }}>
+                        <Button
+                          label="Przyjmij na magazyn"
+                          fullWidth
+                          onPress={async () => {
+                            setBuildOrderReceiveBusy(true);
+                            try {
+                              await receiveBuildOrder(
+                                order.id,
+                                order.order_items.map((item) => ({
+                                  itemId: item.id,
+                                  receivedQuantity:
+                                    Number(buildOrderReceiveDrafts[item.id]?.qty) || 0,
+                                  receivedUnitPrice:
+                                    Number(buildOrderReceiveDrafts[item.id]?.price) || undefined,
+                                })),
+                                buildOrderReceiveDocument,
+                                buildOrderReceiveSupplier,
+                              );
+                              setBuildOrderReceivingId(null);
+                            } finally {
+                              setBuildOrderReceiveBusy(false);
+                            }
+                          }}
+                        />
+                      </View>
+                    </View>
+                    {buildOrderReceiveBusy && (
+                      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>
+                        Zapisywanie…
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       {/* KPI = jednocześnie filtry. Tap przełącza widok listy poniżej. */}
       <View

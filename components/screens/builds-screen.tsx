@@ -93,6 +93,7 @@ export function BuildsScreen() {
   // dostawy na raz (ten sam wzorzec co przypisanie technologii wyżej),
   // ilości/ceny per pozycja trzymane w mapie po id pozycji.
   const [orderGenerating, setOrderGenerating] = useState<string | null>(null);
+  const [orderGeneratedFor, setOrderGeneratedFor] = useState<string | null>(null);
   const [orderReceivingId, setOrderReceivingId] = useState<number | null>(null);
   const [orderReceiveDrafts, setOrderReceiveDrafts] = useState<
     Record<number, { qty: string; price: string }>
@@ -798,8 +799,10 @@ export function BuildsScreen() {
                       disabled={orderGenerating === b.id}
                       onPress={async () => {
                         setOrderGenerating(b.id);
+                        setOrderGeneratedFor(null);
                         try {
                           await generateOrderFromPlan(b.id);
+                          setOrderGeneratedFor(b.id);
                         } finally {
                           setOrderGenerating(null);
                         }
@@ -811,6 +814,13 @@ export function BuildsScreen() {
                     </Pressable>
                   )}
                 </View>
+
+                {orderGeneratedFor === b.id && (
+                  <Text style={{ color: COLORS.success, fontSize: 12, marginTop: 6 }}>
+                    Zamówienie wygenerowane — status i przyjęcie dostawy znajdziesz też
+                    w zakładce Zamówienia.
+                  </Text>
+                )}
 
                 {!hasPlan && buildOrdersForBuild.length === 0 && (
                   <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>

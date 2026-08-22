@@ -74,7 +74,7 @@ declare
   v_seq integer;
   v_order_number text;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_build from builds where id = p_build_id;
   if not found then
@@ -130,7 +130,7 @@ declare
   v_price decimal;
   v_qty decimal;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_order from orders where id = p_order_id for update;
   if not found then

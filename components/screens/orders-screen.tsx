@@ -298,9 +298,19 @@ export function OrdersScreen() {
                       marginTop: 6,
                     }}
                   >
-                    <Text style={{ color: COLORS.foreground, fontSize: 12, flex: 1 }}>
-                      {item.materialName}
-                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                        {item.materialName}
+                      </Text>
+                      {/* Faza 3b: część planu pokryta wolnym magazynem
+                          (nieprzypisanym do żadnej budowy) — już odjęta
+                          od ilości zamawianej po prawej. */}
+                      {Number(item.availableFreeQuantity) > 0 && (
+                        <Text style={{ color: COLORS.success, fontSize: 10, marginTop: 2 }}>
+                          Na magazynie (wolne): {item.availableFreeQuantity} {item.unit}
+                        </Text>
+                      )}
+                    </View>
                     {order.status === "robocze" && editingBuildOrderItemId === item.id ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <View style={{ width: 90 }}>

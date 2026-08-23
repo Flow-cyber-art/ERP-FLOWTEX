@@ -103,22 +103,36 @@ begin
     if v_decision not in ('zwrot', 'wyrzucenie') then
       raise exception 'Nieprawidłowa decyzja rozliczenia materiału #%: %', v_material_id, v_decision;
     end if;
+    -- Partia źródłowa mogła w międzyczasie zniknąć (material_batches ON
+    -- DELETE SET NULL, gdy zejdzie do zera gdzie indziej) — wtedy
+    -- "sourceBatchId" tego lota jest już null. Nie ma dokąd zwrócić —
+    -- twardy błąd zamiast cichego pominięcia (Admin musi wybrać
+    -- "Do wyrzucenia" dla tej pozycji).
+    if v_decision = 'zwrot' and v_batch_id is null then
+      raise exception 'Nie można zwrócić materiału #% na magazyn — partia źródłowa już nie istnieje (skonsumowana gdzie indziej). Wybierz "Do wyrzucenia".',
+        v_material_id;
+    end if;
 
-    if v_batch_id is not null then
-      update build_material_lots set quantity = quantity - v_qty
-        where "buildId" = p_build_id and "materialId" = v_material_id
-          and "sourceBatchId" = v_batch_id and quantity >= v_qty - 0.0001;
-      if not found then
-        raise exception 'Ilość do rozliczenia (materiał #%, partia #%) przekracza pozostałość na budowie.',
-          v_material_id, v_batch_id;
-      end if;
-      delete from build_material_lots
-        where "buildId" = p_build_id and "materialId" = v_material_id
-          and "sourceBatchId" = v_batch_id and quantity <= 0.0001;
+    -- `is not distinct from` zamiast `=`, żeby dopasowanie działało też
+    -- dla lotów z już wyzerowanym "sourceBatchId" (patrz wyżej) — inaczej
+    -- taki lot nigdy nie zostałby zdjęty z build_material_lots, mimo że
+    -- build_material_returns i tak zapisałby go jako rozliczony.
+    update build_material_lots set quantity = quantity - v_qty
+      where "buildId" = p_build_id and "materialId" = v_material_id
+        and "sourceBatchId" is not distinct from v_batch_id and quantity >= v_qty - 0.0001;
+    if not found then
+      raise exception 'Ilość do rozliczenia (materiał #%, partia #%) przekracza pozostałość na budowie.',
+        v_material_id, v_batch_id;
+    end if;
+    delete from build_material_lots
+      where "buildId" = p_build_id and "materialId" = v_material_id
+        and "sourceBatchId" is not distinct from v_batch_id and quantity <= 0.0001;
 
-      if v_decision = 'zwrot' then
-        update material_batches set quantity = quantity + v_qty where id = v_batch_id;
-      end if;
+    if v_decision = 'zwrot' then
+      update material_batches set quantity = quantity + v_qty where id = v_batch_id;
+      -- Jak w każdym innym miejscu, które rusza material_batches (008, 009)
+      -- — odświeża zdenormalizowane materials.stock/unitPrice.
+      perform fn_recalc_material(v_material_id);
     end if;
 
     insert into build_material_returns ("buildId", "materialId", "batchId", quantity, decision, reason)

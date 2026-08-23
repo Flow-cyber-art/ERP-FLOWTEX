@@ -61,6 +61,11 @@ export const materialCategoryEnum = pgEnum("material_category", [
   "pomocniczy",
 ]);
 
+export const returnDecisionEnum = pgEnum("return_decision", [
+  "zwrot",
+  "wyrzucenie",
+]);
+
 export const reportStatusEnum = pgEnum("report_status", [
   "roboczy",
   "oczekuje_na_synchronizacje",
@@ -392,6 +397,27 @@ export const buildSettlementMaterials = pgTable(
   },
   (table) => [primaryKey({ columns: [table.buildId, table.materialId] })],
 );
+
+// Faza 9 modułu Technologia — decyzja o pozostałości materiałowej przy
+// zamknięciu budowy (patrz close_build, supabase/sql/013_faza9_...sql).
+// Zwrot zwiększa material_batches.quantity tej samej partii po tej samej
+// cenie; wyrzucenie zostaje kosztem budowy, nie wraca na stan.
+export const buildMaterialReturns = pgTable("build_material_returns", {
+  id: serial("id").primaryKey(),
+  buildId: integer("buildId")
+    .notNull()
+    .references(() => builds.id, { onDelete: "cascade" }),
+  materialId: integer("materialId")
+    .notNull()
+    .references(() => materials.id, { onDelete: "restrict" }),
+  batchId: integer("batchId").references(() => materialBatches.id, {
+    onDelete: "set null",
+  }),
+  quantity: decimal("quantity", { precision: 12, scale: 3 }).notNull(),
+  decision: returnDecisionEnum("decision").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
 
 /* ============================================================
  * USTAWIENIA — Faza 0 modułu Technologia. Jednowierszowa tabela

@@ -16,6 +16,7 @@ import {
   listBuilds,
   reopenBuild as reopenBuildRemote,
   updateBuildPhotosUrl as updateBuildPhotosUrlRemote,
+  type CloseBuildReturnItem,
 } from "@/lib/data/builds";
 import {
   adjustMaterialStock as adjustMaterialStockRemote,
@@ -683,7 +684,8 @@ function useAppDataState(
   });
   const createBuildMutation = useMutation({ mutationFn: createBuild });
   const closeBuildMutation = useMutation({
-    mutationFn: (vars: { buildId: number }) => closeBuildRemote(vars.buildId),
+    mutationFn: (vars: { buildId: number; returns: CloseBuildReturnItem[] }) =>
+      closeBuildRemote(vars.buildId, vars.returns),
   });
   const reopenBuildMutation = useMutation({
     mutationFn: (vars: { buildId: number }) => reopenBuildRemote(vars.buildId),
@@ -1742,14 +1744,18 @@ function useAppDataState(
   // materiały plan/zużycie, koszty dodatkowe). Wymaga, żeby wszystkie
   // raporty tej budowy były już zatwierdzone — inaczej rozliczenie
   // opierałoby się na niezweryfikowanych danych.
-  const closeBuild = async (buildId: string) => {
+  const closeBuild = async (buildId: string, returns: CloseBuildReturnItem[] = []) => {
     const build = builds.find((b) => b.id === buildId);
     if (!build || build.status === "zamknięta") return;
     const numericId = Number(buildId);
     if (Number.isNaN(numericId)) return;
     try {
-      await closeBuildMutation.mutateAsync({ buildId: numericId });
-      await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      await closeBuildMutation.mutateAsync({ buildId: numericId, returns });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["builds", "list"] }),
+        invalidate("buildMaterialLots"),
+        invalidate("warehouseBatches"),
+      ]);
     } catch (error) {
       reportMutationError(
         error,

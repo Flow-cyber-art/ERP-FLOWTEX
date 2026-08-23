@@ -60,6 +60,14 @@ export function ReportScreen() {
     removeExtraCostFromDraft,
     updateBuildPhotosUrl,
     setTab,
+    warehouseBatches,
+    selectedBatchId,
+    setSelectedBatchId,
+    plannedAmount,
+    setPlannedAmount,
+    draftAssignments,
+    addToDraft,
+    commitAssignments,
   } = useAppData();
 
   const editingReport = editingReportId
@@ -87,12 +95,35 @@ export function ReportScreen() {
   const [editingPhotos, setEditingPhotos] = useState(false);
   const [photosUrlInput, setPhotosUrlInput] = useState("");
 
+  // Ostrzeżenie o pustym kroku (materiały/zespół) przy próbie przejścia
+  // dalej: pierwsze wciśnięcie "Dalej" na pustym kroku tylko pokazuje
+  // komunikat i NIE przechodzi dalej — dopiero drugie wciśnięcie (mimo że
+  // krok nadal jest pusty) przepuszcza. Flaga resetuje się przy każdym
+  // wejściu na dany krok (patrz useEffect niżej), więc jeśli ktoś wróci
+  // "Wstecz" i znowu wejdzie w ten sam krok, ostrzeżenie może się pojawić
+  // ponownie.
+  const [materialsWarningShown, setMaterialsWarningShown] = useState(false);
+  const [teamWarningShown, setTeamWarningShown] = useState(false);
+  useEffect(() => {
+    if (reportStep === 1) setMaterialsWarningShown(false);
+    if (reportStep === 2) setTeamWarningShown(false);
+  }, [reportStep]);
+
   // Etapy technologii (Faza 6) — materiały budowy grupowane po etapie, na
   // podstawie dopasowania nazwy do build_material_plan (Faza 2); to samo
   // dopasowanie robi saveDailyReport w contexts/app-data.tsx przy zapisie
   // stage_name. Materiał bez dopasowania = "materiały pomocnicze".
   const [pomocniczeQuery, setPomocniczeQuery] = useState("");
   const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
+  // Dodawanie materiału pomocniczego z magazynu (np. tarcze, wałki) —
+  // wyszukiwarka po partiach magazynowych, ten sam mechanizm co przy
+  // ręcznym przypisywaniu materiałów do budowy w panelu Admina
+  // (builds-screen.tsx: addToDraft/commitAssignments/warehouseBatches),
+  // udostępniony tu brygadziście. Cenę partii (unitPrice) pomijamy w
+  // widoku brygadzisty — tak samo jak reszta ekranu (renderMaterialRow)
+  // pokazuje mu ilości, nie ceny.
+  const [addMaterialOpen, setAddMaterialOpen] = useState(false);
+  const [addMaterialQuery, setAddMaterialQuery] = useState("");
   const planForActiveBuild = activeBuild
     ? buildMaterialPlans.filter((p) => p.buildId === Number(activeBuild.id))
     : [];
@@ -531,6 +562,179 @@ export function ReportScreen() {
                 <Text style={{ color: COLORS.muted, fontSize: 12 }}>
                   Brak materiałów pomocniczych przypisanych do budowy.
                 </Text>
+              )}
+
+              {!reportApproved && (
+                <View style={{ marginTop: 12 }}>
+                  <Pressable
+                    onPress={() => {
+                      setAddMaterialOpen(!addMaterialOpen);
+                      setAddMaterialQuery("");
+                      setSelectedBatchId(null);
+                      setPlannedAmount("");
+                    }}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: COLORS.primary,
+                      borderRadius: 10,
+                      paddingVertical: 11,
+                      alignItems: "center",
+                      flexDirection: "row",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialIcons
+                      name={addMaterialOpen ? "expand-less" : "add-circle-outline"}
+                      size={18}
+                      color={COLORS.primary}
+                    />
+                    <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+                      Dodaj materiał z magazynu
+                    </Text>
+                  </Pressable>
+
+                  {addMaterialOpen && (
+                    <View
+                      style={{
+                        backgroundColor: COLORS.background,
+                        borderRadius: 10,
+                        padding: 10,
+                        marginTop: 8,
+                      }}
+                    >
+                      <Field
+                        placeholder="Szukaj po nazwie lub indeksie (np. tarcze, wałki)"
+                        value={addMaterialQuery}
+                        onChangeText={setAddMaterialQuery}
+                      />
+                      <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
+                        {warehouseBatches
+                          .map((b) => ({
+                            batch: b,
+                            material: materials.find(
+                              (m) => m.id === String(b.materialId),
+                            ),
+                          }))
+                          .filter(({ material }) => material)
+                          .filter(({ material }) =>
+                            `${material!.name} ${material!.index}`
+                              .toLowerCase()
+                              .includes(addMaterialQuery.trim().toLowerCase()),
+                          )
+                          .sort((a, b) =>
+                            a.material!.name.localeCompare(b.material!.name),
+                          )
+                          .map(({ batch, material }) => {
+                            const selected = selectedBatchId === String(batch.id);
+                            return (
+                              <Pressable
+                                key={batch.id}
+                                onPress={() => setSelectedBatchId(String(batch.id))}
+                                style={{
+                                  paddingVertical: 12,
+                                  borderBottomWidth: 1,
+                                  borderBottomColor: COLORS.border,
+                                  backgroundColor: selected
+                                    ? COLORS.successBg
+                                    : "transparent",
+                                  borderRadius: selected ? 8 : 0,
+                                  paddingHorizontal: selected ? 8 : 0,
+                                }}
+                              >
+                                <Text
+                                  style={{ color: COLORS.foreground, fontWeight: "700" }}
+                                >
+                                  {material!.name}
+                                </Text>
+                                <Text
+                                  style={{
+                                    color: COLORS.muted,
+                                    fontSize: 12,
+                                    marginTop: 3,
+                                  }}
+                                >
+                                  {material!.index} · dostępne {batch.quantity}{" "}
+                                  {material!.unit}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        {warehouseBatches.length === 0 && (
+                          <Text
+                            style={{ color: COLORS.muted, fontSize: 12, padding: 10 }}
+                          >
+                            Brak partii w magazynie.
+                          </Text>
+                        )}
+                      </ScrollView>
+
+                      {selectedBatchId && (
+                        <>
+                          <Text className="text-xs text-muted uppercase mt-4">
+                            Ilość
+                          </Text>
+                          <QuantityStepper
+                            style={{ marginTop: 8 }}
+                            value={plannedAmount}
+                            onChangeText={setPlannedAmount}
+                          />
+                          <View style={{ marginTop: 12 }}>
+                            <Button label="+ Dodaj do listy" onPress={addToDraft} />
+                          </View>
+                        </>
+                      )}
+
+                      {draftAssignments.length > 0 && (
+                        <View
+                          style={{
+                            backgroundColor: COLORS.surface,
+                            borderRadius: 12,
+                            padding: 12,
+                            marginTop: 12,
+                          }}
+                        >
+                          <Text className="text-xs text-muted uppercase">
+                            Materiały oczekujące na zatwierdzenie
+                          </Text>
+                          {draftAssignments.map((draft) => {
+                            const material = materials.find(
+                              (m) => m.id === draft.materialId,
+                            );
+                            return (
+                              <View
+                                key={draft.batchId}
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  paddingVertical: 8,
+                                  borderBottomWidth: 1,
+                                  borderBottomColor: COLORS.border,
+                                }}
+                              >
+                                <Text className="text-xs text-foreground">
+                                  {material?.name}
+                                </Text>
+                                <Text className="text-xs text-primary font-bold">
+                                  {draft.quantity} {material?.unit}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                          <View style={{ marginTop: 12 }}>
+                            <Button
+                              label={`Przypisz ${draftAssignments.length} do budowy`}
+                              onPress={async () => {
+                                await commitAssignments();
+                                setAddMaterialOpen(false);
+                              }}
+                            />
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
               )}
             </View>
 
@@ -1040,25 +1244,33 @@ export function ReportScreen() {
               label="Dalej"
               fullWidth
               onPress={() => {
-                // Informujemy, ale nie blokujemy przejścia dalej — brak
-                // materiałów/osób bywa czasem zamierzony (np. dzień bez
-                // dostaw albo raport uzupełniany w dwóch etapach), więc
-                // decyzję zostawiamy brygadziście.
                 if (reportStep === 1) {
                   const anyMaterialFilled = buildAssignments.some(
                     (a) => Number(reportValues[a.materialId] || 0) > 0,
                   );
-                  if (buildAssignments.length > 0 && !anyMaterialFilled) {
+                  if (
+                    buildAssignments.length > 0 &&
+                    !anyMaterialFilled &&
+                    !materialsWarningShown
+                  ) {
+                    setMaterialsWarningShown(true);
                     Alert.alert(
                       "Brak wpisanych materiałów",
-                      "Nie wpisano zużycia żadnego materiału. Możesz przejść dalej i uzupełnić to później.",
+                      "Nie wpisano zużycia żadnego materiału. Wciśnij „Dalej” ponownie, aby mimo to przejść dalej.",
                     );
+                    return;
                   }
-                } else if (reportStep === 2 && draftPeople.length === 0) {
+                } else if (
+                  reportStep === 2 &&
+                  draftPeople.length === 0 &&
+                  !teamWarningShown
+                ) {
+                  setTeamWarningShown(true);
                   Alert.alert(
                     "Brak dodanych osób",
-                    "Nie dodano nikogo do zespołu. Możesz przejść dalej i uzupełnić to później.",
+                    "Nie dodano nikogo do zespołu. Wciśnij „Dalej” ponownie, aby mimo to przejść dalej.",
                   );
+                  return;
                 }
                 setReportStep((reportStep + 1) as 2 | 3);
               }}

@@ -1685,6 +1685,32 @@ function useAppDataState(
     setReportStep(1);
     setTab("report");
   };
+  // Start "od zera": wcześniej przycisk "+ Nowy raport" (saved-reports-
+  // screen.tsx) tylko przełączał zakładkę na "report" bez czyszczenia
+  // niczego. Dla PIERWSZEGO raportu w sesji działało to przypadkiem (pola
+  // draftowe i tak były jeszcze puste), ale przy DRUGIM raporcie w tej
+  // samej sesji zostawało m.in. reportSaved=true po poprzednim zapisie —
+  // ReportScreen (patrz jego useEffect na reportSaved) natychmiast
+  // odsyłał z powrotem do listy raportów, więc ekran wyglądał, jakby nic
+  // się nie działo po wciśnięciu "Zapisz raport dzienny" (bo faktycznie
+  // nigdy nie dawało się dotrzeć do formularza). editingReportId też
+  // zostawał ustawiony na poprzedni raport, więc "nowy" raport w
+  // rzeczywistości nadpisywałby poprzedni zamiast utworzyć kolejny.
+  // selectedBuildId celowo NIE jest resetowany — to zwykle ta sama
+  // budowa, na której brygadzista właśnie pracuje.
+  const startNewReport = () => {
+    setEditingReportId(null);
+    setReportValues({});
+    setReasons({});
+    setDraftPeople([]);
+    setDraftExtraCosts([]);
+    setDraftKm("");
+    setReportStep(1);
+    setReportSaved(false);
+    setHrSaved(false);
+    setReportStatus("roboczy");
+    setTab("report");
+  };
   const approveReport = (reportId: string) => {
     const report = savedReports.find((r) => r.id === reportId);
     setSavedReports((previous) =>
@@ -1865,6 +1891,7 @@ function useAppDataState(
     setReportStep,
     setEditingReportId,
     openSavedReport,
+    startNewReport,
     approveReport,
     closeBuild,
     reopenBuild,

@@ -9,7 +9,7 @@ import {
 import { useAppData } from "@/contexts/app-data";
 
 export function SavedReportsScreen() {
-  const { savedReports, openSavedReport, setTab } = useAppData();
+  const { savedReports, openSavedReport, startNewReport } = useAppData();
 
   const sorted = [...savedReports].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
@@ -27,7 +27,7 @@ export function SavedReportsScreen() {
         description="Zapisane raporty dzienne i ich aktualny stan."
         action={
           <Pressable
-            onPress={() => setTab("report")}
+            onPress={() => startNewReport()}
             style={({ pressed }) => ({
               backgroundColor: COLORS.primary,
               borderRadius: 10,

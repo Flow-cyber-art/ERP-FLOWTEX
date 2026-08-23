@@ -67,7 +67,8 @@ export function TechnologiesScreen() {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
-  const [thicknessMm, setThicknessMm] = useState("");
+  const [thicknessMinMm, setThicknessMinMm] = useState("");
+  const [thicknessMaxMm, setThicknessMaxMm] = useState("");
   const [stages, setStages] = useState<DraftStage[]>([emptyStage()]);
   const [busy, setBusy] = useState(false);
 
@@ -98,7 +99,11 @@ export function TechnologiesScreen() {
 
   // Filtry listy — firma (chipy z tego, co faktycznie wypełnione) i
   // zakres grubości (mm). Filtrują po aktywnej (najnowszej) wersji
-  // rodziny — to jej dotyczą pola company/thicknessMm w praktyce.
+  // rodziny — to jej dotyczą pola company/thicknessMinMm/thicknessMaxMm
+  // w praktyce. Grubość technologii to sam ZAKRES (od-do), w jakim się
+  // stosuje — dopasowanie to nakładanie się przedziałów: pokazujemy
+  // technologię, jeśli szukany zakres i jej zakres mają część wspólną
+  // (a nie tylko gdy szukana wartość mieści się dokładnie w środku).
   const companies = [...new Set(
     (technologies ?? [])
       .map((t) => t.company?.trim())
@@ -110,12 +115,15 @@ export function TechnologiesScreen() {
     if (filterCompany !== "all" && (active.company?.trim() || "") !== filterCompany) {
       return false;
     }
-    const thickness = active.thicknessMm != null ? Number(active.thicknessMm) : null;
-    if (thicknessFrom != null && (thickness == null || thickness < thicknessFrom)) {
-      return false;
-    }
-    if (thicknessTo != null && (thickness == null || thickness > thicknessTo)) {
-      return false;
+    const techMin = active.thicknessMinMm != null ? Number(active.thicknessMinMm) : null;
+    const techMax = active.thicknessMaxMm != null ? Number(active.thicknessMaxMm) : null;
+    if (thicknessFrom != null || thicknessTo != null) {
+      // Brak zdefiniowanego zakresu u technologii = nie da się ocenić
+      // dopasowania — nie pokazujemy przy aktywnym filtrze grubości
+      // (uzupełnij "Edytuj", żeby technologia zaczęła się pojawiać).
+      if (techMin == null || techMax == null) return false;
+      if (thicknessTo != null && techMin > thicknessTo) return false;
+      if (thicknessFrom != null && techMax < thicknessFrom) return false;
     }
     return true;
   });
@@ -125,7 +133,8 @@ export function TechnologiesScreen() {
     setCode("");
     setName("");
     setCompany("");
-    setThicknessMm("");
+    setThicknessMinMm("");
+    setThicknessMaxMm("");
     setStages([emptyStage()]);
     setEditorOpen(true);
   };
@@ -135,7 +144,8 @@ export function TechnologiesScreen() {
     setCode(t.code);
     setName(t.name);
     setCompany(t.company ?? "");
-    setThicknessMm(t.thicknessMm ?? "");
+    setThicknessMinMm(t.thicknessMinMm ?? "");
+    setThicknessMaxMm(t.thicknessMaxMm ?? "");
     setStages(
       t.technology_stages.length
         ? [...t.technology_stages]
@@ -181,18 +191,27 @@ export function TechnologiesScreen() {
       setLoadError("Dodaj przynajmniej jeden etap z jednym materiałem.");
       return;
     }
+    if (
+      thicknessMinMm &&
+      thicknessMaxMm &&
+      Number(thicknessMinMm) > Number(thicknessMaxMm)
+    ) {
+      setLoadError('Grubość "od" nie może być większa niż "do".');
+      return;
+    }
     setBusy(true);
     setLoadError(null);
     try {
       const newId = await saveTechnology(editingSourceId, code.trim(), name.trim(), payload);
       // Firma/grubość to metadane, nie część receptury (patrz komentarz
-      // przy company/thicknessMm w lib/data/technologies.ts) — zapisywane
-      // osobnym wywołaniem na ŚWIEŻO utworzonej wersji (newId), nie na
-      // editingSourceId (ten zaraz zostanie zdezaktywowany).
+      // przy company/thicknessMinMm/thicknessMaxMm w lib/data/technologies.ts)
+      // — zapisywane osobnym wywołaniem na ŚWIEŻO utworzonej wersji
+      // (newId), nie na editingSourceId (ten zaraz zostanie zdezaktywowany).
       await updateTechnologyMeta(
         newId,
         company.trim() || null,
-        thicknessMm ? Number(thicknessMm) : null,
+        thicknessMinMm ? Number(thicknessMinMm) : null,
+        thicknessMaxMm ? Number(thicknessMaxMm) : null,
       );
       setEditorOpen(false);
       reload();
@@ -249,20 +268,28 @@ export function TechnologiesScreen() {
             value={name}
             onChangeText={setName}
           />
-          <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+          <Text className="text-xs text-muted uppercase mb-2 mt-3">Firma</Text>
+          <Field
+            placeholder="np. Sika"
+            value={company}
+            onChangeText={setCompany}
+          />
+          <Text className="text-xs text-muted uppercase mb-2 mt-3">
+            Zakres grubości posadzki (mm)
+          </Text>
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
             <View style={{ flex: 1 }}>
-              <Text className="text-xs text-muted uppercase mb-2">Firma</Text>
-              <Field
-                placeholder="np. Sika"
-                value={company}
-                onChangeText={setCompany}
+              <QuantityStepper
+                value={thicknessMinMm}
+                onChangeText={setThicknessMinMm}
+                step={0.5}
               />
             </View>
+            <Text style={{ color: COLORS.muted }}>—</Text>
             <View style={{ flex: 1 }}>
-              <Text className="text-xs text-muted uppercase mb-2">Grubość (mm)</Text>
               <QuantityStepper
-                value={thicknessMm}
-                onChangeText={setThicknessMm}
+                value={thicknessMaxMm}
+                onChangeText={setThicknessMaxMm}
                 step={0.5}
               />
             </View>
@@ -642,7 +669,11 @@ export function TechnologiesScreen() {
                     {active.code} · v{active.version}
                     {history.length > 0 ? ` · ${history.length} starszych wersji` : ""}
                     {active.company ? ` · ${active.company}` : ""}
-                    {active.thicknessMm ? ` · ${active.thicknessMm} mm` : ""}
+                    {active.thicknessMinMm && active.thicknessMaxMm
+                      ? active.thicknessMinMm === active.thicknessMaxMm
+                        ? ` · ${active.thicknessMinMm} mm`
+                        : ` · ${active.thicknessMinMm}–${active.thicknessMaxMm} mm`
+                      : ""}
                   </Text>
                 </View>
                 <Pressable onPress={() => startEdit(active)} style={{ marginRight: 14 }}>

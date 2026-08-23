@@ -31,10 +31,13 @@ export type TechnologyRow = {
   version: number;
   isActive: boolean;
   createdAt: string;
-  // Metadane pod filtrowanie (patrz 016_faza1b_firma_grubosc.sql) — nie
+  // Metadane pod filtrowanie (patrz 017_faza1c_zakres_grubosci.sql) — nie
   // część receptury, więc NIE wersjonowane jak stages/materials poniżej.
+  // Grubość to ZAKRES (od-do), nie jedna wartość — ta sama receptura
+  // zwykle stosuje się w przedziale grubości, nie tylko dokładnie jednej.
   company: string | null;
-  thicknessMm: string | null;
+  thicknessMinMm: string | null;
+  thicknessMaxMm: string | null;
   technology_stages: TechnologyStageRow[];
 };
 
@@ -42,7 +45,8 @@ export type TechnologyRow = {
 // ale JS/TS trzyma się camelCase — aliasy "camelCase:snake_case" w select
 // tłumaczą jedno na drugie, żeby reszta kodu nie musiała znać realnych nazw kolumn.
 const TECHNOLOGY_SELECT =
-  "id, code, name, version, isActive:is_active, createdAt, company, thicknessMm:thickness_mm, " +
+  "id, code, name, version, isActive:is_active, createdAt, company, " +
+  "thicknessMinMm:thickness_min_mm, thicknessMaxMm:thickness_max_mm, " +
   "technology_stages(id, name, orderIndex:order_index, " +
   "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, linkedMaterialId:linked_material_id))";
 
@@ -99,19 +103,21 @@ export async function saveTechnology(
 }
 
 /**
- * Firma i grubość (mm) — metadane pod filtrowanie (patrz
- * 016_faza1b_firma_grubosc.sql), osobna funkcja od `saveTechnology` bo
+ * Firma i zakres grubości (mm, od-do) — metadane pod filtrowanie (patrz
+ * 017_faza1c_zakres_grubosci.sql), osobna funkcja od `saveTechnology` bo
  * nie są częścią receptury: edycja NIE tworzy nowej wersji.
  */
 export async function updateTechnologyMeta(
   technologyId: number,
   company: string | null,
-  thicknessMm: number | null,
+  thicknessMinMm: number | null,
+  thicknessMaxMm: number | null,
 ): Promise<void> {
   const { error } = await supabase.rpc("update_technology_meta", {
     p_technology_id: technologyId,
     p_company: company,
-    p_thickness_mm: thicknessMm,
+    p_thickness_min_mm: thicknessMinMm,
+    p_thickness_max_mm: thicknessMaxMm,
   });
   if (error) throw new Error(error.message);
 }

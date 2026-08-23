@@ -622,7 +622,21 @@ function useAppDataState(
     queryKey: ["reports", "list"],
     queryFn: listReports,
     retry: 1,
-    refetchOnWindowFocus: false,
+    // Admin (panel raportów) zwykle trzyma ten ekran otwarty na biurku,
+    // czekając na raporty wysyłane przez brygadzistów z innych urządzeń.
+    // refetchOnWindowFocus pokrywa scenariusz "wróciłem, sprawdzam" —
+    // odświeża natychmiast przy powrocie na kartę. Do tego lekki
+    // refetchInterval jako siatka bezpieczeństwa dla sytuacji, gdy ktoś
+    // zostaje na ekranie bez przełączania karty: 60s to rzadko, więc nie
+    // dobija bez potrzeby do bazy, a jednocześnie opóźnienie zostaje
+    // rozsądne (nie godziny/ręczne odświeżanie, jak wcześniej). Domyślnie
+    // React Query wstrzymuje ten interwał, gdy karta jest w tle
+    // (refetchIntervalInBackground: false), więc nie chodzi w kółko, gdy
+    // nikt nie patrzy. Sam moment wysyłki (ten sam proces) jest już objęty
+    // osobnym invalidate("reports") w saveDailyReportUnsafe, więc na
+    // jednym urządzeniu wynik i tak jest natychmiastowy.
+    refetchOnWindowFocus: true,
+    refetchInterval: 60000,
   });
   useEffect(() => {
     if (!reportsQuery.data) return;
@@ -1435,6 +1449,13 @@ function useAppDataState(
             "Raport zapisany lokalnie",
             "Brak połączenia z serwerem — raport wyśle się automatycznie, gdy pojawi się internet.",
           );
+        } else {
+          // Odśwież listę raportów od razu po realnym wysłaniu do
+          // Supabase, zamiast czekać na najbliższy refetchInterval
+          // (reportsQuery, patrz wyżej) — na tym samym urządzeniu/roli
+          // (np. w podglądzie deweloperskim) wynik jest widoczny
+          // natychmiast, bez czekania do 15s.
+          invalidate("reports");
         }
       });
     }

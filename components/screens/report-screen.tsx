@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useState } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import {
   COLORS,
   todayLabelPL,
@@ -59,12 +59,27 @@ export function ReportScreen() {
     addExtraCostToDraft,
     removeExtraCostFromDraft,
     updateBuildPhotosUrl,
+    setTab,
   } = useAppData();
 
   const editingReport = editingReportId
     ? savedReports.find((report) => report.id === editingReportId)
     : undefined;
   const reportApproved = editingReport?.status === "approved";
+
+  // Po pomyślnym zapisie raportu (reportSaved: false -> true, patrz
+  // saveDailyReportUnsafe w app-data.tsx) wracamy do panelu głównego z
+  // listą wszystkich raportów, zamiast zostawiać brygadzistę na ekranie
+  // podsumowania. Efekt (nie samo onPress) celowo — saveDailyReport bywa
+  // synchronicznie przerywane wcześniejszymi walidacjami (budowa
+  // zamknięta, raport zatwierdzony), które NIE ustawiają reportSaved, więc
+  // w tych przypadkach nawigacja się nie odpala.
+  useEffect(() => {
+    if (reportSaved) {
+      setTab("savedReports");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportSaved]);
 
   // Edycja linku do zdjęć wybranej budowy (np. folder Google Drive) —
   // ten sam wzorzec co w builds-screen.tsx (Admin), tu dostępny dla
@@ -1024,7 +1039,29 @@ export function ReportScreen() {
             <Button
               label="Dalej"
               fullWidth
-              onPress={() => setReportStep((reportStep + 1) as 2 | 3)}
+              onPress={() => {
+                // Informujemy, ale nie blokujemy przejścia dalej — brak
+                // materiałów/osób bywa czasem zamierzony (np. dzień bez
+                // dostaw albo raport uzupełniany w dwóch etapach), więc
+                // decyzję zostawiamy brygadziście.
+                if (reportStep === 1) {
+                  const anyMaterialFilled = buildAssignments.some(
+                    (a) => Number(reportValues[a.materialId] || 0) > 0,
+                  );
+                  if (buildAssignments.length > 0 && !anyMaterialFilled) {
+                    Alert.alert(
+                      "Brak wpisanych materiałów",
+                      "Nie wpisano zużycia żadnego materiału. Możesz przejść dalej i uzupełnić to później.",
+                    );
+                  }
+                } else if (reportStep === 2 && draftPeople.length === 0) {
+                  Alert.alert(
+                    "Brak dodanych osób",
+                    "Nie dodano nikogo do zespołu. Możesz przejść dalej i uzupełnić to później.",
+                  );
+                }
+                setReportStep((reportStep + 1) as 2 | 3);
+              }}
             />
           ) : reportApproved ? (
             <Text

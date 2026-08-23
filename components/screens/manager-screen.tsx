@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   COLORS,
+  Field,
   IconBadge,
   ReportCard,
   ScreenHeader,
@@ -17,46 +18,49 @@ import { useAppData } from "@/contexts/app-data";
 // Wybór budowy PRZED listą raportów (zamiast jednej wspólnej listy
 // wszystkich budów naraz) — z czasem raportów są setki, więc "wszystkie
 // naraz" przestaje być użyteczne. "Wszystkie budowy" zostaje jako
-// pierwsza opcja dla managera, który faktycznie chce widzieć wszystko na
-// raz (np. skrzynkę "do zatwierdzenia" ze wszystkich budów).
+// pierwsza, zawsze widoczna opcja dla managera, który faktycznie chce
+// widzieć wszystko na raz (np. skrzynkę "do zatwierdzenia" ze wszystkich
+// budów). Rozwijany picker z wyszukiwarką (jak w Raporcie brygadzisty),
+// nie rząd chipów — przy kilkudziesięciu budowach chipy przestają się
+// mieścić i trzeba je przewijać w bok, żeby cokolwiek znaleźć.
+//
+// Bez zakładek "Do zatwierdzenia / Zatwierdzone" — raportów dziennie jest
+// niewiele (jeden, może dwa na budowę), więc jedna lista z nie
+// zatwierdzonymi u góry i zatwierdzonymi u dołu jest czytelniejsza niż
+// przełączanie między dwoma widokami. Zatwierdzenie po prostu przenosi
+// raport do dolnej sekcji przy najbliższym odświeżeniu danych.
 export function ManagerScreen() {
   const { builds, assignments, savedReports, approveReport, employees, materials } =
     useAppData();
 
-  const [buildsFilter, setBuildsFilter] = useState<"active" | "archived">(
-    "active",
-  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [buildQuery, setBuildQuery] = useState("");
+  const [showArchivedBuilds, setShowArchivedBuilds] = useState(false);
   const [selectedBuildId, setSelectedBuildId] = useState<string | "all">(
     "all",
-  );
-  const [reportsTab, setReportsTab] = useState<"pending" | "approved">(
-    "pending",
   );
   const [expandedReportId, setExpandedReportId] = useState<string | null>(
     null,
   );
 
   const visibleBuilds = useMemo(
-    () =>
-      builds.filter((b) =>
-        buildsFilter === "active" ? b.status !== "zamknięta" : b.status === "zamknięta",
-      ),
-    [builds, buildsFilter],
+    () => builds.filter((b) => showArchivedBuilds || b.status !== "zamknięta"),
+    [builds, showArchivedBuilds],
   );
+  const filteredBuilds = useMemo(() => {
+    const q = buildQuery.trim().toLowerCase();
+    if (!q) return visibleBuilds;
+    return visibleBuilds.filter(
+      (b) =>
+        b.number.toLowerCase().includes(q) || b.name.toLowerCase().includes(q),
+    );
+  }, [visibleBuilds, buildQuery]);
 
-  // Zmiana filtra aktywne/zarchiwizowane: jeśli wybrana budowa zniknęła z
-  // nowej listy (np. została właśnie zamknięta), wracamy do "Wszystkie",
-  // zamiast pokazywać pusty widok bez wyjaśnienia.
-  const switchBuildsFilter = (next: "active" | "archived") => {
-    setBuildsFilter(next);
-    setSelectedBuildId("all");
-  };
+  const selectedBuild = builds.find((b) => b.id === selectedBuildId);
 
   const reportsForBuilds =
     selectedBuildId === "all"
-      ? savedReports.filter((r) =>
-          visibleBuilds.some((b) => b.id === r.buildId),
-        )
+      ? savedReports.filter((r) => visibleBuilds.some((b) => b.id === r.buildId))
       : savedReports.filter((r) => r.buildId === selectedBuildId);
 
   const pendingReports = [...reportsForBuilds]
@@ -65,8 +69,6 @@ export function ManagerScreen() {
   const approvedReports = [...reportsForBuilds]
     .filter((r) => r.status === "approved")
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const reportsToShow =
-    reportsTab === "pending" ? pendingReports : approvedReports;
 
   return (
     <>
@@ -75,192 +77,185 @@ export function ManagerScreen() {
         description="Wybierz budowę, żeby zobaczyć jej raporty — albo zostaw „Wszystkie budowy”, żeby zatwierdzać ze wszystkich naraz."
       />
 
-      <View
-        className="bg-surface border border-border rounded-2xl overflow-hidden mb-3"
-        style={{ flexDirection: "row" }}
+      <Pressable
+        onPress={() => setPickerOpen(!pickerOpen)}
+        className="bg-surface border border-border rounded-2xl p-4 mb-3"
+        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
       >
-        <Pressable
-          onPress={() => switchBuildsFilter("active")}
-          style={{
-            flex: 1,
-            paddingVertical: 10,
-            alignItems: "center",
-            backgroundColor:
-              buildsFilter === "active" ? COLORS.primary : "transparent",
-          }}
-        >
+        <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+          <Text style={{ color: COLORS.muted, fontSize: 11 }}>Budowa</Text>
           <Text
-            style={{
-              color: buildsFilter === "active" ? COLORS.background : COLORS.muted,
-              fontWeight: "700",
-              fontSize: 12,
-            }}
+            style={{ color: COLORS.foreground, fontWeight: "700", marginTop: 2 }}
+            numberOfLines={1}
           >
-            Aktywne budowy
+            {selectedBuildId === "all"
+              ? "Wszystkie budowy"
+              : `${selectedBuild?.number ?? ""} · ${selectedBuild?.name ?? ""}`}
           </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => switchBuildsFilter("archived")}
-          style={{
-            flex: 1,
-            paddingVertical: 10,
-            alignItems: "center",
-            backgroundColor:
-              buildsFilter === "archived" ? COLORS.primary : "transparent",
-          }}
-        >
-          <Text
-            style={{
-              color: buildsFilter === "archived" ? COLORS.background : COLORS.muted,
-              fontWeight: "700",
-              fontSize: 12,
-            }}
-          >
-            Zarchiwizowane
-          </Text>
-        </Pressable>
-      </View>
+        </View>
+        <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+          {pickerOpen ? "Zwiń" : "Zmień"}
+        </Text>
+      </Pressable>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 16 }}
-      >
-        <View style={{ flexDirection: "row", gap: 8 }}>
+      {pickerOpen && (
+        <View className="bg-surface border border-border rounded-2xl p-3 mb-5">
+          <Field
+            placeholder="🔍 Szukaj budowy…"
+            value={buildQuery}
+            onChangeText={setBuildQuery}
+          />
+
           <Pressable
-            onPress={() => setSelectedBuildId("all")}
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: selectedBuildId === "all" ? COLORS.primary : COLORS.border,
-              backgroundColor: selectedBuildId === "all" ? COLORS.primary : COLORS.surface,
-            }}
+            onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
+            style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}
           >
-            <Text
+            <View
               style={{
-                color: selectedBuildId === "all" ? COLORS.background : COLORS.foreground,
-                fontSize: 13,
-                fontWeight: "700",
+                width: 18,
+                height: 18,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
+                backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              Wszystkie budowy
+              {showArchivedBuilds && (
+                <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
+                  ✓
+                </Text>
+              )}
+            </View>
+            <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
+              Pokaż zarchiwizowane
             </Text>
           </Pressable>
-          {visibleBuilds.map((b) => {
-            const active = selectedBuildId === b.id;
-            const count = savedReports.filter((r) => r.buildId === b.id).length;
-            return (
-              <Pressable
-                key={b.id}
-                onPress={() => setSelectedBuildId(b.id)}
+
+          <ScrollView style={{ maxHeight: 260, marginTop: 10 }} nestedScrollEnabled>
+            <Pressable
+              onPress={() => {
+                setSelectedBuildId("all");
+                setPickerOpen(false);
+              }}
+              style={{
+                paddingVertical: 10,
+                borderBottomWidth: 1,
+                borderBottomColor: COLORS.border,
+              }}
+            >
+              <Text
                 style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: active ? COLORS.primary : COLORS.border,
-                  backgroundColor: active ? COLORS.primary : COLORS.surface,
+                  color: selectedBuildId === "all" ? COLORS.primary : COLORS.foreground,
+                  fontWeight: "700",
+                  fontSize: 13,
                 }}
               >
-                <Text
+                {selectedBuildId === "all" ? "✓ " : ""}Wszystkie budowy
+              </Text>
+            </Pressable>
+            {filteredBuilds.map((b) => {
+              const isSelected = selectedBuildId === b.id;
+              const count = savedReports.filter((r) => r.buildId === b.id).length;
+              return (
+                <Pressable
+                  key={b.id}
+                  onPress={() => {
+                    setSelectedBuildId(b.id);
+                    setPickerOpen(false);
+                  }}
                   style={{
-                    color: active ? COLORS.background : COLORS.foreground,
-                    fontSize: 13,
-                    fontWeight: "700",
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: COLORS.border,
                   }}
                 >
-                  {b.number} · {b.name} ({count})
-                </Text>
-              </Pressable>
-            );
-          })}
-          {visibleBuilds.length === 0 && (
-            <Text style={{ color: COLORS.muted, fontSize: 13, alignSelf: "center" }}>
-              Brak budów w tym widoku.
-            </Text>
-          )}
+                  <Text
+                    style={{
+                      color: isSelected ? COLORS.primary : COLORS.foreground,
+                      fontWeight: "700",
+                      fontSize: 13,
+                    }}
+                  >
+                    {isSelected ? "✓ " : ""}
+                    {b.number} · {b.name} ({count})
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {filteredBuilds.length === 0 && (
+              <Text style={{ color: COLORS.muted, fontSize: 13, paddingVertical: 10 }}>
+                Brak budów pasujących do wyszukiwania.
+              </Text>
+            )}
+          </ScrollView>
         </View>
-      </ScrollView>
+      )}
 
-      <View
-        className="bg-surface border border-border rounded-2xl overflow-hidden mb-3"
-        style={{ flexDirection: "row" }}
-      >
-        <Pressable
-          onPress={() => setReportsTab("pending")}
-          style={{
-            flex: 1,
-            paddingVertical: 12,
-            alignItems: "center",
-            backgroundColor:
-              reportsTab === "pending" ? COLORS.primary : "transparent",
-          }}
-        >
-          <Text
-            style={{
-              color:
-                reportsTab === "pending" ? COLORS.background : COLORS.muted,
-              fontWeight: "700",
-              fontSize: 13,
-            }}
-          >
-            Do zatwierdzenia ({pendingReports.length})
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setReportsTab("approved")}
-          style={{
-            flex: 1,
-            paddingVertical: 12,
-            alignItems: "center",
-            backgroundColor:
-              reportsTab === "approved" ? COLORS.primary : "transparent",
-          }}
-        >
-          <Text
-            style={{
-              color:
-                reportsTab === "approved" ? COLORS.background : COLORS.muted,
-              fontWeight: "700",
-              fontSize: 13,
-            }}
-          >
-            Zatwierdzone ({approvedReports.length})
-          </Text>
-        </Pressable>
-      </View>
-
-      {reportsToShow.length === 0 ? (
+      {pendingReports.length === 0 && approvedReports.length === 0 ? (
         <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
           <IconBadge name="description" />
           <Text className="text-sm text-muted mt-3 text-center">
-            {reportsTab === "pending"
-              ? "Brak raportów oczekujących na zatwierdzenie."
-              : "Brak zatwierdzonych raportów."}
+            Brak raportów dla tego wyboru.
           </Text>
         </View>
       ) : (
         <View className="mb-5">
-          {reportsToShow.map((report) => (
-            <ReportCard
-              key={report.id}
-              report={report}
-              build={builds.find((b) => b.id === report.buildId)}
-              materials={materials}
-              assignments={assignments}
-              employees={employees}
-              expanded={expandedReportId === report.id}
-              onToggle={() =>
-                setExpandedReportId(
-                  expandedReportId === report.id ? null : report.id,
-                )
-              }
-              onApprove={() => approveReport(report.id)}
-              showBuildInfo={selectedBuildId === "all"}
-            />
-          ))}
+          {pendingReports.length > 0 && (
+            <>
+              <Text className="text-xs text-muted uppercase mb-2">
+                Do zatwierdzenia ({pendingReports.length})
+              </Text>
+              {pendingReports.map((report) => (
+                <ReportCard
+                  key={report.id}
+                  report={report}
+                  build={builds.find((b) => b.id === report.buildId)}
+                  materials={materials}
+                  assignments={assignments}
+                  employees={employees}
+                  expanded={expandedReportId === report.id}
+                  onToggle={() =>
+                    setExpandedReportId(
+                      expandedReportId === report.id ? null : report.id,
+                    )
+                  }
+                  onApprove={() => approveReport(report.id)}
+                  showBuildInfo={selectedBuildId === "all"}
+                />
+              ))}
+            </>
+          )}
+
+          {approvedReports.length > 0 && (
+            <>
+              <Text
+                className="text-xs text-muted uppercase mb-2"
+                style={{ marginTop: pendingReports.length > 0 ? 20 : 0 }}
+              >
+                Zatwierdzone ({approvedReports.length})
+              </Text>
+              {approvedReports.map((report) => (
+                <ReportCard
+                  key={report.id}
+                  report={report}
+                  build={builds.find((b) => b.id === report.buildId)}
+                  materials={materials}
+                  assignments={assignments}
+                  employees={employees}
+                  expanded={expandedReportId === report.id}
+                  onToggle={() =>
+                    setExpandedReportId(
+                      expandedReportId === report.id ? null : report.id,
+                    )
+                  }
+                  onApprove={() => approveReport(report.id)}
+                  showBuildInfo={selectedBuildId === "all"}
+                />
+              ))}
+            </>
+          )}
         </View>
       )}
     </>

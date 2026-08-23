@@ -106,47 +106,12 @@ export function AdminScreen() {
 
 // Sekcja na przyszłe ustawienia aplikacji. Na razie tylko wylogowanie —
 // celowo na samym końcu i z potwierdzeniem, żeby nie dało się go
-// nacisnąć przez przypadek.
+// nacisnąć przez przypadek. Stawka za km (Faza 7) przeniesiona do
+// "Zespół i dniówka" (AdminTeamSection) — dniówka i stawka za km to ten
+// sam rodzaj ustawienia (parametr rozliczeniowy), więc żyją razem.
 function AdminSettingsSection() {
-  const { kmRate, updateKmRate } = useAppData();
-  const [kmRateInput, setKmRateInput] = useState(kmRate ? String(kmRate) : "");
-  const [kmRateSaved, setKmRateSaved] = useState(false);
-
-  useEffect(() => {
-    setKmRateInput(kmRate ? String(kmRate) : "");
-  }, [kmRate]);
-
   return (
     <View className="bg-surface border border-border rounded-2xl p-4">
-      <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 6 }}>
-        Stawka za km (zł) — używana przy wysyłce raportu dziennego
-        (Faza 7). Zmiana nie rusza wcześniej wysłanych raportów, bo
-        stawka jest w nich zamrożona.
-      </Text>
-      <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
-        <Field
-          placeholder="np. 0,90"
-          keyboardType="numeric"
-          value={kmRateInput}
-          onChangeText={(value) => {
-            setKmRateInput(value);
-            setKmRateSaved(false);
-          }}
-          style={{ flex: 1, marginTop: 0 }}
-        />
-        <Button
-          label={kmRateSaved ? "Zapisano" : "Zapisz"}
-          onPress={async () => {
-            const value = Number(kmRateInput.replace(",", "."));
-            if (Number.isNaN(value) || value < 0) return;
-            await updateKmRate(value);
-            setKmRateSaved(true);
-          }}
-        />
-      </View>
-
-      <View style={{ height: 1, backgroundColor: COLORS.border, marginVertical: 16 }} />
-
       <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
         Tutaj z czasem pojawią się kolejne ustawienia aplikacji.
       </Text>
@@ -172,19 +137,27 @@ function AdminTeamSection() {
   const {
     workdayHours,
     workdayHoursInput,
+    kmRate,
     employees,
     newEmployee,
     setWorkdayHoursInput,
     setNewEmployee,
     saveWorkdayHours,
+    updateKmRate,
     saveEmployee,
     updateEmployeeRate,
   } = useAppData();
 
   const [workdayOpen, setWorkdayOpen] = useState(false);
+  const [kmRateOpen, setKmRateOpen] = useState(false);
+  const [kmRateInput, setKmRateInput] = useState(kmRate ? String(kmRate) : "");
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [editingRateId, setEditingRateId] = useState<string | null>(null);
   const [rateInput, setRateInput] = useState("");
+
+  useEffect(() => {
+    setKmRateInput(kmRate ? String(kmRate) : "");
+  }, [kmRate]);
 
   return (
     <>
@@ -233,6 +206,64 @@ function AdminTeamSection() {
                 onPress={() => {
                   saveWorkdayHours();
                   setWorkdayOpen(false);
+                }}
+              />
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Stawka za km (Faza 7) — ten sam wzorzec co Dniówka wyżej:
+          zwarta linia, edycja (stepper +/- 0,50 zł) tylko na żądanie.
+          Zapis idzie od razu do bazy (updateKmRate, RLS: tylko Admin),
+          w odróżnieniu od dniówki, która zostaje czysto lokalna. */}
+      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-3">
+        <Pressable
+          onPress={() => setKmRateOpen(!kmRateOpen)}
+          style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
+        >
+          <IconBadge name="directions-car" size={18} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>STAWKA ZA KM</Text>
+            <Text
+              style={{
+                color: COLORS.foreground,
+                fontWeight: "700",
+                fontSize: 15,
+                marginTop: 2,
+              }}
+            >
+              {kmRate.toFixed(2)} zł / km
+            </Text>
+          </View>
+          <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+            {kmRateOpen ? "Zwiń" : "Zmień"}
+          </Text>
+        </Pressable>
+        {kmRateOpen && (
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: COLORS.border,
+              padding: 14,
+            }}
+          >
+            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <QuantityStepper
+                value={kmRateInput}
+                onChangeText={setKmRateInput}
+                step={0.5}
+              />
+              <Text style={{ color: COLORS.muted }}>zł / km</Text>
+            </View>
+            <View style={{ marginTop: 10 }}>
+              <Button
+                label="Zapisz"
+                onPress={async () => {
+                  const value = Number(kmRateInput.replace(",", "."));
+                  if (Number.isNaN(value) || value < 0) return;
+                  await updateKmRate(value);
+                  setKmRateOpen(false);
                 }}
               />
             </View>

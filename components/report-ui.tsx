@@ -401,21 +401,26 @@ const QuantityStepper = ({
   value,
   onChangeText,
   min = 0,
+  step = 1,
   disabled = false,
   style,
 }: {
   value: string;
   onChangeText: (v: string) => void;
   min?: number;
+  // Skok przycisków +/- (domyślnie 1, np. dla stawki za km 0.5) —
+  // patrz stawkaKmInput w admin-screen.tsx (Faza 7).
+  step?: number;
   disabled?: boolean;
   style?: object;
 }) => {
   const current = Number(value) || 0;
   // Ilości materiałów mają w bazie do 3 miejsc po przecinku (niepełne
-  // litry/wiadra przy posadzkach żywicznych) — round1 zaokrągla WYŁĄCZNIE
-  // to, co dopisują tu przyciski +/-, żeby nie naростały błędy zmiennoprz.
-  // (np. 2.3 - 1 w JS bez zaokrąglenia potrafi dać 1.2999999999999998).
-  const round1 = (n: number) => Math.round(n * 10) / 10;
+  // litry/wiadra przy posadzkach żywicznych), a stawki (np. km) do 2 —
+  // round2 zaokrągla WYŁĄCZNIE to, co dopisują tu przyciski +/-, żeby nie
+  // narastały błędy zmiennoprz. (np. 2.3 - 1 w JS bez zaokrąglenia potrafi
+  // dać 1.2999999999999998).
+  const round2 = (n: number) => Math.round(n * 100) / 100;
   return (
     <View
       style={[
@@ -437,7 +442,7 @@ const QuantityStepper = ({
       <Pressable
         disabled={disabled}
         hitSlop={10}
-        onPress={() => onChangeText(String(round1(Math.max(min, current - 1))))}
+        onPress={() => onChangeText(String(round2(Math.max(min, current - step))))}
         style={{
           width: 34,
           height: 34,
@@ -474,7 +479,7 @@ const QuantityStepper = ({
       <Pressable
         disabled={disabled}
         hitSlop={10}
-        onPress={() => onChangeText(String(round1(current + 1)))}
+        onPress={() => onChangeText(String(round2(current + step)))}
         style={{
           width: 34,
           height: 34,

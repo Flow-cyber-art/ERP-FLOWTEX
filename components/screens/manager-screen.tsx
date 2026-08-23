@@ -36,7 +36,6 @@ export function ManagerScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow="ZARZĄDZANIE / RAPORTY"
         title="Raporty"
         description="Raporty ze wszystkich budów spływają tu automatycznie — zatwierdź je tutaj. Szczegóły materiałowe konkretnej budowy oraz jej zamknięcie znajdziesz w zakładce Budowy."
       />

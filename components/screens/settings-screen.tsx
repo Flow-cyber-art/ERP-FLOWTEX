@@ -1,5 +1,6 @@
-import { Text, View } from "react-native";
-import { Button, COLORS, confirmAction, ScreenHeader } from "@/components/report-ui";
+import { View } from "react-native";
+import { Button, confirmAction, ScreenHeader } from "@/components/report-ui";
+import { AccountSettingsSection } from "@/components/account-settings-section";
 import { signOut } from "@/lib/data/auth";
 
 // Zakładka "Admin" dla Brygadzisty i Pracownika — odpowiednik sekcji
@@ -11,12 +12,11 @@ import { signOut } from "@/lib/data/auth";
 export function SettingsScreen() {
   return (
     <>
-      <ScreenHeader eyebrow="ADMIN" title="Ustawienia" description="Ustawienia aplikacji." />
+      <ScreenHeader title="Ustawienia" description="Ustawienia aplikacji." />
 
-      <View className="bg-surface border border-border rounded-2xl p-4">
-        <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
-          Tutaj z czasem pojawią się kolejne ustawienia aplikacji.
-        </Text>
+      <AccountSettingsSection />
+
+      <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
         <Button
           label="Wyloguj"
           secondary

@@ -5,6 +5,7 @@ import {
 import {
   todayLabelPL,
   Button,
+  ScreenHeader,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
@@ -19,15 +20,7 @@ export function StartScreen() {
   return (
     <>
   <>
-    <Text className="text-xs tracking-widest text-primary font-bold">
-      FLOWTEX / OPERATIONS
-    </Text>
-    <Text className="text-3xl font-bold text-foreground mt-2">
-      Dzień dobry, brygadzisto.
-    </Text>
-    <Text className="text-sm text-muted mt-1 mb-6">
-      {todayLabelPL()}
-    </Text>
+    <ScreenHeader title="Dzień dobry, brygadzisto." description={todayLabelPL()} />
     <View className="bg-surface border border-border rounded-3xl p-5 mb-4">
       <Text className="text-xs text-muted">RAPORT DZIENNY</Text>
       <Text className="text-xl font-bold text-foreground mt-2">

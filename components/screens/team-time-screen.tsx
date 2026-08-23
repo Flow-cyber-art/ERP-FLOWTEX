@@ -28,7 +28,6 @@ export function TeamTimeScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow="BRYGADZISTA / CZAS ZESPOŁU"
         title="Czas pracy zespołu"
         description="Wybierz jednego pracownika, aby zobaczyć jego indywidualną ewidencję."
       />

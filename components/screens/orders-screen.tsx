@@ -218,7 +218,6 @@ export function OrdersScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow="MAGAZYN / ZAMÓWIENIA"
         title="Zamówienia"
         description="Braki materiałowe, zamówienia w drodze i przyjęcia na magazyn."
         action={

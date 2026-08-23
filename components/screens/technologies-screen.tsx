@@ -175,17 +175,16 @@ export function TechnologiesScreen() {
 
   return (
     <>
-      <View className="flex-row justify-between items-start mb-5">
-        <ScreenHeader
-          eyebrow="KONFIGURACJA / TECHNOLOGIE"
-          title="Technologie"
-          description="Receptury posadzek — etapy, materiały, zużycie na m²."
-        />
-        <Button
-          label={editorOpen ? "Anuluj" : "+ Nowa"}
-          onPress={editorOpen ? () => setEditorOpen(false) : startNew}
-        />
-      </View>
+      <ScreenHeader
+        title="Technologie"
+        description="Receptury posadzek — etapy, materiały, zużycie na m²."
+        action={
+          <Button
+            label={editorOpen ? "Anuluj" : "+ Nowa"}
+            onPress={editorOpen ? () => setEditorOpen(false) : startNew}
+          />
+        }
+      />
 
       {editorOpen && (
         <View className="bg-surface border border-border rounded-2xl p-4 mb-4">

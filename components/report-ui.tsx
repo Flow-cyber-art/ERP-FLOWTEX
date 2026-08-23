@@ -829,12 +829,10 @@ const IconBadge = ({
 );
 
 export function ScreenHeader({
-  eyebrow,
   title,
   description,
   action,
 }: {
-  eyebrow: string;
   title: string;
   description?: string;
   // Opcjonalny przycisk akcji w prawym górnym rogu nagłówka (np. "+ Nowe
@@ -851,11 +849,8 @@ export function ScreenHeader({
         gap: 12,
       }}
     >
-      <View style={{ flex: 1 }}>
-        <Text className="text-xs tracking-widest text-primary font-bold">
-          {eyebrow}
-        </Text>
-        <Text className="text-3xl font-bold text-foreground mt-2">{title}</Text>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text className="text-3xl font-bold text-foreground">{title}</Text>
         {description ? (
           <Text className="text-sm text-muted mt-2">{description}</Text>
         ) : null}

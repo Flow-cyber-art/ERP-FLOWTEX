@@ -24,7 +24,6 @@ export function WorkerScreen() {
     <>
   <>
     <ScreenHeader
-      eyebrow="PRACOWNIK / EWIDENCJA CZASU"
       title="Mój czas pracy"
       description="Podgląd własnych godzin. Ten widok nie pozwala edytować wpisów."
     />

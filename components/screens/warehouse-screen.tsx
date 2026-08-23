@@ -37,13 +37,10 @@ export function WarehouseScreen() {
   return (
     <>
   <>
-    <View className="flex-row justify-between items-start mb-5">
-      <ScreenHeader eyebrow="MAGAZYN / STAN" title="Materiały" />
-      <Button
-        label="+ Dodaj"
-        onPress={() => setShowMaterial(!showMaterial)}
-      />
-    </View>
+    <ScreenHeader
+      title="Materiały"
+      action={<Button label="+ Dodaj" onPress={() => setShowMaterial(!showMaterial)} />}
+    />
     {showMaterial && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
         <Field

@@ -150,7 +150,6 @@ export function SettlementScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow="BUDOWA / ROZLICZENIE"
         title="Rozliczenie budowy"
         description="Plan, przypisano, zużyto, koszt i marża — spięte z faz 0–7."
       />

@@ -248,7 +248,6 @@ export function ReportScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow={`RAPORT / ${todayLabelPL()}`}
         title="Zużycie dzienne"
       />
 

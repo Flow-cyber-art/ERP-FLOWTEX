@@ -12,6 +12,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
+import { AccountSettingsSection } from "@/components/account-settings-section";
 import type { AppRole } from "@/lib/data/auth";
 import { signOut } from "@/lib/data/auth";
 import {
@@ -50,7 +51,6 @@ export function AdminScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow="ADMINISTRACJA"
         title={TAB_META[section].title}
         description={TAB_META[section].description}
       />
@@ -111,25 +111,25 @@ export function AdminScreen() {
 // sam rodzaj ustawienia (parametr rozliczeniowy), więc żyją razem.
 function AdminSettingsSection() {
   return (
-    <View className="bg-surface border border-border rounded-2xl p-4">
-      <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
-        Tutaj z czasem pojawią się kolejne ustawienia aplikacji.
-      </Text>
-      <Button
-        label="Wyloguj"
-        secondary
-        onPress={() =>
-          confirmAction(
-            "Wylogować się?",
-            "Będzie trzeba zalogować się ponownie.",
-            "Wyloguj",
-            () => {
-              signOut();
-            },
-          )
-        }
-      />
-    </View>
+    <>
+      <AccountSettingsSection />
+      <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
+        <Button
+          label="Wyloguj"
+          secondary
+          onPress={() =>
+            confirmAction(
+              "Wylogować się?",
+              "Będzie trzeba zalogować się ponownie.",
+              "Wyloguj",
+              () => {
+                signOut();
+              },
+            )
+          }
+        />
+      </View>
+    </>
   );
 }
 

@@ -45,6 +45,7 @@ export function BuildsScreen() {
     picker,
     pickerQuery,
     draftAssignments,
+    setDraftAssignments,
     newBuild,
     workdayHours,
     setShowBuild,
@@ -138,15 +139,14 @@ export function BuildsScreen() {
   return (
     <>
   <>
-    <View className="flex-row justify-between items-start mb-5">
-      <ScreenHeader
-        eyebrow={isArchiveView ? "REALIZACJA / ARCHIWUM" : "REALIZACJA / BUDOWY"}
-        title={isArchiveView ? "Archiwum budów" : "Budowy"}
-      />
-      {!isArchiveView && (
-        <Button label="+ Nowa" onPress={() => setShowBuild(!showBuild)} />
-      )}
-    </View>
+    <ScreenHeader
+      title={isArchiveView ? "Archiwum budów" : "Budowy"}
+      action={
+        !isArchiveView ? (
+          <Button label="+ Nowa" onPress={() => setShowBuild(!showBuild)} />
+        ) : undefined
+      }
+    />
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
         <Field
@@ -497,11 +497,20 @@ export function BuildsScreen() {
                 </View>
               );
             })}
-            <View style={{ marginTop: 12 }}>
-              <Button
-                label={`Zatwierdź ${draftAssignments.length} materiałów`}
-                onPress={commitAssignments}
-              />
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Anuluj przypisanie"
+                  secondary
+                  onPress={() => setDraftAssignments([])}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label={`Zatwierdź ${draftAssignments.length} materiałów`}
+                  onPress={commitAssignments}
+                />
+              </View>
             </View>
           </View>
         )}

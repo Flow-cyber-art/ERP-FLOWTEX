@@ -22,7 +22,6 @@ export function SavedReportsScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow="BRYGADZISTA / RAPORTY"
         title="Raporty"
         description="Zapisane raporty dzienne i ich aktualny stan."
         action={

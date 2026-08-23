@@ -108,8 +108,45 @@ export function AdminScreen() {
 // celowo na samym końcu i z potwierdzeniem, żeby nie dało się go
 // nacisnąć przez przypadek.
 function AdminSettingsSection() {
+  const { kmRate, updateKmRate } = useAppData();
+  const [kmRateInput, setKmRateInput] = useState(kmRate ? String(kmRate) : "");
+  const [kmRateSaved, setKmRateSaved] = useState(false);
+
+  useEffect(() => {
+    setKmRateInput(kmRate ? String(kmRate) : "");
+  }, [kmRate]);
+
   return (
     <View className="bg-surface border border-border rounded-2xl p-4">
+      <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 6 }}>
+        Stawka za km (zł) — używana przy wysyłce raportu dziennego
+        (Faza 7). Zmiana nie rusza wcześniej wysłanych raportów, bo
+        stawka jest w nich zamrożona.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
+        <Field
+          placeholder="np. 0,90"
+          keyboardType="numeric"
+          value={kmRateInput}
+          onChangeText={(value) => {
+            setKmRateInput(value);
+            setKmRateSaved(false);
+          }}
+          style={{ flex: 1, marginTop: 0 }}
+        />
+        <Button
+          label={kmRateSaved ? "Zapisano" : "Zapisz"}
+          onPress={async () => {
+            const value = Number(kmRateInput.replace(",", "."));
+            if (Number.isNaN(value) || value < 0) return;
+            await updateKmRate(value);
+            setKmRateSaved(true);
+          }}
+        />
+      </View>
+
+      <View style={{ height: 1, backgroundColor: COLORS.border, marginVertical: 16 }} />
+
       <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
         Tutaj z czasem pojawią się kolejne ustawienia aplikacji.
       </Text>

@@ -41,7 +41,9 @@ export type PendingReportSubmission = {
     reason?: string;
     stageName?: string;
   }[];
-  extraCosts: { label: string; amount: number; note?: string }[];
+  extraCosts: { label: string; amount: number; note?: string; category?: string }[];
+  // Kilometrówka (Faza 7) — patrz submitDailyReport w lib/data/reports.ts.
+  km?: number;
   /** Kiedy dodane do kolejki lokalnie — do sortowania i debugowania. */
   queuedAt: string;
   /** Liczba nieudanych prób — do prostego backoffu / ostrzeżenia w UI. */
@@ -128,6 +130,7 @@ export async function flushOutbox(): Promise<{
           people: item.people,
           materials: item.materials,
           extraCosts: item.extraCosts,
+          km: item.km,
         });
         succeededKeys.push(reportKey(item));
       } catch (error) {

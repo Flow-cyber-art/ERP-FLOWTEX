@@ -47,6 +47,7 @@ import {
   updateReportStatus,
   type ReportRow,
 } from "@/lib/data/reports";
+import { getSettings, updateKmRate as updateKmRateRemote } from "@/lib/data/settings";
 import { useRealtimeSync } from "@/lib/data/use-realtime-sync";
 import { createBuildDriveFolder } from "@/lib/data/drive";
 import { listActiveTechnologies, type TechnologyRow } from "@/lib/data/technologies";
@@ -98,6 +99,11 @@ export type SavedReport = {
   extraCosts: ExtraCost[];
   status: SavedReportStatus;
   updatedAt: string;
+  // Kilometrówka (Faza 7) — km wpisane przez brygadzistę i stawka/koszt
+  // zamrożone PRZEZ BAZĘ w momencie wysyłki (patrz submit_daily_report).
+  km?: number;
+  kmRateApplied?: number;
+  kmCost?: number;
 };
 
 import {
@@ -151,9 +157,13 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
       label: c.label,
       amount: Number(c.amount),
       note: c.note ?? undefined,
+      category: c.category ?? undefined,
     })),
     status: row.status === "approved" ? "approved" : "submitted",
     updatedAt: row.updatedAt,
+    km: row.km != null ? Number(row.km) : undefined,
+    kmRateApplied: row.kmRateApplied != null ? Number(row.kmRateApplied) : undefined,
+    kmCost: row.kmCost != null ? Number(row.kmCost) : undefined,
   };
 }
 
@@ -467,6 +477,17 @@ function useAppDataState(
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  // Ustawienia aplikacji (Faza 7) — na razie tylko stawka za km,
+  // singleton (patrz lib/data/settings.ts). kmRate używane do podglądu
+  // kosztu w formularzu raportu, PRZED wysyłką — autorytatywna wartość
+  // i tak jest zamrażana przez bazę w submit_daily_report.
+  const settingsQuery = useQuery({
+    queryKey: ["settings", "get"],
+    queryFn: getSettings,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  const kmRate = Number(settingsQuery.data?.kmRate ?? 0);
 
   useEffect(() => {
     if (!buildsQuery.data?.length) return;
@@ -682,6 +703,9 @@ function useAppDataState(
     mutationFn: (vars: { employeeId: number; hourlyRate: number }) =>
       updateEmployeeRateRemote(vars.employeeId, vars.hourlyRate),
   });
+  const updateKmRateMutation = useMutation({
+    mutationFn: (vars: { kmRate: number }) => updateKmRateRemote(vars.kmRate),
+  });
   const createOrderMutation = useMutation({ mutationFn: createOrderRemote });
   const markOrderOrderedMutation = useMutation({
     mutationFn: (vars: { orderId: number }) => markOrderOrderedRemote(vars.orderId),
@@ -768,6 +792,10 @@ function useAppDataState(
     { employeeId: string; start: string; end: string }[]
   >([]);
   const [draftExtraCosts, setDraftExtraCosts] = useState<ExtraCost[]>([]);
+  // Kilometrówka (Faza 7) — string (jak inne pola formularza), żeby
+  // pole mogło być puste zamiast "0". Puste/niepoprawne = brak km w
+  // raporcie (patrz saveDailyReportUnsafe niżej).
+  const [draftKm, setDraftKm] = useState("");
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   const [orderMaterialName, setOrderMaterialName] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
@@ -1281,6 +1309,13 @@ function useAppDataState(
       extraCosts: [...draftExtraCosts],
       status: existingReport?.status || "submitted",
       updatedAt: new Date().toISOString(),
+      // km/kmRateApplied/kmCost lokalnie: km od razu (wpisane przez
+      // brygadzistę), stawka/koszt dopiero po odpowiedzi z bazy niżej
+      // (submitDailyReport) — baza jest tu autorytatywna, tak samo jak
+      // przy FIFO materiałów.
+      km: Number(draftKm.replace(",", ".")) || undefined,
+      kmRateApplied: existingReport?.kmRateApplied,
+      kmCost: existingReport?.kmCost,
     };
     setSavedReports((previous) =>
       existingReport
@@ -1336,6 +1371,7 @@ function useAppDataState(
       setDraftPeople([]);
     }
     setDraftExtraCosts([]);
+    setDraftKm("");
     setHrSaved(true);
     setReportSaved(true);
     setReportStatus("wysłany");
@@ -1383,6 +1419,7 @@ function useAppDataState(
       label: c.label,
       amount: c.amount,
       note: c.note,
+      category: c.category,
     }));
     if (!Number.isNaN(numericBuildId)) {
       enqueueReport({
@@ -1391,6 +1428,7 @@ function useAppDataState(
         people: peoplePayload,
         materials: materialsPayload,
         extraCosts: extraCostsPayload,
+        km: reportSnapshot.km,
       }).then(({ sent }) => {
         if (!sent) {
           Alert.alert(
@@ -1434,6 +1472,16 @@ function useAppDataState(
       await invalidate("employees");
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać stawki.");
+    }
+  };
+  // Stawka za km (Faza 7) — edytowana wyłącznie przez Admina (RLS), patrz
+  // AdminSettingsSection w components/screens/admin-screen.tsx.
+  const updateKmRate = async (rate: number) => {
+    try {
+      await updateKmRateMutation.mutateAsync({ kmRate: rate });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "get"] });
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać stawki za km.");
     }
   };
   // Edycja ceny jednostkowej materiału w magazynie. Nie wpływa wstecz na
@@ -1592,10 +1640,11 @@ function useAppDataState(
     label: string,
     amount: number,
     note?: string,
+    category?: string,
   ) => {
     setDraftExtraCosts([
       ...draftExtraCosts,
-      { id: `cost-${Date.now()}`, label, amount, note },
+      { id: `cost-${Date.now()}`, label, amount, note, category },
     ]);
   };
   const removeExtraCostFromDraft = (id: string) => {
@@ -1610,6 +1659,7 @@ function useAppDataState(
     setReasons({ ...report.reasons });
     setDraftPeople([...report.people]);
     setDraftExtraCosts([...(report.extraCosts || [])]);
+    setDraftKm(report.km != null ? String(report.km) : "");
     setReportSaved(false);
     setReportStep(1);
     setTab("report");
@@ -1756,6 +1806,8 @@ function useAppDataState(
     timePicker,
     draftPeople,
     draftExtraCosts,
+    draftKm,
+    kmRate,
     orders,
     orderMaterialName,
     orderQuantity,
@@ -1809,6 +1861,7 @@ function useAppDataState(
     setTimePicker,
     setDraftPeople,
     setDraftExtraCosts,
+    setDraftKm,
     setOrders,
     setOrderMaterialName,
     setOrderQuantity,
@@ -1829,6 +1882,7 @@ function useAppDataState(
     saveDailyReport,
     saveEmployee,
     updateEmployeeRate,
+    updateKmRate,
     updateMaterialPrice,
     updateMaterialStock,
     createOrder,

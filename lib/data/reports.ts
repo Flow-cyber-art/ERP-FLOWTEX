@@ -29,7 +29,15 @@ export type SubmitReportMaterial = {
   // FIFO/koszt, patrz submit_daily_report w supabase/sql.
   stageName?: string;
 };
-export type SubmitReportExtraCost = { label: string; amount: number; note?: string };
+// Kategoria kosztu dodatkowego (Faza 7) — pole opisowe, bez walidacji po
+// stronie bazy; cztery podpowiedzi w UI (patrz components/report-ui.tsx),
+// plus dowolna własna wartość.
+export type SubmitReportExtraCost = {
+  label: string;
+  amount: number;
+  note?: string;
+  category?: string;
+};
 
 export type SubmitDailyReportInput = {
   buildId: number;
@@ -37,6 +45,10 @@ export type SubmitDailyReportInput = {
   people: SubmitReportPerson[];
   materials: SubmitReportMaterial[];
   extraCosts: SubmitReportExtraCost[];
+  // Kilometrówka (Faza 7) — liczba km na ten raport. `undefined`/0 nie
+  // zapisuje żadnego kosztu (baza zamraża kmCost tylko gdy km nie jest
+  // null, patrz submit_daily_report w supabase/sql/012_faza7_km_koszty.sql).
+  km?: number;
 };
 
 export type SubmitDailyReportResult = {
@@ -50,6 +62,9 @@ export type SubmitDailyReportResult = {
    * tym swój lokalny szacunek zamiast mu ufać.
    */
   materials: { materialId: number; usedQuantity: number; cost: number }[];
+  /** Stawka za km zamrożona PRZEZ BAZĘ w momencie tego zapisu (Faza 7). */
+  kmRateApplied: number | null;
+  kmCost: number | null;
 };
 
 export async function submitDailyReport(
@@ -61,10 +76,21 @@ export async function submitDailyReport(
     p_people: input.people,
     p_materials: input.materials,
     p_extra_costs: input.extraCosts,
+    p_km: input.km || null,
   });
   if (error) throw new Error(error.message);
-  const result = data as { reportId: number; materials: SubmitDailyReportResult["materials"] };
-  return { reportId: result.reportId, materials: result.materials ?? [] };
+  const result = data as {
+    reportId: number;
+    materials: SubmitDailyReportResult["materials"];
+    kmRateApplied: number | string | null;
+    kmCost: number | string | null;
+  };
+  return {
+    reportId: result.reportId,
+    materials: result.materials ?? [],
+    kmRateApplied: result.kmRateApplied != null ? Number(result.kmRateApplied) : null,
+    kmCost: result.kmCost != null ? Number(result.kmCost) : null,
+  };
 }
 
 /** Zatwierdzenie / odesłanie do poprawy raportu po (buildId, date). */
@@ -89,18 +115,27 @@ export type ReportRow = {
   status: ReportStatus;
   adminComment: string | null;
   updatedAt: string;
+  km: string | null;
+  kmRateApplied: string | null;
+  kmCost: string | null;
   builds: { number: string; name: string } | null;
   report_materials: { materialId: number; usedQuantity: string; cost: string; reason: string | null }[];
   report_people: { employeeId: number; start: string; end: string }[];
-  report_extra_costs: { id: number; label: string; amount: string; note: string | null }[];
+  report_extra_costs: {
+    id: number;
+    label: string;
+    amount: string;
+    note: string | null;
+    category: string | null;
+  }[];
 };
 
 const REPORT_SELECT = `
-  id, buildId, date, status, adminComment, updatedAt,
+  id, buildId, date, status, adminComment, updatedAt, km, kmRateApplied, kmCost,
   builds ( number, name ),
   report_materials ( materialId, usedQuantity, cost, reason ),
   report_people ( employeeId, start, end ),
-  report_extra_costs ( id, label, amount, note )
+  report_extra_costs ( id, label, amount, note, category )
 `;
 
 /**

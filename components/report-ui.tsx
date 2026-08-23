@@ -121,7 +121,14 @@ export type ExtraCost = {
   label: string;
   amount: number;
   note?: string;
+  // Kategoria kosztu (Faza 7) — pole opisowe bez walidacji, patrz
+  // EXTRA_COST_CATEGORIES niżej dla podpowiedzi w UI.
+  category?: string;
 };
+
+// Podpowiedzi kategorii kosztu dodatkowego (product_spec.md / plan
+// wdrożenia, Faza 7) — brygadzista może też wpisać własną w polu tekstowym.
+const EXTRA_COST_CATEGORIES = ["nocleg", "parking", "zakup", "inne"] as const;
 
 type Employee = {
   id: string;
@@ -496,19 +503,25 @@ const ExtraCostsSection = ({
   disabled = false,
 }: {
   costs: ExtraCost[];
-  onAdd: (label: string, amount: number, note?: string) => void;
+  onAdd: (label: string, amount: number, note?: string, category?: string) => void;
   onRemove: (id: string) => void;
   disabled?: boolean;
 }) => {
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState<string>("");
+  const [customCategory, setCustomCategory] = useState("");
   const total = costs.reduce((sum, c) => sum + c.amount, 0);
   const submit = () => {
     const value = Number(amount.replace(",", "."));
     if (!label.trim() || !value || value <= 0) return;
-    onAdd(label.trim(), value);
+    const resolvedCategory =
+      category === "inne" ? customCategory.trim() || "inne" : category || undefined;
+    onAdd(label.trim(), value, undefined, resolvedCategory);
     setLabel("");
     setAmount("");
+    setCategory("");
+    setCustomCategory("");
   };
   return (
     <View>
@@ -524,17 +537,19 @@ const ExtraCostsSection = ({
             borderTopColor: COLORS.border,
           }}
         >
-          <Text
-            style={{
-              color: COLORS.foreground,
-              fontSize: 14,
-              flex: 1,
-              minWidth: 0,
-            }}
-            numberOfLines={1}
-          >
-            {c.label}
-          </Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              style={{ color: COLORS.foreground, fontSize: 14 }}
+              numberOfLines={1}
+            >
+              {c.label}
+            </Text>
+            {!!c.category && (
+              <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 1 }}>
+                {c.category}
+              </Text>
+            )}
+          </View>
           <Text
             style={{
               color: COLORS.foreground,
@@ -603,6 +618,46 @@ const ExtraCostsSection = ({
             style={{ flexGrow: 1, flexBasis: 90, marginTop: 0, minWidth: 0 }}
           />
         </View>
+      )}
+      {!disabled && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {EXTRA_COST_CATEGORIES.map((option) => {
+            const active = category === option;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => setCategory(active ? "" : option)}
+                style={{
+                  paddingVertical: 6,
+                  paddingHorizontal: 12,
+                  borderRadius: 999,
+                  backgroundColor: active ? COLORS.primary : COLORS.background,
+                  borderWidth: 1,
+                  borderColor: active ? COLORS.primary : COLORS.border,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: "700",
+                    color: active ? COLORS.background : COLORS.muted,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+      {!disabled && category === "inne" && (
+        <Field
+          placeholder="Własna kategoria (opcjonalnie)"
+          value={customCategory}
+          onChangeText={setCustomCategory}
+          style={{ marginTop: 8 }}
+        />
       )}
       {!disabled && (
         <View style={{ marginTop: 8 }}>

@@ -36,6 +36,8 @@ export function ReportScreen() {
     timePicker,
     draftPeople,
     draftExtraCosts,
+    draftKm,
+    kmRate,
     setSelectedBuildId,
     setPicker,
     setReportValues,
@@ -48,6 +50,7 @@ export function ReportScreen() {
     setPersonEnd,
     setTimePicker,
     setDraftExtraCosts,
+    setDraftKm,
     activeBuild,
     buildAssignments,
     buildMaterialPlans,
@@ -518,6 +521,27 @@ export function ReportScreen() {
 
             <View className="border-t border-border p-4">
               <Text className="text-xs text-muted uppercase mb-2">
+                Kilometrówka
+              </Text>
+              <Field
+                placeholder="Liczba km"
+                keyboardType="numeric"
+                value={draftKm}
+                editable={!reportApproved}
+                onChangeText={setDraftKm}
+                style={{ marginTop: 0 }}
+              />
+              {!!draftKm && kmRate > 0 && (
+                <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
+                  {(Number(draftKm.replace(",", ".")) || 0).toString()} km ×{" "}
+                  {kmRate.toFixed(2)} zł/km ≈{" "}
+                  {((Number(draftKm.replace(",", ".")) || 0) * kmRate).toFixed(2)} zł
+                </Text>
+              )}
+            </View>
+
+            <View className="border-t border-border p-4">
+              <Text className="text-xs text-muted uppercase mb-2">
                 Dodatkowe koszty
               </Text>
               <ExtraCostsSection
@@ -869,6 +893,22 @@ export function ReportScreen() {
                 </View>
               );
             })}
+
+            {!!draftKm && (
+              <>
+                <Text className="text-xs text-muted uppercase mt-5 mb-1">
+                  Kilometrówka
+                </Text>
+                <Text className="text-sm text-foreground">
+                  {draftKm} km
+                  {kmRate > 0
+                    ? ` × ${kmRate.toFixed(2)} zł/km ≈ ${(
+                        (Number(draftKm.replace(",", ".")) || 0) * kmRate
+                      ).toFixed(2)} zł`
+                    : ""}
+                </Text>
+              </>
+            )}
 
             {draftExtraCosts.length > 0 && (
               <>

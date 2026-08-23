@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
   Button,
   COLORS,
@@ -16,6 +16,7 @@ import {
   saveTechnology,
   updateTechnologyMeta,
 } from "@/lib/data/technologies";
+import { parseTechnologySql } from "@/lib/data/technology-sql-import";
 
 // Panel Admina — Technologie (receptury posadzek), Faza 1 modułu
 // Technologia. "Edytuj" NIGDY nie nadpisuje istniejącej technologii —
@@ -77,6 +78,14 @@ export function TechnologiesScreen() {
   const [thicknessRangeMode, setThicknessRangeMode] = useState(false);
   const [stages, setStages] = useState<DraftStage[]>([emptyStage()]);
   const [busy, setBusy] = useState(false);
+
+  // Tryb wpisywania nowej technologii: formularz krok po kroku albo wklejony
+  // SQL. SQL nigdy nie jest wykonywany na bazie — jest tylko parsowany
+  // (patrz lib/data/technology-sql-import.ts) i wypełnia te same pola co
+  // tryb tradycyjny, żeby dało się je sprawdzić/poprawić przed zapisem.
+  const [formMode, setFormMode] = useState<"traditional" | "sql">("traditional");
+  const [sqlInput, setSqlInput] = useState("");
+  const [sqlError, setSqlError] = useState<string | null>(null);
 
   // Filtry listy (nie edytora) — firma i zakres grubości. Do uzupełnienia
   // ręcznie w istniejących technologiach przez "Edytuj", stąd oba pola
@@ -143,7 +152,47 @@ export function TechnologiesScreen() {
     setThicknessMaxMm("");
     setThicknessRangeMode(false);
     setStages([emptyStage()]);
+    setFormMode("traditional");
+    setSqlInput("");
+    setSqlError(null);
     setEditorOpen(true);
+  };
+
+  const handleParseSql = () => {
+    try {
+      const parsed = parseTechnologySql(sqlInput);
+      setCode(parsed.code);
+      setName(parsed.name);
+      setCompany(parsed.company ?? "");
+      setThicknessMinMm(parsed.thicknessMinMm != null ? String(parsed.thicknessMinMm) : "");
+      setThicknessMaxMm(parsed.thicknessMaxMm != null ? String(parsed.thicknessMaxMm) : "");
+      setThicknessRangeMode(
+        parsed.thicknessMinMm != null &&
+          parsed.thicknessMaxMm != null &&
+          parsed.thicknessMinMm !== parsed.thicknessMaxMm,
+      );
+      setStages(
+        parsed.stages.map((s) => ({
+          key: nextKey(),
+          name: s.name,
+          materials: s.materials.length
+            ? s.materials.map((m) => ({
+                key: nextKey(),
+                name: m.name,
+                unit: m.unit,
+                consumptionPerM2: String(m.consumptionPerM2),
+                linkedMaterialId: "",
+              }))
+            : [emptyMaterial()],
+        })),
+      );
+      setSqlError(null);
+      // Przełącz na widok formularza — to jest podgląd do sprawdzenia i
+      // ewentualnej poprawki, zanim cokolwiek trafi do Supabase.
+      setFormMode("traditional");
+    } catch (err) {
+      setSqlError(err instanceof Error ? err.message : "Nie udało się odczytać SQL.");
+    }
   };
 
   const startEdit = (t: TechnologyRow) => {
@@ -180,6 +229,11 @@ export function TechnologiesScreen() {
             }))
         : [emptyStage()],
     );
+    // Import SQL ma sens tylko dla zupełnie nowej technologii — edycja
+    // istniejącej zawsze zaczyna się od pełnego, wypełnionego formularza.
+    setFormMode("traditional");
+    setSqlInput("");
+    setSqlError(null);
     setEditorOpen(true);
   };
 
@@ -280,6 +334,81 @@ export function TechnologiesScreen() {
               budowy które już ją mają przypisaną się nie zmienią.
             </Text>
           )}
+
+          {editingSourceId == null && (
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+              {(
+                [
+                  { key: "traditional", label: "Tradycyjnie" },
+                  { key: "sql", label: "Przez SQL" },
+                ] as const
+              ).map((opt) => (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => setFormMode(opt.key)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 9,
+                    borderRadius: 10,
+                    alignItems: "center",
+                    borderWidth: 1,
+                    borderColor: formMode === opt.key ? COLORS.primary : COLORS.border,
+                    backgroundColor: formMode === opt.key ? COLORS.primary : COLORS.background,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: formMode === opt.key ? COLORS.background : COLORS.foreground,
+                      fontWeight: "700",
+                      fontSize: 13,
+                    }}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {editingSourceId == null && formMode === "sql" ? (
+            <View>
+              <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>
+                Wklej SQL w formacie: insert into technologies (...) values (...) returning id,
+                dalej etapy (cross join values ... as stage_data) i materiały (join values ...
+                as material_data). Nic nie zostanie wysłane do bazy — wczytanie tylko wypełni
+                formularz poniżej do sprawdzenia i akceptacji.
+              </Text>
+              <TextInput
+                multiline
+                numberOfLines={14}
+                value={sqlInput}
+                onChangeText={setSqlInput}
+                placeholder="begin;&#10;&#10;with new_technology as (...)"
+                placeholderTextColor={COLORS.muted}
+                textAlignVertical="top"
+                style={{
+                  backgroundColor: COLORS.background,
+                  color: COLORS.foreground,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  padding: 12,
+                  minHeight: 220,
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                }}
+              />
+              {sqlError && (
+                <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 10 }}>
+                  {sqlError}
+                </Text>
+              )}
+              <View style={{ marginTop: 12 }}>
+                <Button label="Wczytaj i pokaż podgląd" onPress={handleParseSql} />
+              </View>
+            </View>
+          ) : (
+            <>
           <Text className="text-xs text-muted uppercase mb-2">Kod (rodzina technologii)</Text>
           <Field placeholder="np. ST/PU/2" value={code} onChangeText={setCode} />
           <Text className="text-xs text-muted uppercase mb-2 mt-3">Nazwa</Text>
@@ -562,6 +691,8 @@ export function TechnologiesScreen() {
               />
             )}
           </View>
+          </>
+          )}
         </View>
       )}
 

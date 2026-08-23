@@ -96,6 +96,12 @@ export async function cancelBuildOrder(orderId: number): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Kasuje TYLKO zamówienie już anulowane — patrz delete_build_order (015). */
+export async function deleteBuildOrder(orderId: number): Promise<void> {
+  const { error } = await supabase.rpc("delete_build_order", { p_order_id: orderId });
+  if (error) throw new Error(error.message);
+}
+
 export type ReceiveBuildOrderItemInput = {
   itemId: number;
   receivedQuantity: number;

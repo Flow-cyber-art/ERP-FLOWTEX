@@ -210,6 +210,7 @@ export function ReportScreen() {
           <QuantityStepper
             disabled={reportApproved}
             value={reportValues[a.materialId] || "0"}
+            unit={m?.unit}
             onChangeText={(v) =>
               setReportValues({
                 ...reportValues,

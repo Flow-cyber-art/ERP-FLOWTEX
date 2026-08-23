@@ -35,6 +35,7 @@ export function BuildsScreen() {
     updateOrderItemQuantity,
     markBuildOrderOrdered,
     cancelBuildOrder,
+    deleteBuildOrder,
     receiveBuildOrder,
     showBuild,
     showAssignment,
@@ -1128,6 +1129,24 @@ export function BuildsScreen() {
                               Zapisywanie…
                             </Text>
                           )}
+                        </View>
+                      )}
+
+                      {order.status === "anulowane" && (
+                        <View style={{ marginTop: 10 }}>
+                          <Button
+                            label="Usuń zamówienie"
+                            secondary
+                            fullWidth
+                            onPress={() =>
+                              confirmAction(
+                                "Skasować zamówienie?",
+                                `${order.orderNumber} zostanie trwale usunięte z listy.`,
+                                "Usuń",
+                                () => deleteBuildOrder(order.id),
+                              )
+                            }
+                          />
                         </View>
                       )}
                     </View>

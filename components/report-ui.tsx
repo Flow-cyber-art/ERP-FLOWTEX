@@ -415,6 +415,7 @@ const QuantityStepper = ({
   step = 1,
   disabled = false,
   style,
+  unit,
 }: {
   value: string;
   onChangeText: (v: string) => void;
@@ -424,6 +425,11 @@ const QuantityStepper = ({
   step?: number;
   disabled?: boolean;
   style?: object;
+  // Opcjonalna jednostka wyświetlana tuż obok steppera (np. "kg", "m²") —
+  // bez niej sama liczba nie mówi, w czym się ją wpisuje (patrz
+  // renderMaterialRow w report-screen.tsx, gdzie brygadzista wpisuje
+  // zużycie materiału bez żadnego innego kontekstu jednostki obok).
+  unit?: string;
 }) => {
   const current = Number(value) || 0;
   // Ilości materiałów mają w bazie do 3 miejsc po przecinku (niepełne
@@ -504,6 +510,18 @@ const QuantityStepper = ({
           color={disabled ? COLORS.muted : COLORS.primary}
         />
       </Pressable>
+      {unit ? (
+        <Text
+          style={{
+            color: COLORS.muted,
+            fontSize: 12,
+            fontWeight: "700",
+            paddingRight: 10,
+          }}
+        >
+          {unit}
+        </Text>
+      ) : null}
     </View>
   );
 };

@@ -60,6 +60,7 @@ export function OrdersScreen() {
     updateOrderItemQuantity,
     markBuildOrderOrdered,
     cancelBuildOrder,
+    deleteBuildOrder,
     receiveBuildOrder,
     createOrder,
     createOrderFromShortage,
@@ -237,6 +238,100 @@ export function OrdersScreen() {
           </Pressable>
         }
       />
+
+      {/* Zamówienie ręczne, spoza listy braków — zwinięte domyślnie,
+          otwierane przyciskiem w nagłówku, tuż pod nim (nie na dole
+          strony), żeby nie trzeba było szukać, gdzie się otworzyło. */}
+      {manualFormOpen && (
+        <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
+          <Text className="text-sm font-bold text-foreground">
+            Zamów materiał spoza listy
+          </Text>
+          <Text className="text-xs text-muted mt-1">
+            Coś, czego nie ma jeszcze w magazynie ani w planach budów.
+          </Text>
+          <Field
+            placeholder="Nazwa materiału"
+            value={orderMaterialName}
+            onChangeText={(v: string) => setOrderMaterialName(capitalizeFirst(v))}
+            onFocus={() => setNameFieldFocused(true)}
+            onBlur={() => {
+              // Małe opóźnienie, żeby tapnięcie w podpowiedź zdążyło się
+              // zarejestrować zanim lista zniknie (onBlur odpala się
+              // przed onPress na liście, gdyby zniknęła natychmiast).
+              setTimeout(() => setNameFieldFocused(false), 150);
+            }}
+          />
+          {showSuggestions && materialSuggestions.length > 0 && (
+            <View
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: 10,
+                marginTop: 6,
+                overflow: "hidden",
+              }}
+            >
+              {materialSuggestions.map((m) => (
+                <Pressable
+                  key={m.id}
+                  onPress={() => {
+                    setOrderMaterialName(m.name);
+                    setNameFieldFocused(false);
+                  }}
+                  style={{
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: COLORS.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: COLORS.foreground,
+                      fontSize: 13,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {m.name}
+                  </Text>
+                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                    {m.index} · na magazynie: {m.stock ?? 0} {m.unit}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {exactMaterialMatch && (
+            <Text
+              style={{ color: COLORS.success, fontSize: 11, marginTop: 4 }}
+            >
+              Materiał już jest w magazynie ({exactMaterialMatch.index}) —
+              zamówienie zostanie do niego dopięte.
+            </Text>
+          )}
+          <Text
+            style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}
+            className="uppercase"
+          >
+            Ilość do zamówienia
+          </Text>
+          <QuantityStepper
+            style={{ marginTop: 8 }}
+            value={orderQuantity}
+            onChangeText={setOrderQuantity}
+          />
+          <View style={{ marginTop: 12 }}>
+            <Button label="Utwórz zamówienie" onPress={createOrder} />
+          </View>
+          {orderSaved && (
+            <Text
+              style={{ color: COLORS.success, fontWeight: "700", marginTop: 10 }}
+            >
+              Zamówienie zapisane.
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* Zamówienia z planu materiałowego budowy (Faza 3) — generowane z
           karty budowy przyciskiem "+ Z planu", ale statusy i przyjęcie
@@ -502,6 +597,24 @@ export function OrdersScreen() {
                     )}
                   </View>
                 )}
+
+                {order.status === "anulowane" && (
+                  <View style={{ marginTop: 10 }}>
+                    <Button
+                      label="Usuń zamówienie"
+                      secondary
+                      fullWidth
+                      onPress={() =>
+                        confirmAction(
+                          "Skasować zamówienie?",
+                          `${order.orderNumber} zostanie trwale usunięte z listy.`,
+                          "Usuń",
+                          () => deleteBuildOrder(order.id),
+                        )
+                      }
+                    />
+                  </View>
+                )}
               </View>
             );
           })}
@@ -519,100 +632,6 @@ export function OrdersScreen() {
         <View style={{ width: 1, backgroundColor: COLORS.border }} />
         {kpi("Dostarczone", dostarczoneCount, COLORS.success, "dostarczone")}
       </View>
-
-      {/* Zamówienie ręczne, spoza listy braków — zwinięte domyślnie,
-          otwierane przyciskiem w nagłówku, żeby nie zajmowało stałego
-          miejsca w treści widoku. */}
-      {manualFormOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
-          <Text className="text-sm font-bold text-foreground">
-            Zamów materiał spoza listy
-          </Text>
-          <Text className="text-xs text-muted mt-1">
-            Coś, czego nie ma jeszcze w magazynie ani w planach budów.
-          </Text>
-          <Field
-            placeholder="Nazwa materiału"
-            value={orderMaterialName}
-            onChangeText={(v: string) => setOrderMaterialName(capitalizeFirst(v))}
-            onFocus={() => setNameFieldFocused(true)}
-            onBlur={() => {
-              // Małe opóźnienie, żeby tapnięcie w podpowiedź zdążyło się
-              // zarejestrować zanim lista zniknie (onBlur odpala się
-              // przed onPress na liście, gdyby zniknęła natychmiast).
-              setTimeout(() => setNameFieldFocused(false), 150);
-            }}
-          />
-          {showSuggestions && materialSuggestions.length > 0 && (
-            <View
-              style={{
-                backgroundColor: COLORS.background,
-                borderRadius: 10,
-                marginTop: 6,
-                overflow: "hidden",
-              }}
-            >
-              {materialSuggestions.map((m) => (
-                <Pressable
-                  key={m.id}
-                  onPress={() => {
-                    setOrderMaterialName(m.name);
-                    setNameFieldFocused(false);
-                  }}
-                  style={{
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    borderBottomWidth: 1,
-                    borderBottomColor: COLORS.border,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: COLORS.foreground,
-                      fontSize: 13,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {m.name}
-                  </Text>
-                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                    {m.index} · na magazynie: {m.stock ?? 0} {m.unit}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-          {exactMaterialMatch && (
-            <Text
-              style={{ color: COLORS.success, fontSize: 11, marginTop: 4 }}
-            >
-              Materiał już jest w magazynie ({exactMaterialMatch.index}) —
-              zamówienie zostanie do niego dopięte.
-            </Text>
-          )}
-          <Text
-            style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}
-            className="uppercase"
-          >
-            Ilość do zamówienia
-          </Text>
-          <QuantityStepper
-            style={{ marginTop: 8 }}
-            value={orderQuantity}
-            onChangeText={setOrderQuantity}
-          />
-          <View style={{ marginTop: 12 }}>
-            <Button label="Utwórz zamówienie" onPress={createOrder} />
-          </View>
-          {orderSaved && (
-            <Text
-              style={{ color: COLORS.success, fontWeight: "700", marginTop: 10 }}
-            >
-              Zamówienie zapisane.
-            </Text>
-          )}
-        </View>
-      )}
 
       {/* LISTA — zagęszczona, jeden wiersz = jeden materiał, jeden status. */}
       {filter !== "aktywne" && (

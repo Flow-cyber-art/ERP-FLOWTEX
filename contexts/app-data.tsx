@@ -70,6 +70,7 @@ import {
 } from "@/lib/data/build-stages";
 import {
   cancelBuildOrder as cancelBuildOrderRemote,
+  deleteBuildOrder as deleteBuildOrderRemote,
   generateOrderFromPlan as generateOrderFromPlanRemote,
   listBuildOrders,
   markBuildOrderOrdered as markBuildOrderOrderedRemote,
@@ -121,6 +122,7 @@ import {
   type Material,
   type Assignment,
   type Employee,
+  confirmAction,
   notify,
 } from "@/components/report-ui";
 
@@ -756,6 +758,9 @@ function useAppDataState(
   const cancelBuildOrderMutation = useMutation({
     mutationFn: (vars: { orderId: number }) => cancelBuildOrderRemote(vars.orderId),
   });
+  const deleteBuildOrderMutation = useMutation({
+    mutationFn: (vars: { orderId: number }) => deleteBuildOrderRemote(vars.orderId),
+  });
   const receiveBuildOrderMutation = useMutation({
     mutationFn: (vars: {
       orderId: number;
@@ -976,7 +981,15 @@ function useAppDataState(
   // wpisywać ilość planowaną i zdawać się na automatyczny FIFO.
   const addToDraft = () => {
     const amount = Number(plannedAmount);
-    if (!selectedBuildId || !selectedBatchId || !amount || amount <= 0) return;
+    // activeBuild?.id, nie goły selectedBuildId — ten drugi startuje na
+    // ID z lokalnego seeda (initialBuilds[0].id, patrz useState wyżej) i
+    // zostaje nim, dopóki ktoś ręcznie nie dotknie przełącznika budowy w
+    // pickerze — u brygadzisty z jedną budową to się nigdy nie zdarza,
+    // więc "Zatwierdź" trafiał w budowę, która nie istnieje w bazie
+    // (stąd "budowa się nie zsynchronizowała"). saveDailyReportUnsafe
+    // niżej ma dokładnie to samo obejście.
+    const effectiveBuildId = activeBuild?.id || selectedBuildId;
+    if (!effectiveBuildId || !selectedBatchId || !amount || amount <= 0) return;
     const batch = warehouseBatches.find((b) => String(b.id) === selectedBatchId);
     if (!batch) return;
     const existing = draftAssignments.find((a) => a.batchId === selectedBatchId);
@@ -997,7 +1010,10 @@ function useAppDataState(
   };
   const commitAssignments = async () => {
     if (!draftAssignments.length) return;
-    const targetBuild = builds.find((b) => b.id === selectedBuildId);
+    // Patrz komentarz w addToDraft — activeBuild?.id jest tym, co
+    // faktycznie widać na ekranie, selectedBuildId bywa nieaktualne.
+    const effectiveBuildId = activeBuild?.id || selectedBuildId;
+    const targetBuild = builds.find((b) => b.id === effectiveBuildId);
     if (targetBuild?.status === "zamknięta") {
       notify(
         "Budowa zamknięta",
@@ -1005,7 +1021,7 @@ function useAppDataState(
       );
       return;
     }
-    const numericBuildId = Number(selectedBuildId);
+    const numericBuildId = Number(effectiveBuildId);
     const items = draftAssignments
       .map((d) => ({
         batchId: Number(d.batchId),
@@ -1085,21 +1101,45 @@ function useAppDataState(
     const stock = Number(newMaterial.stock);
     const min = Number(newMaterial.min) || 0;
     const unitPrice = Number(newMaterial.unitPrice) || 0;
-    try {
-      await createMaterialMutation.mutateAsync({
-        name: newMaterial.name,
-        index: newMaterial.index,
-        unit: newMaterial.unit || "szt.",
-        stock,
-        min,
-        unitPrice,
-      });
-      await invalidate("materials");
-      setNewMaterial({ name: "", index: "", unit: "szt.", stock: "0", min: "5", unitPrice: "0" });
-      setShowMaterial(false);
-    } catch (error) {
-      reportMutationError(error, "Nie udało się dodać materiału.");
+    const createIt = async () => {
+      try {
+        await createMaterialMutation.mutateAsync({
+          name: newMaterial.name,
+          index: newMaterial.index,
+          unit: newMaterial.unit || "szt.",
+          stock,
+          min,
+          unitPrice,
+        });
+        await invalidate("materials");
+        setNewMaterial({ name: "", index: "", unit: "szt.", stock: "0", min: "5", unitPrice: "0" });
+        setShowMaterial(false);
+      } catch (error) {
+        reportMutationError(error, "Nie udało się dodać materiału.");
+      }
+    };
+    // Ten sam materiał (nazwa + cena) dodany dwukrotnie jako osobne
+    // pozycje magazynowe rozjeżdża stan na dwa niezależne wiersze zamiast
+    // jednego — scalanie już istniejących pozycji jest zbyt ryzykowne
+    // (partie/przypisania do budów trzymają się materialId), więc tylko
+    // ostrzegamy PRZED utworzeniem kolejnej, zamiast robić to po cichu.
+    // Dopisanie stanu do istniejącej pozycji: wyszukiwarka + "+ partia"
+    // przy materiale w warehouse-screen.tsx.
+    const duplicate = materials.find(
+      (m) =>
+        m.name.trim().toLowerCase() === newMaterial.name.trim().toLowerCase() &&
+        Math.abs((m.unitPrice || 0) - unitPrice) < 0.01,
+    );
+    if (duplicate) {
+      confirmAction(
+        "Taki materiał już jest w magazynie",
+        `"${duplicate.name}" (${duplicate.index}) w tej samej cenie już istnieje — obecny stan: ${duplicate.stock} ${duplicate.unit}. Żeby dopisać ilość do istniejącej pozycji zamiast tworzyć duplikat, użyj wyszukiwarki i edycji stanu przy tym materiale. Dodać mimo to jako nową, osobną pozycję?`,
+        "Dodaj mimo to",
+        createIt,
+      );
+      return;
     }
+    await createIt();
   };
   const saveBuild = async () => {
     const duration = Number(newBuild.durationDays);
@@ -1212,6 +1252,14 @@ function useAppDataState(
       await invalidate("buildOrders");
     } catch (error) {
       reportMutationError(error, "Nie udało się anulować zamówienia.");
+    }
+  };
+  const deleteBuildOrder = async (orderId: number) => {
+    try {
+      await deleteBuildOrderMutation.mutateAsync({ orderId });
+      await invalidate("buildOrders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się skasować zamówienia.");
     }
   };
   // Przyjęcie dostawy: każda pozycja z osobną ilością/ceną dopisuje własną
@@ -1826,6 +1874,7 @@ function useAppDataState(
     updateOrderItemQuantity,
     markBuildOrderOrdered,
     cancelBuildOrder,
+    deleteBuildOrder,
     receiveBuildOrder,
     warehouseBatches,
     buildMaterialLots: (buildMaterialLotsQuery.data ?? []) as BuildMaterialLotRow[],

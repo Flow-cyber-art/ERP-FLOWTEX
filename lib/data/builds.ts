@@ -77,14 +77,33 @@ export async function createBuild(input: CreateBuildInput): Promise<BuildRow> {
   return data as BuildRow;
 }
 
+export type CloseBuildReturnItem = {
+  materialId: number;
+  batchId: number | null;
+  quantity: number;
+  decision: "zwrot" | "wyrzucenie";
+  reason?: string | null;
+};
+
 /**
  * Zamyka budowę i zapisuje snapshot rozliczenia (godziny, materiały,
  * koszty dodatkowe) — patrz `close_build` w `supabase/sql/`. Wymaga, żeby
  * wszystkie raporty tej budowy były już zatwierdzone; w innym wypadku
  * (albo gdy budowa nie istnieje) rzuca czytelny błąd z komunikatem funkcji.
+ *
+ * `returns` (Faza 9) — decyzja per pozostała partia przypisana do budowy
+ * (`build_material_lots`): zwrot na magazyn (ta sama partia, ta sama
+ * cena) albo do wyrzucenia (zostaje kosztem budowy). Puste = budowa bez
+ * pozostałości materiałowej.
  */
-export async function closeBuild(buildId: number): Promise<void> {
-  const { error } = await supabase.rpc("close_build", { p_build_id: buildId });
+export async function closeBuild(
+  buildId: number,
+  returns: CloseBuildReturnItem[] = [],
+): Promise<void> {
+  const { error } = await supabase.rpc("close_build", {
+    p_build_id: buildId,
+    p_returns: returns,
+  });
   if (error) throw new Error(error.message);
 }
 

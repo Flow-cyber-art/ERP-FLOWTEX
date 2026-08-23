@@ -23,6 +23,7 @@ export function BuildsScreen() {
     technologies,
     buildTechnologySnapshots,
     buildMaterialPlans,
+    buildMaterialLots,
     assignBuildTechnology,
     assignments,
     savedReports,
@@ -106,6 +107,16 @@ export function BuildsScreen() {
     Record<number, { qty: string; price: string }>
   >({});
   const [orderReceiveBusy, setOrderReceiveBusy] = useState(false);
+  // Zamknięcie budowy (Faza 9) — jeśli budowa ma pozostałość materiałową
+  // (build_material_lots, przypisane a niezużyte), przed samym
+  // zamknięciem Admin musi zdecydować per pozycja: zwrot na magazyn albo
+  // do wyrzucenia (+ opcjonalny powód). Panel otwarty na jedną budowę
+  // naraz, decyzje trzymane po kluczu wiersza `build_material_lots`.
+  const [closingBuildId, setClosingBuildId] = useState<string | null>(null);
+  const [returnDecisions, setReturnDecisions] = useState<
+    Record<number, { decision: "zwrot" | "wyrzucenie"; reason: string }>
+  >({});
+  const [closeBusy, setCloseBusy] = useState(false);
   // Dokument dostawy i dostawca (Faza 4) — jeden na całe przyjmowane
   // zamówienie (wiele pozycji, jedna dostawa).
   const [orderReceiveDocument, setOrderReceiveDocument] = useState("");
@@ -1558,35 +1569,241 @@ export function BuildsScreen() {
             </View>
           )}
 
-          {!isClosed && (
-            <View style={{ marginTop: 18 }}>
-              <Button
-                label="Zamknij i rozlicz budowę"
-                secondary
-                disabled={pendingCount > 0}
-                onPress={() =>
-                  confirmAction(
-                    "Zamknąć budowę?",
-                    `Budowa ${b.number} zostanie oznaczona jako zamknięta i policzone zostanie jej finalne rozliczenie. Tej operacji nie da się cofnąć w prosty sposób.`,
-                    "Zamknij budowę",
-                    () => closeBuild(b.id),
-                  )
+          {!isClosed &&
+            (() => {
+              // Pozostałość materiałowa (Faza 9): build_material_lots trzyma
+              // na żywo dostępną, jeszcze nie zużytą ilość per partia
+              // przypisana do tej budowy (patrz fn_consume_build_lot_fifo,
+              // 009_faza5_reczny_wybor_partii.sql) — dokładnie to, o czym
+              // Admin musi zdecydować przed zamknięciem.
+              const remainingLots = buildMaterialLots.filter(
+                (l) => l.buildId === Number(b.id) && Number(l.quantity) > 0.0001,
+              );
+              const isClosingThis = closingBuildId === b.id;
+              const allDecided = remainingLots.every((l) => {
+                const d = returnDecisions[l.id];
+                return (
+                  d &&
+                  (d.decision === "zwrot" ||
+                    (d.decision === "wyrzucenie" && d.reason.trim().length > 0))
+                );
+              });
+              const submitClose = async () => {
+                const items = remainingLots.map((l) => ({
+                  materialId: l.materialId,
+                  batchId: l.sourceBatchId,
+                  quantity: Number(l.quantity),
+                  decision: returnDecisions[l.id]?.decision ?? "zwrot",
+                  reason: returnDecisions[l.id]?.reason || undefined,
+                }));
+                setCloseBusy(true);
+                try {
+                  await closeBuild(b.id, items);
+                  setClosingBuildId(null);
+                  setReturnDecisions({});
+                } finally {
+                  setCloseBusy(false);
                 }
-              />
-              {pendingCount > 0 && (
-                <Text
-                  style={{
-                    color: COLORS.muted,
-                    fontSize: 11,
-                    marginTop: 6,
-                    textAlign: "center",
-                  }}
-                >
-                  Zatwierdź wszystkie raporty tej budowy, żeby móc ją zamknąć.
-                </Text>
-              )}
-            </View>
-          )}
+              };
+              return (
+                <View style={{ marginTop: 18 }}>
+                  {isClosingThis ? (
+                    <View
+                      style={{
+                        borderTopWidth: 1,
+                        borderTopColor: COLORS.border,
+                        paddingTop: 14,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: COLORS.foreground,
+                          fontWeight: "800",
+                          fontSize: 13,
+                          marginBottom: 4,
+                        }}
+                      >
+                        Pozostałość materiałowa
+                      </Text>
+                      <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>
+                        Dla każdej partii zdecyduj: zwrot na magazyn albo do wyrzucenia
+                        (zostaje kosztem budowy).
+                      </Text>
+                      {remainingLots.map((l) => {
+                        const material = materials.find(
+                          (m) => m.id === String(l.materialId),
+                        );
+                        const batch = warehouseBatches.find(
+                          (wb) => wb.id === l.sourceBatchId,
+                        );
+                        const d = returnDecisions[l.id] ?? {
+                          decision: "zwrot" as const,
+                          reason: "",
+                        };
+                        return (
+                          <View
+                            key={l.id}
+                            style={{
+                              marginBottom: 12,
+                              paddingBottom: 12,
+                              borderBottomWidth: 1,
+                              borderBottomColor: COLORS.border,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: COLORS.foreground,
+                                fontSize: 13,
+                                fontWeight: "700",
+                              }}
+                            >
+                              {material?.name ?? "Materiał usunięty"} · {l.quantity}{" "}
+                              {material?.unit ?? ""}
+                            </Text>
+                            {batch && (
+                              <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                                Partia z {batch.receivedAt.slice(0, 10)}
+                                {batch.supplier ? ` · ${batch.supplier}` : ""}
+                              </Text>
+                            )}
+                            <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                              <Pressable
+                                onPress={() =>
+                                  setReturnDecisions((prev) => ({
+                                    ...prev,
+                                    [l.id]: { decision: "zwrot", reason: prev[l.id]?.reason ?? "" },
+                                  }))
+                                }
+                                style={{
+                                  flex: 1,
+                                  paddingVertical: 8,
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor:
+                                    d.decision === "zwrot" ? COLORS.success : COLORS.border,
+                                  backgroundColor:
+                                    d.decision === "zwrot" ? COLORS.successBg : "transparent",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: d.decision === "zwrot" ? COLORS.success : COLORS.muted,
+                                    fontSize: 12,
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  Zwrot na magazyn
+                                </Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() =>
+                                  setReturnDecisions((prev) => ({
+                                    ...prev,
+                                    [l.id]: {
+                                      decision: "wyrzucenie",
+                                      reason: prev[l.id]?.reason ?? "",
+                                    },
+                                  }))
+                                }
+                                style={{
+                                  flex: 1,
+                                  paddingVertical: 8,
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor:
+                                    d.decision === "wyrzucenie" ? COLORS.danger : COLORS.border,
+                                  backgroundColor:
+                                    d.decision === "wyrzucenie" ? COLORS.dangerBg : "transparent",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color:
+                                      d.decision === "wyrzucenie" ? COLORS.danger : COLORS.muted,
+                                    fontSize: 12,
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  Do wyrzucenia
+                                </Text>
+                              </Pressable>
+                            </View>
+                            {d.decision === "wyrzucenie" && (
+                              <View style={{ marginTop: 8 }}>
+                                <Field
+                                  placeholder="Powód (wymagany)"
+                                  value={d.reason}
+                                  onChangeText={(v: string) =>
+                                    setReturnDecisions((prev) => ({
+                                      ...prev,
+                                      [l.id]: { decision: "wyrzucenie", reason: v },
+                                    }))
+                                  }
+                                />
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label="Anuluj"
+                            secondary
+                            onPress={() => {
+                              setClosingBuildId(null);
+                              setReturnDecisions({});
+                            }}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label={closeBusy ? "Zamykanie…" : "Zamknij budowę"}
+                            disabled={!allDecided || closeBusy}
+                            onPress={submitClose}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      <Button
+                        label="Zamknij i rozlicz budowę"
+                        secondary
+                        disabled={pendingCount > 0}
+                        onPress={() => {
+                          if (remainingLots.length === 0) {
+                            confirmAction(
+                              "Zamknąć budowę?",
+                              `Budowa ${b.number} zostanie oznaczona jako zamknięta i policzone zostanie jej finalne rozliczenie. Tej operacji nie da się cofnąć w prosty sposób.`,
+                              "Zamknij budowę",
+                              () => closeBuild(b.id, []),
+                            );
+                            return;
+                          }
+                          setReturnDecisions({});
+                          setClosingBuildId(b.id);
+                        }}
+                      />
+                      {pendingCount > 0 && (
+                        <Text
+                          style={{
+                            color: COLORS.muted,
+                            fontSize: 11,
+                            marginTop: 6,
+                            textAlign: "center",
+                          }}
+                        >
+                          Zatwierdź wszystkie raporty tej budowy, żeby móc ją zamknąć.
+                        </Text>
+                      )}
+                    </>
+                  )}
+                </View>
+              );
+            })()}
           {isClosed && (
             <View style={{ marginTop: 18 }}>
               <Button

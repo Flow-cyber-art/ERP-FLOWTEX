@@ -7,11 +7,4 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
-  // Konto serwisowe Google (Drive API) — automatyczny podfolder ze
-  // zdjęciami dla każdej nowej budowy. Patrz server/_core/googleDrive.ts.
-  googleDriveServiceAccountEmail:
-    process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_EMAIL ?? "",
-  googleDriveServiceAccountPrivateKey:
-    process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PRIVATE_KEY ?? "",
-  googleDriveParentFolderId: process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID ?? "",
 };

@@ -225,8 +225,10 @@ Brygadziście, tak jak `submit_daily_report`.
 `lib/data/*.ts` — warstwa danych (cały serwer Express/tRPC —
 `server/routers.ts`, `server/data-routers.ts` — został usunięty; nic go
 już nie wołało. Prawdziwy Express w `server/_core/` zostaje — obsługuje
-logowanie/OAuth **tego starego, osobnego systemu** (nie Supabase Auth —
-patrz uwaga w punkcie 7) i endpoint do Google Drive):
+wyłącznie logowanie/OAuth **tego starego, osobnego systemu** (nie
+Supabase Auth — patrz uwaga w punkcie 7). Endpoint tworzenia folderu w
+Google Drive, który tu wcześniej też żył, został usunięty — przeniesiony
+w całości na Supabase Edge Function, patrz niżej):
 
 - `lib/data/auth.ts` — logowanie/wylogowanie/sesja/rola (punkt 5).
 - `lib/data/builds.ts` — lista, tworzenie, zamykanie/wznawianie budowy,
@@ -260,16 +262,24 @@ patrz uwaga w punkcie 7) i endpoint do Google Drive):
 - `lib/data/admin-users.ts` + `supabase/functions/admin-users/` —
   zarządzanie kontami logowania (tworzenie, reset hasła, usuwanie) z
   panelu **Zespół → Konta logowania**, patrz punkt 5.
+- `lib/data/drive-photos.ts` + `supabase/functions/drive-photos/` —
+  katalog na zdjęcia budowy (Google Drive, Shared Drive + konto
+  serwisowe) i upload zdjęć z raportu dziennego brygadzisty. Ten sam
+  wzorzec autoryzacji co `admin-users` (weryfikacja Supabase Auth JWT +
+  rola z `profiles` wewnątrz Edge Function), w odróżnieniu od
+  POPRZEDNIEJ wersji tej integracji, która żyła w starym Expressie i
+  sprawdzała sesję niewłaściwego, nieużywanego systemu logowania —
+  dlatego zawsze cicho zwracała 401 i link do zdjęć nigdy się nie
+  zapisywał. Pełna konfiguracja (Google Cloud, Shared Drive, sekrety):
+  `GOOGLE_DRIVE_SETUP.md`.
 
 ## 7. Czego świadomie brakuje (kolejne kroki)
 
 - **Stary Express OAuth (`server/_core/oauth.ts`, tabela `users`) nie
   został usunięty**, mimo że logowanie do apki idzie teraz przez
-  Supabase Auth — to dwa NIEZALEŻNE systemy. Endpoint tworzenia folderu
-  w Google Drive (`server/_core/googleDrive.ts`) nadal sprawdza sesję
-  starego systemu, więc **dopóki go nie przepniesz na Supabase Auth,
-  zawsze zwróci 401** — nieszkodliwe (budowa i tak się zapisuje, tylko
-  bez linku), ale wymaga osobnej poprawki, jeśli/gdy odpalisz tę funkcję.
+  Supabase Auth — to dwa NIEZALEŻNE systemy. Obsługuje już tylko relikt
+  tego starego systemu logowania, nic w bieżącym flow apki z niego nie
+  korzysta.
 - **Kolejka offline działa tylko dla raportu dziennego.** Korekta stanu
   magazynu, zamówienia — wymagają sieci. Świadomie odłożone: to
   operacje Admina (biuro, lepszy zasięg niż plac budowy), więc ryzyko

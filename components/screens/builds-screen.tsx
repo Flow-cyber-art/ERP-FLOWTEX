@@ -15,6 +15,7 @@ import {
   StatusBadge,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 
 export function BuildsScreen() {
   const {
@@ -93,6 +94,11 @@ export function BuildsScreen() {
     string | null
   >(null);
   const [photosUrlInput, setPhotosUrlInput] = useState("");
+  // Tworzenie katalogu na zdjęcia (Google Drive) — jeden na raz w trakcie
+  // tworzenia, żeby zablokować podwójne kliknięcie (i przez to podwójny
+  // folder) na czas wywołania edge function drive-photos.
+  const [creatingDriveFolderId, setCreatingDriveFolderId] = useState<string | null>(null);
+  const [driveFolderError, setDriveFolderError] = useState<string | null>(null);
   // Przypisanie/zmiana technologii (Faza 2) — jeden picker na raz, ten
   // sam wzorzec co edycja linku do zdjęć powyżej.
   const [techEditBuildId, setTechEditBuildId] = useState<string | null>(null);
@@ -1230,8 +1236,38 @@ export function BuildsScreen() {
                 </Pressable>
               ) : (
                 <Text style={{ color: COLORS.muted, fontSize: 12, flex: 1 }}>
-                  Brak linku do zdjęć.
+                  {creatingDriveFolderId === b.id
+                    ? "Tworzenie katalogu…"
+                    : "Brak katalogu na zdjęcia."}
                 </Text>
+              )}
+              {!b.photosUrl && (
+                <Pressable
+                  disabled={creatingDriveFolderId === b.id}
+                  onPress={async () => {
+                    setDriveFolderError(null);
+                    setCreatingDriveFolderId(b.id);
+                    try {
+                      await createBuildDriveFolder(Number(b.id));
+                      // Realtime na "builds" (use-realtime-sync.ts)
+                      // odświeży photosUrl/driveFolderId za chwilę same —
+                      // nie trzeba tu ręcznie invalidować.
+                    } catch (err) {
+                      setDriveFolderError(
+                        err instanceof Error ? err.message : "Nie udało się stworzyć katalogu.",
+                      );
+                    } finally {
+                      setCreatingDriveFolderId(null);
+                    }
+                  }}
+                  style={{ marginRight: 12 }}
+                >
+                  <Text
+                    style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}
+                  >
+                    Stwórz katalog na zdjęcia
+                  </Text>
+                </Pressable>
               )}
               <Pressable
                 onPress={() => {
@@ -1247,10 +1283,15 @@ export function BuildsScreen() {
                     ? "Zwiń"
                     : b.photosUrl
                       ? "Zmień"
-                      : "+ Dodaj link"}
+                      : "…lub wklej link ręcznie"}
                 </Text>
               </Pressable>
             </View>
+            {driveFolderError && (
+              <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
+                {driveFolderError}
+              </Text>
+            )}
             {editingPhotosBuildId === b.id && (
               <View style={{ marginTop: 10 }}>
                 <Field

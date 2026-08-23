@@ -121,6 +121,15 @@ const config: ExpoConfig = {
         },
       },
     ],
+    [
+      "expo-image-picker",
+      {
+        photosPermission:
+          "Aplikacja potrzebuje dostępu do galerii, żeby dołączyć zdjęcia budowy.",
+        cameraPermission:
+          "Aplikacja potrzebuje dostępu do aparatu, żeby zrobić zdjęcia budowy.",
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

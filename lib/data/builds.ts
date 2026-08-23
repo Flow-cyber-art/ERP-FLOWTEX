@@ -22,12 +22,13 @@ export type BuildRow = {
   durationDays: number;
   status: BuildStatus;
   photosUrl: string | null;
+  driveFolderId: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 const BUILD_COLUMNS =
-  "id, number, name, manager, teamId, startDate, durationDays, status, photosUrl, createdAt, updatedAt";
+  "id, number, name, manager, teamId, startDate, durationDays, status, photosUrl, driveFolderId:drive_folder_id, createdAt, updatedAt";
 
 export async function listBuilds(): Promise<BuildRow[]> {
   const { data, error } = await supabase

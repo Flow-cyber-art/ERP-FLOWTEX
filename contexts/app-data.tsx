@@ -53,7 +53,6 @@ import {
   updateCloseBuildPin as updateCloseBuildPinRemote,
 } from "@/lib/data/settings";
 import { useRealtimeSync } from "@/lib/data/use-realtime-sync";
-import { createBuildDriveFolder } from "@/lib/data/drive";
 import { listActiveTechnologies, type TechnologyRow } from "@/lib/data/technologies";
 import {
   assignTechnologyToBuild,
@@ -1255,22 +1254,11 @@ function useAppDataState(
         contractValue: "",
       });
       setShowBuild(false);
-
-      // Automatyczny podfolder ze zdjęciami w Google Drive, nazwany jak
-      // budowa. Best-effort: budowa jest już zapisana, więc błąd tutaj
-      // (np. serwer niedostępny, zła konfiguracja Drive) nie cofa
-      // zapisu — po prostu link do zdjęć zostaje pusty i można go
-      // dodać ręcznie później.
-      try {
-        const folder = await createBuildDriveFolder(newBuild.name);
-        await updateBuildPhotosUrlMutation.mutateAsync({
-          buildId: build.id,
-          photosUrl: folder.webViewLink,
-        });
-        await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
-      } catch (driveError) {
-        console.error("[Drive] Nie udało się utworzyć folderu:", driveError);
-      }
+      // Katalog na zdjęcia (Google Drive) NIE jest tworzony tu automatycznie
+      // — Admin robi to świadomie przyciskiem "Stwórz katalog na zdjęcia"
+      // na karcie budowy (builds-screen.tsx), przez Supabase Edge Function
+      // drive-photos (patrz lib/data/drive-photos.ts). Budowa jako taka
+      // nie zależy w żaden sposób od tego, czy katalog już istnieje.
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać budowy.");
     }

@@ -13,7 +13,6 @@ import { COLORS } from "@/components/report-ui";
 import { LogoMark } from "@/components/logo-mark";
 import { AppDataProvider, useAppData } from "@/contexts/app-data";
 import { AuthGate } from "@/components/auth-gate";
-import { signOut } from "@/lib/data/auth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const StartScreen = lazy(() =>
@@ -69,6 +68,11 @@ const WorkerScreen = lazy(() =>
 const TechnologiesScreen = lazy(() =>
   import("@/components/screens/technologies-screen").then((m) => ({
     default: m.TechnologiesScreen,
+  })),
+);
+const SettingsScreen = lazy(() =>
+  import("@/components/screens/settings-screen").then((m) => ({
+    default: m.SettingsScreen,
   })),
 );
 
@@ -339,8 +343,12 @@ function HomeScreenInner() {
               badgeCount: reportsNeedingFixCount,
             }),
             routeButton("teamTime", "◷", "Czas zespołu"),
+            routeButton("admin", "⚙", "Admin"),
           ]
-        : [routeButton("worker", "◷", "Mój czas")];
+        : [
+            routeButton("worker", "◷", "Mój czas"),
+            routeButton("admin", "⚙", "Admin"),
+          ];
   const nav = isDesktop ? (
     <View
       style={{
@@ -383,7 +391,7 @@ function HomeScreenInner() {
           </Text>
         </View>
       </View>
-      {[...visibleRoutes, routeButton("logout", "⎋", "Wyloguj", { onPress: () => { signOut(); } })]}
+      {visibleRoutes}
     </View>
   ) : (
     <View
@@ -421,7 +429,7 @@ function HomeScreenInner() {
         borderTopColor: COLORS.border,
       }}
     >
-      {[...visibleRoutes, routeButton("logout", "⎋", "Wyloguj", { onPress: () => { signOut(); } })]}
+      {visibleRoutes}
     </View>
   );
   return (
@@ -522,6 +530,10 @@ function HomeScreenInner() {
                 <TeamTimeScreen />
               )}
               {tab === "worker" && devRole === "Pracownik" && <WorkerScreen />}
+              {tab === "admin" &&
+                (devRole === "Brygadzista" || devRole === "Pracownik") && (
+                  <SettingsScreen />
+                )}
             </Suspense>
           ) : (
             <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />

@@ -9,7 +9,7 @@ import {
 import { useAppData } from "@/contexts/app-data";
 
 export function SavedReportsScreen() {
-  const { savedReports, openSavedReport } = useAppData();
+  const { savedReports, openSavedReport, setTab } = useAppData();
 
   const sorted = [...savedReports].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
@@ -22,9 +22,27 @@ export function SavedReportsScreen() {
   return (
     <>
       <ScreenHeader
-        eyebrow="BRYGADZISTA / MOJE RAPORTY"
-        title="Moje raporty"
+        eyebrow="BRYGADZISTA / RAPORTY"
+        title="Raporty"
         description="Zapisane raporty dzienne i ich aktualny stan."
+        action={
+          <Pressable
+            onPress={() => setTab("report")}
+            style={({ pressed }) => ({
+              backgroundColor: COLORS.primary,
+              borderRadius: 10,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <Text
+              style={{ color: COLORS.background, fontWeight: "800", fontSize: 13 }}
+            >
+              + Nowy raport
+            </Text>
+          </Pressable>
+        }
       />
 
       {savedReports.length > 0 && (

@@ -338,8 +338,15 @@ function HomeScreenInner() {
         ]
       : devRole === "Brygadzista"
         ? [
-            routeButton("report", "▤", "Raport"),
-            routeButton("savedReports", "▤", "Moje raporty", {
+            // Połączone "Raport" + "Moje raporty" w jedną zakładkę: lista
+            // raportów (dawne "Moje raporty") jest teraz jedynym wejściem do
+            // raportów, a nowy raport zaczyna się przyciskiem "+ Nowy
+            // raport" w jej nagłówku (patrz saved-reports-screen.tsx). Tab
+            // pozostaje podświetlony też na ekranie "report" (formularz
+            // nowego/edytowanego raportu), bo z punktu widzenia nawigacji
+            // to wciąż ta sama sekcja.
+            routeButton("savedReports", "▤", "Raporty", {
+              isActive: tab === "savedReports" || tab === "report",
               badgeCount: reportsNeedingFixCount,
             }),
             routeButton("teamTime", "◷", "Czas zespołu"),

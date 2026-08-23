@@ -186,6 +186,22 @@ function useAppDataState(
         ? "warehouse"
         : "report",
   );
+  // Które zakładki zostały już choć raz odwiedzone w tej sesji — steruje
+  // `enabled` zapytań, które nie są potrzebne od razu na starcie (patrz
+  // "leniwe" useQuery niżej: technologie, plan materiałowy, zamówienia z
+  // planu, partie magazynowe, loty partii na budowach, statusy etapów,
+  // ustawienia). Rośnie tylko w jedną stronę — raz odblokowana zakładka
+  // zostaje odblokowana, żeby powrót do niej czytał z cache'u zamiast
+  // odpytywać serwer od nowa. `builds/materials/orders/reports/employees/
+  // buildMaterials` NIE są tak bramkowane — są potrzebne od razu (liczniki
+  // w pasku nawigacji, ekran startowy, `assignments` używane wszędzie).
+  const [unlockedTabs, setUnlockedTabs] = useState<Set<string>>(
+    () => new Set([tab]),
+  );
+  useEffect(() => {
+    setUnlockedTabs((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
+  }, [tab]);
+  const tabDataEnabled = (tabs: string[]) => tabs.some((t) => unlockedTabs.has(t));
   const [devRole, setDevRole] = useState<"Admin" | "Brygadzista" | "Pracownik">(
     initialRole,
   );
@@ -406,90 +422,142 @@ function useAppDataState(
   // wypełnić raport). Gdy jest sieć, świeże dane z bazy nadpisują ten cache.
   const queryClient = useQueryClient();
   useRealtimeSync(queryClient);
+  // Eager — potrzebne od razu niezależnie od zakładki: liczniki w pasku
+  // nawigacji (belowMinimumMaterials, pendingOrdersCount,
+  // reportsPendingApprovalCount/reportsNeedingFixCount), ekran startowy,
+  // i `assignments` (buildMaterials → useEffect niżej) używane wszędzie.
+  // `staleTime: Infinity` na WSZYSTKICH zapytaniach w tym pliku — realtime
+  // (useRealtimeSync wyżej) i tak unieważnia cache dokładnie wtedy, gdy
+  // dane się realnie zmienią, więc czasowe wygaszanie tylko dokładałoby
+  // zbędne odpytywanie serwera przy każdym powrocie na zakładkę.
   const buildsQuery = useQuery({
     queryKey: ["builds", "list"],
     queryFn: listBuilds,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
   const materialsQuery = useQuery({
     queryKey: ["materials", "list"],
     queryFn: listMaterials,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
   const employeesQuery = useQuery({
     queryKey: ["employees", "list"],
     queryFn: listEmployees,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
+  // Leniwe — reszta poniżej odpala się dopiero przy pierwszym wejściu na
+  // zakładkę, która ich faktycznie potrzebuje (tabDataEnabled wyżej),
+  // zamiast wszystkie naraz na starcie aplikacji. Każde `enabled` wymienia
+  // WSZYSTKIE zakładki faktycznie czytające dany zasób (sprawdzone przez
+  // grep w komponentach, nie zgadywane) — pomyłka w drugą stronę
+  // (zbędna zakładka na liście) kosztuje tylko jedno zbędne zapytanie,
+  // ale brakująca zakładka to realny bug (pusty ekran).
+  //
   // Technologie (Faza 1/2) — tylko aktywne (najnowsza wersja każdej
-  // rodziny), to jest to, co widać przy przypisywaniu do budowy.
+  // rodziny); potrzebne w Technologiach i przy przypisywaniu technologii
+  // do budowy w Budowach.
   const technologiesQuery = useQuery({
     queryKey: ["technologies", "active"],
     queryFn: listActiveTechnologies,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    // "warehouse" dopisane celowo: na mobile Technologie renderują się
+    // WEWNĄTRZ zakładki "warehouse" (przełącznik warehouseView, patrz
+    // index.tsx) — `tab` sam w sobie nigdy nie zmienia się na
+    // "technologies" na tym layoucie, więc bez tego to zapytanie nigdy
+    // by się nie odblokowało na mobile.
+    enabled: tabDataEnabled(["technologies", "builds", "warehouse"]),
   });
   // Snapshot+plan dla WSZYSTKICH budów naraz, filtrowane po buildId w UI —
-  // ten sam wzorzec co assignments/savedReports poniżej.
+  // ten sam wzorzec co assignments/savedReports poniżej. Tylko Budowy.
   const buildTechnologySnapshotsQuery = useQuery({
     queryKey: ["buildTechnologySnapshots", "list"],
     queryFn: listBuildTechnologySnapshots,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["builds"]),
   });
+  // Plan materiałowy per etap — Budowy (karta budowy), Raport (grupowanie
+  // materiałów po etapie) i Rozliczenie (tabela plan/przypisano/zużyto).
   const buildMaterialPlansQuery = useQuery({
     queryKey: ["buildMaterialPlans", "list"],
     queryFn: listBuildMaterialPlans,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["builds", "report", "settlement"]),
   });
   const buildMaterialPlans = (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[];
   // Zamówienia jako nagłówek+pozycje (Faza 3) — dla WSZYSTKICH budów naraz,
   // filtrowane po buildId w UI, ten sam wzorzec co plan materiałowy wyżej.
+  // Budowy (generowanie/przyjęcie z planu) i Zamówienia (lista/przyjęcie).
   const buildOrdersQuery = useQuery({
     queryKey: ["buildOrders", "list"],
     queryFn: listBuildOrders,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["builds", "orders"]),
   });
   // Realne partie magazynowe (Faza 4) — czysty odczyt dla ekranu magazynu
   // (data, ilość dostępna, cena, dokument, dostawca); NIE zastępuje
   // `materialBatches` (lokalna symulacja FIFO pod raport dzienny/offline).
+  // Magazyn (lista partii), Budowy (ręczny wybór partii do przypisania) i
+  // Raport (brygadzista dodający materiał pomocniczy z magazynu).
   const warehouseBatchesQuery = useQuery({
     queryKey: ["warehouseBatches", "list"],
     queryFn: listWarehouseBatchesRemote,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["warehouse", "builds", "report"]),
   });
   const warehouseBatches = (warehouseBatchesQuery.data ?? []) as WarehouseBatchRow[];
   // Partie faktycznie przypisane do budów (Faza 5) — czysty odczyt,
   // przydatny do pokazania "z jakiej partii" w raporcie/rozliczeniu.
+  // Budowy (panel zamknięcia — decyzja o pozostałości) i Rozliczenie.
   const buildMaterialLotsQuery = useQuery({
     queryKey: ["buildMaterialLots", "list"],
     queryFn: listBuildMaterialLotsRemote,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["builds", "settlement"]),
   });
   // Statusy etapów technologii (Faza 6) — wszystkie budowy naraz, ten sam
-  // wzorzec co plan materiałowy/zamówienia wyżej.
+  // wzorzec co plan materiałowy/zamówienia wyżej. Obecnie nieużywane przez
+  // żaden ekran (przygotowane pod przyszłą funkcję) — bramkowane tak samo
+  // jak Budowy/Raport, których dotyczyłoby najbardziej, gdyby zaczęło być
+  // czytane.
   const buildStageStatusesQuery = useQuery({
     queryKey: ["buildStageStatuses", "list"],
     queryFn: listBuildStageStatuses,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["builds", "report"]),
   });
   // Ustawienia aplikacji (Faza 7) — na razie tylko stawka za km,
   // singleton (patrz lib/data/settings.ts). kmRate używane do podglądu
   // kosztu w formularzu raportu, PRZED wysyłką — autorytatywna wartość
-  // i tak jest zamrażana przez bazę w submit_daily_report.
+  // i tak jest zamrażana przez bazę w submit_daily_report. Tab "admin"
+  // (panel Admina — sekcja "Zespół i dniówka" — oraz "Ustawienia" u
+  // pozostałych ról, ta sama zakładka) i Raport (kmRate w formularzu).
   const settingsQuery = useQuery({
     queryKey: ["settings", "get"],
     queryFn: getSettings,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["admin", "report"]),
   });
   const kmRate = Number(settingsQuery.data?.kmRate ?? 0);
 
@@ -569,6 +637,7 @@ function useAppDataState(
     queryFn: listOrders,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
   useEffect(() => {
     if (!ordersQuery.data) return;
@@ -599,6 +668,7 @@ function useAppDataState(
     queryFn: listBuildMaterials,
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
   useEffect(() => {
     if (!buildMaterialsQuery.data) return;

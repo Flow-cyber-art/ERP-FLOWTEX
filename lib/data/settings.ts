@@ -10,10 +10,11 @@ import { supabase } from "@/lib/supabase";
 export type SettingsRow = {
   id: true;
   kmRate: string;
+  closeBuildPin: string | null;
   updatedAt: string;
 };
 
-const SETTINGS_SELECT = "id, kmRate:km_rate, updatedAt";
+const SETTINGS_SELECT = "id, kmRate:km_rate, closeBuildPin:close_build_pin, updatedAt";
 
 export async function getSettings(): Promise<SettingsRow> {
   const { data, error } = await supabase
@@ -29,6 +30,16 @@ export async function updateKmRate(kmRate: number): Promise<void> {
   const { error } = await supabase
     .from("settings")
     .update({ km_rate: kmRate, updatedAt: new Date().toISOString() })
+    .eq("id", true);
+  if (error) throw new Error(error.message);
+}
+
+// Pusty string = wyłączenie zabezpieczenia (zapisywane jako null, patrz
+// close_build_pin w 019_pin_zamkniecia_budowy.sql).
+export async function updateCloseBuildPin(pin: string): Promise<void> {
+  const { error } = await supabase
+    .from("settings")
+    .update({ close_build_pin: pin.trim() || null, updatedAt: new Date().toISOString() })
     .eq("id", true);
   if (error) throw new Error(error.message);
 }

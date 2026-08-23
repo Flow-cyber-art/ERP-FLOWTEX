@@ -65,6 +65,7 @@ export function BuildsScreen() {
     reopenBuild,
     updateBuildPhotosUrl,
     buildsView,
+    closeBuildPin,
   } = useAppData();
 
   const isArchiveView = buildsView === "archive";
@@ -120,6 +121,16 @@ export function BuildsScreen() {
   // do wyrzucenia (+ opcjonalny powód). Panel otwarty na jedną budowę
   // naraz, decyzje trzymane po kluczu wiersza `build_material_lots`.
   const [closingBuildId, setClosingBuildId] = useState<string | null>(null);
+  // PIN zabezpieczający zamknięcie budowy (ustawiany w Admin → Ustawienia,
+  // patrz closeBuildPin/updateCloseBuildPin) — gdy ustawiony, blokuje
+  // "Zamknij i rozlicz budowę" dopóki nie zostanie wpisany poprawnie.
+  // Pusty closeBuildPin (null) = zabezpieczenie wyłączone, przycisk działa
+  // od razu jak wcześniej.
+  const [pinGate, setPinGate] = useState<{ buildId: string; run: () => void } | null>(
+    null,
+  );
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
   const [returnDecisions, setReturnDecisions] = useState<
     Record<number, { decision: "zwrot" | "wyrzucenie"; reason: string }>
   >({});
@@ -209,11 +220,13 @@ export function BuildsScreen() {
         <Text className="text-xs text-muted uppercase mt-4 mb-2">
           Wartość kontraktu (PLN, opcjonalnie)
         </Text>
-        <QuantityStepper
+        <Field
+          placeholder="np. 250000"
           value={newBuild.contractValue}
           onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, contractValue: v })
+            setNewBuild({ ...newBuild, contractValue: v.replace(",", ".") })
           }
+          keyboardType="decimal-pad"
         />
         <Text className="text-xs text-muted uppercase mt-4">
           Data rozpoczęcia
@@ -1816,6 +1829,53 @@ export function BuildsScreen() {
                         </View>
                       </View>
                     </View>
+                  ) : pinGate?.buildId === b.id ? (
+                    <View className="bg-surface border border-border rounded-2xl p-4">
+                      <Text style={{ color: COLORS.foreground, fontWeight: "700", marginBottom: 8 }}>
+                        Podaj PIN, żeby zamknąć budowę
+                      </Text>
+                      <Field
+                        placeholder="PIN"
+                        value={pinInput}
+                        onChangeText={setPinInput}
+                        keyboardType="number-pad"
+                        secureTextEntry
+                      />
+                      {pinError && (
+                        <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
+                          {pinError}
+                        </Text>
+                      )}
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label="Anuluj"
+                            secondary
+                            onPress={() => {
+                              setPinGate(null);
+                              setPinInput("");
+                              setPinError(null);
+                            }}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label="Zatwierdź"
+                            onPress={() => {
+                              if (pinInput !== closeBuildPin) {
+                                setPinError("Nieprawidłowy PIN.");
+                                return;
+                              }
+                              const run = pinGate.run;
+                              setPinGate(null);
+                              setPinInput("");
+                              setPinError(null);
+                              run();
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </View>
                   ) : (
                     <>
                       <Button
@@ -1823,17 +1883,26 @@ export function BuildsScreen() {
                         secondary
                         disabled={pendingCount > 0}
                         onPress={() => {
-                          if (remainingLots.length === 0) {
-                            confirmAction(
-                              "Zamknąć budowę?",
-                              `Budowa ${b.number} zostanie oznaczona jako zamknięta i policzone zostanie jej finalne rozliczenie. Tej operacji nie da się cofnąć w prosty sposób.`,
-                              "Zamknij budowę",
-                              () => closeBuild(b.id, []),
-                            );
-                            return;
+                          const proceed = () => {
+                            if (remainingLots.length === 0) {
+                              confirmAction(
+                                "Zamknąć budowę?",
+                                `Budowa ${b.number} zostanie oznaczona jako zamknięta i policzone zostanie jej finalne rozliczenie. Tej operacji nie da się cofnąć w prosty sposób.`,
+                                "Zamknij budowę",
+                                () => closeBuild(b.id, []),
+                              );
+                              return;
+                            }
+                            setReturnDecisions({});
+                            setClosingBuildId(b.id);
+                          };
+                          if (closeBuildPin) {
+                            setPinInput("");
+                            setPinError(null);
+                            setPinGate({ buildId: b.id, run: proceed });
+                          } else {
+                            proceed();
                           }
-                          setReturnDecisions({});
-                          setClosingBuildId(b.id);
                         }}
                       />
                       {pendingCount > 0 && (

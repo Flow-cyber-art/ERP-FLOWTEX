@@ -138,12 +138,14 @@ function AdminTeamSection() {
     workdayHours,
     workdayHoursInput,
     kmRate,
+    closeBuildPin,
     employees,
     newEmployee,
     setWorkdayHoursInput,
     setNewEmployee,
     saveWorkdayHours,
     updateKmRate,
+    updateCloseBuildPin,
     saveEmployee,
     updateEmployeeRate,
   } = useAppData();
@@ -151,6 +153,8 @@ function AdminTeamSection() {
   const [workdayOpen, setWorkdayOpen] = useState(false);
   const [kmRateOpen, setKmRateOpen] = useState(false);
   const [kmRateInput, setKmRateInput] = useState(kmRate ? String(kmRate) : "");
+  const [closeBuildPinOpen, setCloseBuildPinOpen] = useState(false);
+  const [closeBuildPinInput, setCloseBuildPinInput] = useState(closeBuildPin ?? "");
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [editingRateId, setEditingRateId] = useState<string | null>(null);
   const [rateInput, setRateInput] = useState("");
@@ -158,6 +162,10 @@ function AdminTeamSection() {
   useEffect(() => {
     setKmRateInput(kmRate ? String(kmRate) : "");
   }, [kmRate]);
+
+  useEffect(() => {
+    setCloseBuildPinInput(closeBuildPin ?? "");
+  }, [closeBuildPin]);
 
   return (
     <>
@@ -200,14 +208,26 @@ function AdminTeamSection() {
               />
               <Text style={{ color: COLORS.muted }}>h / dzień</Text>
             </View>
-            <View style={{ marginTop: 10 }}>
-              <Button
-                label="Zapisz"
-                onPress={() => {
-                  saveWorkdayHours();
-                  setWorkdayOpen(false);
-                }}
-              />
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Anuluj"
+                  secondary
+                  onPress={() => {
+                    setWorkdayHoursInput(String(workdayHours));
+                    setWorkdayOpen(false);
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Zapisz"
+                  onPress={() => {
+                    saveWorkdayHours();
+                    setWorkdayOpen(false);
+                  }}
+                />
+              </View>
             </View>
           </View>
         )}
@@ -256,16 +276,100 @@ function AdminTeamSection() {
               />
               <Text style={{ color: COLORS.muted }}>zł / km</Text>
             </View>
-            <View style={{ marginTop: 10 }}>
-              <Button
-                label="Zapisz"
-                onPress={async () => {
-                  const value = Number(kmRateInput.replace(",", "."));
-                  if (Number.isNaN(value) || value < 0) return;
-                  await updateKmRate(value);
-                  setKmRateOpen(false);
-                }}
-              />
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Anuluj"
+                  secondary
+                  onPress={() => {
+                    setKmRateInput(kmRate ? String(kmRate) : "");
+                    setKmRateOpen(false);
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Zapisz"
+                  onPress={async () => {
+                    const value = Number(kmRateInput.replace(",", "."));
+                    if (Number.isNaN(value) || value < 0) return;
+                    await updateKmRate(value);
+                    setKmRateOpen(false);
+                  }}
+                />
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* PIN zabezpieczający "Zamknij (i rozlicz) budowę" (patrz
+          builds-screen.tsx) — ten sam wzorzec co Stawka za km wyżej. Puste
+          pole = zabezpieczenie wyłączone (updateCloseBuildPin zapisuje
+          wtedy null, patrz lib/data/settings.ts). */}
+      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-3">
+        <Pressable
+          onPress={() => setCloseBuildPinOpen(!closeBuildPinOpen)}
+          style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
+        >
+          <IconBadge name="lock" size={18} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+              PIN ZAMKNIĘCIA BUDOWY
+            </Text>
+            <Text
+              style={{
+                color: COLORS.foreground,
+                fontWeight: "700",
+                fontSize: 15,
+                marginTop: 2,
+              }}
+            >
+              {closeBuildPin ? "Włączony" : "Wyłączony"}
+            </Text>
+          </View>
+          <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+            {closeBuildPinOpen ? "Zwiń" : "Zmień"}
+          </Text>
+        </Pressable>
+        {closeBuildPinOpen && (
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: COLORS.border,
+              padding: 14,
+            }}
+          >
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 8 }}>
+              Wpisany tu PIN będzie wymagany przy zamykaniu i rozliczaniu
+              budowy. Zostaw puste, żeby wyłączyć zabezpieczenie.
+            </Text>
+            <Field
+              placeholder="np. 1234 (puste = wyłączony)"
+              value={closeBuildPinInput}
+              onChangeText={setCloseBuildPinInput}
+              keyboardType="number-pad"
+            />
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Anuluj"
+                  secondary
+                  onPress={() => {
+                    setCloseBuildPinInput(closeBuildPin ?? "");
+                    setCloseBuildPinOpen(false);
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Zapisz"
+                  onPress={async () => {
+                    await updateCloseBuildPin(closeBuildPinInput);
+                    setCloseBuildPinOpen(false);
+                  }}
+                />
+              </View>
             </View>
           </View>
         )}
@@ -420,6 +524,20 @@ function AdminTeamSection() {
                       onChangeText={setRateInput}
                     />
                   </View>
+                  <Pressable
+                    onPress={() => setEditingRateId(null)}
+                    style={{
+                      borderRadius: 10,
+                      paddingHorizontal: 16,
+                      justifyContent: "center",
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                    }}
+                  >
+                    <Text style={{ color: COLORS.muted, fontWeight: "700" }}>
+                      Anuluj
+                    </Text>
+                  </Pressable>
                   <Pressable
                     onPress={() => {
                       updateEmployeeRate(employee.id, Number(rateInput) || 0);

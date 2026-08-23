@@ -47,7 +47,11 @@ import {
   updateReportStatus,
   type ReportRow,
 } from "@/lib/data/reports";
-import { getSettings, updateKmRate as updateKmRateRemote } from "@/lib/data/settings";
+import {
+  getSettings,
+  updateKmRate as updateKmRateRemote,
+  updateCloseBuildPin as updateCloseBuildPinRemote,
+} from "@/lib/data/settings";
 import { useRealtimeSync } from "@/lib/data/use-realtime-sync";
 import { createBuildDriveFolder } from "@/lib/data/drive";
 import { listActiveTechnologies, type TechnologyRow } from "@/lib/data/technologies";
@@ -545,21 +549,24 @@ function useAppDataState(
     staleTime: Infinity,
     enabled: tabDataEnabled(["builds", "report"]),
   });
-  // Ustawienia aplikacji (Faza 7) — na razie tylko stawka za km,
-  // singleton (patrz lib/data/settings.ts). kmRate używane do podglądu
-  // kosztu w formularzu raportu, PRZED wysyłką — autorytatywna wartość
-  // i tak jest zamrażana przez bazę w submit_daily_report. Tab "admin"
-  // (panel Admina — sekcja "Zespół i dniówka" — oraz "Ustawienia" u
-  // pozostałych ról, ta sama zakładka) i Raport (kmRate w formularzu).
+  // Ustawienia aplikacji (Faza 7 + PIN zamknięcia budowy) — singleton
+  // (patrz lib/data/settings.ts). kmRate używane do podglądu kosztu w
+  // formularzu raportu, PRZED wysyłką — autorytatywna wartość i tak jest
+  // zamrażana przez bazę w submit_daily_report. closeBuildPin sprawdzany
+  // w Budowach przed "Zamknij (i rozlicz) budowę", stąd "builds" też w
+  // enabled. Tab "admin" (panel Admina — sekcja "Zespół i dniówka" —
+  // oraz "Ustawienia" u pozostałych ról, ta sama zakładka) i Raport
+  // (kmRate w formularzu).
   const settingsQuery = useQuery({
     queryKey: ["settings", "get"],
     queryFn: getSettings,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: Infinity,
-    enabled: tabDataEnabled(["admin", "report"]),
+    enabled: tabDataEnabled(["admin", "report", "builds"]),
   });
   const kmRate = Number(settingsQuery.data?.kmRate ?? 0);
+  const closeBuildPin = settingsQuery.data?.closeBuildPin ?? null;
 
   useEffect(() => {
     if (!buildsQuery.data?.length) return;
@@ -794,6 +801,9 @@ function useAppDataState(
   });
   const updateKmRateMutation = useMutation({
     mutationFn: (vars: { kmRate: number }) => updateKmRateRemote(vars.kmRate),
+  });
+  const updateCloseBuildPinMutation = useMutation({
+    mutationFn: (vars: { pin: string }) => updateCloseBuildPinRemote(vars.pin),
   });
   const createOrderMutation = useMutation({ mutationFn: createOrderRemote });
   const markOrderOrderedMutation = useMutation({
@@ -1636,6 +1646,17 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać stawki za km.");
     }
   };
+  // PIN zabezpieczający "Zamknij (i rozlicz) budowę" (patrz builds-screen.tsx)
+  // — edytowany wyłącznie przez Admina (RLS), pusty string wyłącza
+  // zabezpieczenie (patrz updateCloseBuildPin w lib/data/settings.ts).
+  const updateCloseBuildPinValue = async (pin: string) => {
+    try {
+      await updateCloseBuildPinMutation.mutateAsync({ pin });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "get"] });
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać PIN-u.");
+    }
+  };
   // Edycja ceny jednostkowej materiału w magazynie. Nie wpływa wstecz na
   // już przypisane do budów ilości — te mają cenę zamrożoną na Assignment.
   // Ręczna zmiana ceny to korekta pomyłki (np. źle wpisana cena), nie nowy
@@ -1991,6 +2012,7 @@ function useAppDataState(
     draftExtraCosts,
     draftKm,
     kmRate,
+    closeBuildPin,
     orders,
     orderMaterialName,
     orderQuantity,
@@ -2068,6 +2090,7 @@ function useAppDataState(
     saveEmployee,
     updateEmployeeRate,
     updateKmRate,
+    updateCloseBuildPin: updateCloseBuildPinValue,
     updateMaterialPrice,
     updateMaterialStock,
     createOrder,

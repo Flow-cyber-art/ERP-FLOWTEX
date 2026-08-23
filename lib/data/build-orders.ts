@@ -25,6 +25,11 @@ export type BuildOrderItemRow = {
   unit: string;
   receivedQuantity: string | null;
   receivedUnitPrice: string | null;
+  // Faza 3b — ile z `plannedQuantity` pokryło się wolnym magazynem
+  // (nieprzypisanym do żadnej budowy) w momencie generowania zamówienia
+  // — patrz supabase/sql/011_faza3b_wolny_magazyn.sql. 0, gdy nic nie
+  // pokryło (wtedy ordered_quantity == plannedQuantity, jak dawniej).
+  availableFreeQuantity: string;
 };
 
 export type BuildOrderRow = {
@@ -41,7 +46,8 @@ const ORDER_SELECT =
   "id, buildId:build_id, orderNumber:order_number, status, notes, createdAt, " +
   "order_items(id, orderId:order_id, materialName:material_name, linkedMaterialId:linked_material_id, " +
   "plannedQuantity:planned_quantity, orderedQuantity:ordered_quantity, unit, " +
-  "receivedQuantity:received_quantity, receivedUnitPrice:received_unit_price)";
+  "receivedQuantity:received_quantity, receivedUnitPrice:received_unit_price, " +
+  "availableFreeQuantity:available_free_quantity)";
 
 /** Wszystkie zamówienia naraz (jak assignments/savedReports), filtrowane po buildId w UI. */
 export async function listBuildOrders(): Promise<BuildOrderRow[]> {

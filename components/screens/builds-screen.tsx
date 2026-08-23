@@ -1893,7 +1893,17 @@ export function BuildsScreen() {
                               );
                               return;
                             }
-                            setReturnDecisions({});
+                            // Domyślnie "zwrot" dla każdej pozycji — wypisane
+                            // wprost do stanu, a nie tylko pokazane jako
+                            // podświetlenie w renderze, inaczej allDecided
+                            // niżej zostaje false, dopóki ktoś nie kliknie
+                            // każdej pozycji osobno (mimo że wygląda na już
+                            // wybraną).
+                            setReturnDecisions(
+                              Object.fromEntries(
+                                remainingLots.map((l) => [l.id, { decision: "zwrot" as const, reason: "" }]),
+                              ),
+                            );
                             setClosingBuildId(b.id);
                           };
                           if (closeBuildPin) {

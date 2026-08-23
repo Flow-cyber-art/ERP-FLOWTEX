@@ -325,7 +325,7 @@ function HomeScreenInner() {
           }
         },
       });
-  const technologiesButton = routeButton("technologies", "🧪", "Technologie");
+  const technologiesButton = routeButton("technologies", "⚗", "Technologie");
   const visibleRoutes =
     devRole === "Admin"
       ? [

@@ -1,13 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useEffect, useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import {
   COLORS,
   todayLabelPL,
   Button,
   Field,
   IconBadge,
+  notify,
   QuantityStepper,
   ExtraCostsSection,
   ReportStepper,
@@ -1254,7 +1255,7 @@ export function ReportScreen() {
                     !materialsWarningShown
                   ) {
                     setMaterialsWarningShown(true);
-                    Alert.alert(
+                    notify(
                       "Brak wpisanych materiałów",
                       "Nie wpisano zużycia żadnego materiału. Wciśnij „Dalej” ponownie, aby mimo to przejść dalej.",
                     );
@@ -1266,7 +1267,7 @@ export function ReportScreen() {
                   !teamWarningShown
                 ) {
                   setTeamWarningShown(true);
-                  Alert.alert(
+                  notify(
                     "Brak dodanych osób",
                     "Nie dodano nikogo do zespołu. Wciśnij „Dalej” ponownie, aby mimo to przejść dalej.",
                   );

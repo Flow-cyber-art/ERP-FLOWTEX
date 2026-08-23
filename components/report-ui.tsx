@@ -10,11 +10,12 @@ import {
   View,
 } from "react-native";
 
-// react-native-web's Alert.alert renders a plain window.alert() and
-// completely ignores the buttons array — so on web, destructive/confirm
-// dialogs with a Tak/Nie choice (e.g. zamykanie budowy) never fire their
-// onPress callback and silently do nothing. window.confirm is the web
-// equivalent that actually returns a boolean the user chose.
+// react-native-web's Alert.alert (0.21.x) is a complete no-op — no
+// window.alert/confirm fallback, nothing — so on web every Alert.alert
+// call (confirm dialogs with a Tak/Nie choice AND plain info/error
+// popups) silently does nothing: the user sees no dialog and no error,
+// it just looks like the button didn't work. window.confirm/window.alert
+// are the web equivalents that actually show something.
 export const confirmAction = (
   title: string,
   message: string,
@@ -29,6 +30,16 @@ export const confirmAction = (
     { text: "Anuluj", style: "cancel" },
     { text: confirmLabel, style: "destructive", onPress: onConfirm },
   ]);
+};
+
+// Odpowiednik confirmAction dla zwykłych komunikatów bez wyboru (błędy
+// zapisu, walidacja formularza) — patrz komentarz wyżej, ten sam powód.
+export const notify = (title: string, message: string) => {
+  if (Platform.OS === "web") {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+  Alert.alert(title, message);
 };
 
 type Material = {

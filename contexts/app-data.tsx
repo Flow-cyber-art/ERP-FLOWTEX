@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Alert } from "react-native";
 import {
   createContext,
   useContext,
@@ -122,6 +121,7 @@ import {
   type Material,
   type Assignment,
   type Employee,
+  notify,
 } from "@/components/report-ui";
 
 // Mapuje wiersz z bazy (reports + zagnieżdżone report_materials/
@@ -775,7 +775,7 @@ function useAppDataState(
       error && typeof error === "object" && "message" in error
         ? String((error as { message?: unknown }).message)
         : fallback;
-    Alert.alert("Nie udało się zapisać", message || fallback);
+    notify("Nie udało się zapisać", message || fallback);
   }
 
   const [newEmployee, setNewEmployee] = useState({
@@ -999,7 +999,7 @@ function useAppDataState(
     if (!draftAssignments.length) return;
     const targetBuild = builds.find((b) => b.id === selectedBuildId);
     if (targetBuild?.status === "zamknięta") {
-      Alert.alert(
+      notify(
         "Budowa zamknięta",
         "Ta budowa została zamknięta i rozliczona — nie można już przypisywać do niej materiałów.",
       );
@@ -1013,7 +1013,7 @@ function useAppDataState(
       }))
       .filter((i) => !Number.isNaN(i.batchId));
     if (Number.isNaN(numericBuildId) || !items.length) {
-      Alert.alert(
+      notify(
         "Poczekaj na synchronizację",
         "Budowa lub partia jeszcze się nie zsynchronizowały z serwerem — spróbuj ponownie za chwilę.",
       );
@@ -1063,7 +1063,7 @@ function useAppDataState(
     // że pole "Ilość początkowa" zostaje puste, jeśli nikt go nie dotknie —
     // QuantityStepper startuje bez wartości, nie od "0").
     if (!newMaterial.name || !newMaterial.index || !newMaterial.stock) {
-      Alert.alert(
+      notify(
         "Brakuje danych",
         "Uzupełnij nazwę, indeks i ilość początkową (może być 0), żeby zapisać materiał.",
       );
@@ -1076,7 +1076,7 @@ function useAppDataState(
           newMaterial.index.trim().toLowerCase(),
       )
     ) {
-      Alert.alert(
+      notify(
         "Indeks już istnieje",
         `Materiał z indeksem "${newMaterial.index}" jest już w magazynie.`,
       );
@@ -1265,7 +1265,7 @@ function useAppDataState(
   const saveDailyReportUnsafe = () => {
     const buildId = activeBuild?.id || selectedBuildId;
     if (activeBuild?.status === "zamknięta") {
-      Alert.alert(
+      notify(
         "Budowa zamknięta",
         "Ta budowa została zamknięta i rozliczona — nie można już dodawać do niej raportów.",
       );
@@ -1278,7 +1278,7 @@ function useAppDataState(
         (!editingReportId && report.date === date && report.buildId === buildId),
     );
     if (existingReport?.status === "approved") {
-      Alert.alert(
+      notify(
         "Raport zatwierdzony",
         "Zatwierdzonego raportu nie można już edytować.",
       );
@@ -1458,7 +1458,7 @@ function useAppDataState(
         km: reportSnapshot.km,
       }).then(({ sent }) => {
         if (!sent) {
-          Alert.alert(
+          notify(
             "Raport zapisany lokalnie",
             "Brak połączenia z serwerem — raport wyśle się automatycznie, gdy pojawi się internet.",
           );
@@ -1479,7 +1479,7 @@ function useAppDataState(
     // "Admin" w wyborze na ekranie Administratora to rola aplikacyjna
     // (devRole), nie rola pracownika w bazie.
     if (newEmployee.role !== "Brygadzista" && newEmployee.role !== "Pracownik") {
-      Alert.alert("Nieprawidłowa rola", "Wybierz Brygadzista lub Pracownik.");
+      notify("Nieprawidłowa rola", "Wybierz Brygadzista lub Pracownik.");
       return;
     }
     try {
@@ -1646,7 +1646,7 @@ function useAppDataState(
       !Number.isFinite(em) ||
       eh * 60 + em <= sh * 60 + sm
     ) {
-      Alert.alert(
+      notify(
         "Nieprawidłowy czas",
         "Godzina końca musi być późniejsza niż godzina rozpoczęcia.",
       );
@@ -1655,7 +1655,7 @@ function useAppDataState(
     if (
       draftPeople.some((person) => person.employeeId === selectedEmployeeId)
     ) {
-      Alert.alert(
+      notify(
         "Osoba już dodana",
         "Ta osoba znajduje się już w koszyku raportu.",
       );

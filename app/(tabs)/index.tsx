@@ -326,13 +326,17 @@ function HomeScreenInner() {
         },
       });
   const technologiesButton = routeButton("technologies", "⚗", "Technologie");
+  // Kolejność wg cyklu życia budowy: Budowy (+ Archiwum, sparowane jako
+  // toggle wyżej) → Technologie (receptura) → Magazyn (materiały, sparowane
+  // z Technologie jako toggle na mobile) → Zamówienia → Raporty →
+  // Rozliczenie → Admin na końcu jako funkcja "meta", poza flow budowy.
   const visibleRoutes =
     devRole === "Admin"
       ? [
-          warehouseButton,
-          ...(isDesktop ? [technologiesButton] : []),
           buildsButton,
           ...(isDesktop ? [buildsArchiveButton] : []),
+          ...(isDesktop ? [technologiesButton] : []),
+          warehouseButton,
           routeButton("orders", "▧", "Zamówienia", {
             badgeCount: pendingOrdersCount,
           }),

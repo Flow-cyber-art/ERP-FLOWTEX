@@ -69,6 +69,12 @@ export function TechnologiesScreen() {
   const [company, setCompany] = useState("");
   const [thicknessMinMm, setThicknessMinMm] = useState("");
   const [thicknessMaxMm, setThicknessMaxMm] = useState("");
+  // Zdecydowana większość technologii ma JEDNĄ grubość, nie zakres —
+  // domyślnie jedno pole, "do" tylko po rozwinięciu (patrz "+ Zakres
+  // grubości" w formularzu). thicknessMaxMm i tak zawsze istnieje w
+  // bazie (patrz save niżej) — tryb pojedynczej wartości po prostu
+  // ustawia min = max zamiast pokazywać drugie, prawie zawsze puste pole.
+  const [thicknessRangeMode, setThicknessRangeMode] = useState(false);
   const [stages, setStages] = useState<DraftStage[]>([emptyStage()]);
   const [busy, setBusy] = useState(false);
 
@@ -135,6 +141,7 @@ export function TechnologiesScreen() {
     setCompany("");
     setThicknessMinMm("");
     setThicknessMaxMm("");
+    setThicknessRangeMode(false);
     setStages([emptyStage()]);
     setEditorOpen(true);
   };
@@ -146,6 +153,14 @@ export function TechnologiesScreen() {
     setCompany(t.company ?? "");
     setThicknessMinMm(t.thicknessMinMm ?? "");
     setThicknessMaxMm(t.thicknessMaxMm ?? "");
+    // Autodetekcja: jeśli min i max już się różnią, otwórz od razu w
+    // trybie zakresu — inaczej edycja czegoś innego mogłaby po cichu
+    // "spłaszczyć" istniejący zakres do jednej wartości przy zapisie.
+    setThicknessRangeMode(
+      t.thicknessMinMm != null &&
+        t.thicknessMaxMm != null &&
+        t.thicknessMinMm !== t.thicknessMaxMm,
+    );
     setStages(
       t.technology_stages.length
         ? [...t.technology_stages]
@@ -191,10 +206,15 @@ export function TechnologiesScreen() {
       setLoadError("Dodaj przynajmniej jeden etap z jednym materiałem.");
       return;
     }
+    // Tryb pojedynczej wartości (domyślny — patrz thicknessRangeMode):
+    // "do" nie jest w ogóle pokazywane, więc przy zapisie kopiuje "od" —
+    // w bazie zakres i tak zawsze ma obie granice (min = max = ta sama
+    // wartość dla technologii bez realnego zakresu).
+    const effectiveThicknessMaxMm = thicknessRangeMode ? thicknessMaxMm : thicknessMinMm;
     if (
       thicknessMinMm &&
-      thicknessMaxMm &&
-      Number(thicknessMinMm) > Number(thicknessMaxMm)
+      effectiveThicknessMaxMm &&
+      Number(thicknessMinMm) > Number(effectiveThicknessMaxMm)
     ) {
       setLoadError('Grubość "od" nie może być większa niż "do".');
       return;
@@ -211,7 +231,7 @@ export function TechnologiesScreen() {
         newId,
         company.trim() || null,
         thicknessMinMm ? Number(thicknessMinMm) : null,
-        thicknessMaxMm ? Number(thicknessMaxMm) : null,
+        effectiveThicknessMaxMm ? Number(effectiveThicknessMaxMm) : null,
       );
       setEditorOpen(false);
       reload();
@@ -275,25 +295,50 @@ export function TechnologiesScreen() {
             onChangeText={setCompany}
           />
           <Text className="text-xs text-muted uppercase mb-2 mt-3">
-            Zakres grubości posadzki (mm)
+            Grubość posadzki (mm)
           </Text>
-          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-            <View style={{ flex: 1 }}>
+          {thicknessRangeMode ? (
+            <>
+              <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+                <View style={{ flex: 1 }}>
+                  <QuantityStepper
+                    value={thicknessMinMm}
+                    onChangeText={setThicknessMinMm}
+                    step={0.5}
+                  />
+                </View>
+                <Text style={{ color: COLORS.muted }}>—</Text>
+                <View style={{ flex: 1 }}>
+                  <QuantityStepper
+                    value={thicknessMaxMm}
+                    onChangeText={setThicknessMaxMm}
+                    step={0.5}
+                  />
+                </View>
+              </View>
+              <Pressable onPress={() => setThicknessRangeMode(false)} style={{ marginTop: 8 }}>
+                <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                  − Jedna wartość zamiast zakresu
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
               <QuantityStepper
                 value={thicknessMinMm}
                 onChangeText={setThicknessMinMm}
                 step={0.5}
               />
-            </View>
-            <Text style={{ color: COLORS.muted }}>—</Text>
-            <View style={{ flex: 1 }}>
-              <QuantityStepper
-                value={thicknessMaxMm}
-                onChangeText={setThicknessMaxMm}
-                step={0.5}
-              />
-            </View>
-          </View>
+              <Pressable
+                onPress={() => setThicknessRangeMode(true)}
+                style={{ marginTop: 8 }}
+              >
+                <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                  + Zakres grubości
+                </Text>
+              </Pressable>
+            </>
+          )}
 
           {stages.map((stage, stageIdx) => (
             <View

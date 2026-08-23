@@ -71,6 +71,11 @@ export function BuildsScreen() {
 
   // Które budowy mają rozwiniętą sekcję raportów, i który konkretny raport
   // (w obrębie dowolnej budowy) jest rozwinięty — jeden na raz wystarcza.
+  // Szukajka po numerze/nazwie budowy — ten sam mechanizm co w Raportach
+  // Admina (manager-screen.tsx). Aktywne/Archiwum zostają osobnymi
+  // zakładkami nawigacji (sterowanymi z index.tsx), więc bez osobnego
+  // checkboxa "pokaż zarchiwizowane" — to już robi przełączenie zakładki.
+  const [buildQuery, setBuildQuery] = useState("");
   const [expandedBuildReports, setExpandedBuildReports] = useState<
     Record<string, boolean>
   >({});
@@ -135,7 +140,15 @@ export function BuildsScreen() {
     .sort((x, y) =>
       (y.settlement?.closedAt || "").localeCompare(x.settlement?.closedAt || ""),
     );
-  const visibleBuilds = buildsView === "active" ? activeBuilds : archivedBuilds;
+  const buildsForView = buildsView === "active" ? activeBuilds : archivedBuilds;
+  const buildQueryNormalized = buildQuery.trim().toLowerCase();
+  const visibleBuilds = buildQueryNormalized
+    ? buildsForView.filter(
+        (b) =>
+          b.number.toLowerCase().includes(buildQueryNormalized) ||
+          b.name.toLowerCase().includes(buildQueryNormalized),
+      )
+    : buildsForView;
 
   return (
     <>
@@ -147,6 +160,12 @@ export function BuildsScreen() {
           <Button label="+ Nowa" onPress={() => setShowBuild(!showBuild)} />
         ) : undefined
       }
+    />
+    <Field
+      placeholder="🔍 Szukaj budowy…"
+      value={buildQuery}
+      onChangeText={setBuildQuery}
+      style={{ marginBottom: 16 }}
     />
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
@@ -517,17 +536,19 @@ export function BuildsScreen() {
         )}
       </View>
     )}
-    {isArchiveView && archivedBuilds.length > 0 && (
+    {isArchiveView && visibleBuilds.length > 0 && (
       <Text className="text-xs text-muted uppercase mb-3">
-        Zamkniętych budów: {archivedBuilds.length}
+        Zamkniętych budów: {visibleBuilds.length}
       </Text>
     )}
     {visibleBuilds.length === 0 && (
       <View className="bg-surface border border-border rounded-2xl p-5 items-center">
         <Text className="text-sm text-muted">
-          {isArchiveView
-            ? "Brak zamkniętych budów. Zamknięte budowy pojawią się tutaj."
-            : "Brak aktywnych budów. Dodaj pierwszą budowę powyżej."}
+          {buildQueryNormalized
+            ? "Brak budów pasujących do wyszukiwania."
+            : isArchiveView
+              ? "Brak zamkniętych budów. Zamknięte budowy pojawią się tutaj."
+              : "Brak aktywnych budów. Dodaj pierwszą budowę powyżej."}
         </Text>
       </View>
     )}

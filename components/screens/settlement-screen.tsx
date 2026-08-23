@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { COLORS, formatPLN, ScreenHeader } from "@/components/report-ui";
+import { COLORS, Field, formatPLN, ScreenHeader } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
 /**
@@ -35,9 +35,29 @@ export function SettlementScreen() {
       }),
     [builds],
   );
+
+  // Ten sam picker co w Raportach Admina (manager-screen.tsx) — szukajka
+  // + checkbox "Pokaż zarchiwizowane" zamiast rzędu chipów, który przy
+  // większej liczbie budów trzeba przewijać w bok.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [buildQuery, setBuildQuery] = useState("");
+  const [showArchivedBuilds, setShowArchivedBuilds] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const visibleBuilds = useMemo(
+    () => sortedBuilds.filter((b) => showArchivedBuilds || b.status !== "zamknięta"),
+    [sortedBuilds, showArchivedBuilds],
+  );
+  const filteredBuilds = useMemo(() => {
+    const q = buildQuery.trim().toLowerCase();
+    if (!q) return visibleBuilds;
+    return visibleBuilds.filter(
+      (b) => b.number.toLowerCase().includes(q) || b.name.toLowerCase().includes(q),
+    );
+  }, [visibleBuilds, buildQuery]);
+
   const build =
-    sortedBuilds.find((b) => b.id === selectedId) ?? sortedBuilds[0] ?? null;
+    visibleBuilds.find((b) => b.id === selectedId) ?? visibleBuilds[0] ?? null;
 
   const materialCostFor = (materialId: string) => {
     if (!build) return 0;
@@ -154,37 +174,97 @@ export function SettlementScreen() {
         description="Plan, przypisano, zużyto, koszt i marża — spięte z faz 0–7."
       />
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {sortedBuilds.map((b) => {
-            const active = build?.id === b.id;
-            return (
-              <Pressable
-                key={b.id}
-                onPress={() => setSelectedId(b.id)}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: active ? COLORS.primary : COLORS.border,
-                  backgroundColor: active ? COLORS.primary : COLORS.surface,
-                }}
-              >
-                <Text
+      <Pressable
+        onPress={() => setPickerOpen(!pickerOpen)}
+        className="bg-surface border border-border rounded-2xl p-4 mb-3"
+        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+      >
+        <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+          <Text style={{ color: COLORS.muted, fontSize: 11 }}>Budowa</Text>
+          <Text
+            style={{ color: COLORS.foreground, fontWeight: "700", marginTop: 2 }}
+            numberOfLines={1}
+          >
+            {build ? `${build.number} · ${build.name}` : "Brak budów"}
+          </Text>
+        </View>
+        <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+          {pickerOpen ? "Zwiń" : "Zmień"}
+        </Text>
+      </Pressable>
+
+      {pickerOpen && (
+        <View className="bg-surface border border-border rounded-2xl p-3 mb-5">
+          <Field
+            placeholder="🔍 Szukaj budowy…"
+            value={buildQuery}
+            onChangeText={setBuildQuery}
+          />
+
+          <Pressable
+            onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
+            style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}
+          >
+            <View
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
+                backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {showArchivedBuilds && (
+                <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
+                  ✓
+                </Text>
+              )}
+            </View>
+            <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
+              Pokaż zarchiwizowane
+            </Text>
+          </Pressable>
+
+          <ScrollView style={{ maxHeight: 260, marginTop: 10 }} nestedScrollEnabled>
+            {filteredBuilds.map((b) => {
+              const isSelected = build?.id === b.id;
+              return (
+                <Pressable
+                  key={b.id}
+                  onPress={() => {
+                    setSelectedId(b.id);
+                    setPickerOpen(false);
+                  }}
                   style={{
-                    color: active ? COLORS.background : COLORS.foreground,
-                    fontSize: 13,
-                    fontWeight: "700",
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: COLORS.border,
                   }}
                 >
-                  {b.number} · {b.name}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    style={{
+                      color: isSelected ? COLORS.primary : COLORS.foreground,
+                      fontWeight: "700",
+                      fontSize: 13,
+                    }}
+                  >
+                    {isSelected ? "✓ " : ""}
+                    {b.number} · {b.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {filteredBuilds.length === 0 && (
+              <Text style={{ color: COLORS.muted, fontSize: 13, paddingVertical: 10 }}>
+                Brak budów pasujących do wyszukiwania.
+              </Text>
+            )}
+          </ScrollView>
         </View>
-      </ScrollView>
+      )}
 
       {!build ? (
         <View className="bg-surface border border-border rounded-2xl p-5 items-center">

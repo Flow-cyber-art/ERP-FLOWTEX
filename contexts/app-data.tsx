@@ -371,6 +371,7 @@ function useAppDataState(
     index: "",
     unit: "szt.",
     stock: "0",
+    min: "5",
     unitPrice: "0",
   });
   const [newBuild, setNewBuild] = useState({
@@ -960,6 +961,15 @@ function useAppDataState(
       }))
       .filter((row) => row.missing > 0);
   }, [materials, assignments]);
+  // Materiały poniżej własnego stanu minimalnego (m.min, patrz + Dodaj
+  // materiał w warehouse-screen.tsx) — inny sygnał niż `shortages`
+  // powyżej (tam "brakuje do planu budów", tu "trzeba dokupić, żeby
+  // magazyn nie zszedł poniżej ustalonego poziomu"). Ten sam warunek co
+  // podświetlenie stanu na czerwono na liście materiałów.
+  const belowMinimumMaterials = useMemo(
+    () => materials.filter((m) => m.stock <= m.min),
+    [materials],
+  );
   // Ręczny wybór partii (Faza 5) — admin wybiera KONKRETNĄ partię
   // (wyszukiwarka pokazuje różne daty/ceny tej samej pozycji, patrz
   // warehouseBatches) i ile z niej trafia na budowę, zamiast tylko
@@ -1073,6 +1083,7 @@ function useAppDataState(
       return;
     }
     const stock = Number(newMaterial.stock);
+    const min = Number(newMaterial.min) || 0;
     const unitPrice = Number(newMaterial.unitPrice) || 0;
     try {
       await createMaterialMutation.mutateAsync({
@@ -1080,11 +1091,11 @@ function useAppDataState(
         index: newMaterial.index,
         unit: newMaterial.unit || "szt.",
         stock,
-        min: 5,
+        min,
         unitPrice,
       });
       await invalidate("materials");
-      setNewMaterial({ name: "", index: "", unit: "szt.", stock: "0", unitPrice: "0" });
+      setNewMaterial({ name: "", index: "", unit: "szt.", stock: "0", min: "5", unitPrice: "0" });
       setShowMaterial(false);
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać materiału.");
@@ -1928,6 +1939,7 @@ function useAppDataState(
     activeBuild,
     buildAssignments,
     shortages,
+    belowMinimumMaterials,
     addToDraft,
     commitAssignments,
     saveMaterial,

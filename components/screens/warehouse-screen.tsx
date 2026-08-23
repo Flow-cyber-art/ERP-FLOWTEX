@@ -111,6 +111,21 @@ export function WarehouseScreen() {
         </View>
         <View style={{ marginTop: 10 }}>
           <Text className="text-xs text-muted uppercase">
+            Stan minimalny ({newMaterial.unit || "szt."})
+          </Text>
+          <Text className="text-xs text-muted mt-0.5 mb-2">
+            Poziom, który powinien być utrzymywany na magazynie — spadek
+            poniżej niego oznaczy materiał jako brakujący.
+          </Text>
+          <QuantityStepper
+            value={newMaterial.min}
+            onChangeText={(v: string) =>
+              setNewMaterial({ ...newMaterial, min: v })
+            }
+          />
+        </View>
+        <View style={{ marginTop: 10 }}>
+          <Text className="text-xs text-muted uppercase">
             Cena jednostkowa (PLN)
           </Text>
           <QuantityStepper

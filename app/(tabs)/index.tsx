@@ -90,12 +90,12 @@ function HomeScreenInner() {
     setBuildsView,
     warehouseView,
     setWarehouseView,
-    shortages,
+    belowMinimumMaterials,
     orders,
     reportsPendingApprovalCount,
     reportsNeedingFixCount,
   } = useAppData();
-  const shortageCount = shortages.length;
+  const shortageCount = belowMinimumMaterials.length;
   const pendingOrdersCount = orders.filter(
     (o) => o.status === "do realizacji",
   ).length;

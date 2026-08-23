@@ -528,6 +528,23 @@ const ExtraCostsSection = ({
     setCategory("");
     setCustomCategory("");
   };
+  // Wybór podpowiedzi (nocleg/parking/zakup) od razu podstawia jej nazwę do
+  // pola "Nazwa kosztu" — najczęściej jest to i tak docelowa nazwa (jeden
+  // "Parking" na raport), więc nie trzeba wpisywać tego samego dwa razy.
+  // "inne" celowo pomijamy: tam nazwę i tak trzeba wpisać ręcznie, bo sama
+  // kategoria nią nie jest. Odklikanie aktywnej podpowiedzi czyści nazwę,
+  // ale tylko jeśli użytkownik jej po drodze ręcznie nie zmienił — inaczej
+  // zgubilibyśmy to, co właśnie wpisał.
+  const selectCategory = (option: (typeof EXTRA_COST_CATEGORIES)[number]) => {
+    const capitalized = option.charAt(0).toUpperCase() + option.slice(1);
+    if (category === option) {
+      setCategory("");
+      if (label === capitalized) setLabel("");
+      return;
+    }
+    setCategory(option);
+    if (option !== "inne") setLabel(capitalized);
+  };
   return (
     <View>
       {costs.map((c, i) => (
@@ -631,7 +648,7 @@ const ExtraCostsSection = ({
             return (
               <Pressable
                 key={option}
-                onPress={() => setCategory(active ? "" : option)}
+                onPress={() => selectCategory(option)}
                 style={{
                   paddingVertical: 6,
                   paddingHorizontal: 12,

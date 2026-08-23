@@ -75,6 +75,11 @@ const SettingsScreen = lazy(() =>
     default: m.SettingsScreen,
   })),
 );
+const SettlementScreen = lazy(() =>
+  import("@/components/screens/settlement-screen").then((m) => ({
+    default: m.SettlementScreen,
+  })),
+);
 
 function HomeScreenInner() {
   const {
@@ -334,6 +339,7 @@ function HomeScreenInner() {
           routeButton("manager", "▥", "Raporty", {
             badgeCount: reportsPendingApprovalCount,
           }),
+          routeButton("settlement", "Σ", "Rozliczenie"),
           adminButton,
         ]
       : devRole === "Brygadzista"
@@ -528,6 +534,7 @@ function HomeScreenInner() {
               {tab === "builds" && devRole === "Admin" && <BuildsScreen />}
               {tab === "orders" && devRole === "Admin" && <OrdersScreen />}
               {tab === "manager" && devRole === "Admin" && <ManagerScreen />}
+              {tab === "settlement" && devRole === "Admin" && <SettlementScreen />}
               {tab === "admin" && devRole === "Admin" && <AdminScreen />}
               {tab === "report" && devRole === "Brygadzista" && <ReportScreen />}
               {tab === "savedReports" && devRole === "Brygadzista" && (

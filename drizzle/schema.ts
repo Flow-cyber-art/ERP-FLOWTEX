@@ -450,6 +450,11 @@ export const technologies = pgTable("technologies", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   createdBy: text("createdBy"), // uuid (auth.users/profiles.id) — brak natywnego typu uuid w tym pliku dotąd, patrz SQL
+  // Firma (producent receptury) i grubość posadzki w mm — wyłącznie
+  // metadane do filtrowania listy technologii (patrz 016_faza1b_...sql),
+  // nie część receptury: zmiana nie bumpuje wersji jak stages/materials.
+  company: text("company"),
+  thicknessMm: decimal("thickness_mm", { precision: 6, scale: 2 }),
 });
 
 export const technologyStages = pgTable("technology_stages", {

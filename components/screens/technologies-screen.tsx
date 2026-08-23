@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import {
   Button,
   COLORS,
@@ -14,6 +14,7 @@ import {
   type TechnologyRow,
   listAllTechnologies,
   saveTechnology,
+  updateTechnologyMeta,
 } from "@/lib/data/technologies";
 
 // Panel Admina — Technologie (receptury posadzek), Faza 1 modułu
@@ -65,8 +66,17 @@ export function TechnologiesScreen() {
   const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [thicknessMm, setThicknessMm] = useState("");
   const [stages, setStages] = useState<DraftStage[]>([emptyStage()]);
   const [busy, setBusy] = useState(false);
+
+  // Filtry listy (nie edytora) — firma i zakres grubości. Do uzupełnienia
+  // ręcznie w istniejących technologiach przez "Edytuj", stąd oba pola
+  // metadanych żyją też w formularzu wyżej.
+  const [filterCompany, setFilterCompany] = useState<string | "all">("all");
+  const [filterThicknessFrom, setFilterThicknessFrom] = useState("");
+  const [filterThicknessTo, setFilterThicknessTo] = useState("");
 
   const reload = () => {
     setLoadError(null);
@@ -86,10 +96,36 @@ export function TechnologiesScreen() {
     a[0].name.localeCompare(b[0].name),
   );
 
+  // Filtry listy — firma (chipy z tego, co faktycznie wypełnione) i
+  // zakres grubości (mm). Filtrują po aktywnej (najnowszej) wersji
+  // rodziny — to jej dotyczą pola company/thicknessMm w praktyce.
+  const companies = [...new Set(
+    (technologies ?? [])
+      .map((t) => t.company?.trim())
+      .filter((c): c is string => !!c),
+  )].sort((a, b) => a.localeCompare(b));
+  const thicknessFrom = filterThicknessFrom ? Number(filterThicknessFrom) : null;
+  const thicknessTo = filterThicknessTo ? Number(filterThicknessTo) : null;
+  const filteredFamilies = families.filter(([active]) => {
+    if (filterCompany !== "all" && (active.company?.trim() || "") !== filterCompany) {
+      return false;
+    }
+    const thickness = active.thicknessMm != null ? Number(active.thicknessMm) : null;
+    if (thicknessFrom != null && (thickness == null || thickness < thicknessFrom)) {
+      return false;
+    }
+    if (thicknessTo != null && (thickness == null || thickness > thicknessTo)) {
+      return false;
+    }
+    return true;
+  });
+
   const startNew = () => {
     setEditingSourceId(null);
     setCode("");
     setName("");
+    setCompany("");
+    setThicknessMm("");
     setStages([emptyStage()]);
     setEditorOpen(true);
   };
@@ -98,6 +134,8 @@ export function TechnologiesScreen() {
     setEditingSourceId(t.id);
     setCode(t.code);
     setName(t.name);
+    setCompany(t.company ?? "");
+    setThicknessMm(t.thicknessMm ?? "");
     setStages(
       t.technology_stages.length
         ? [...t.technology_stages]
@@ -146,7 +184,16 @@ export function TechnologiesScreen() {
     setBusy(true);
     setLoadError(null);
     try {
-      await saveTechnology(editingSourceId, code.trim(), name.trim(), payload);
+      const newId = await saveTechnology(editingSourceId, code.trim(), name.trim(), payload);
+      // Firma/grubość to metadane, nie część receptury (patrz komentarz
+      // przy company/thicknessMm w lib/data/technologies.ts) — zapisywane
+      // osobnym wywołaniem na ŚWIEŻO utworzonej wersji (newId), nie na
+      // editingSourceId (ten zaraz zostanie zdezaktywowany).
+      await updateTechnologyMeta(
+        newId,
+        company.trim() || null,
+        thicknessMm ? Number(thicknessMm) : null,
+      );
       setEditorOpen(false);
       reload();
     } catch (err) {
@@ -202,6 +249,24 @@ export function TechnologiesScreen() {
             value={name}
             onChangeText={setName}
           />
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text className="text-xs text-muted uppercase mb-2">Firma</Text>
+              <Field
+                placeholder="np. Sika"
+                value={company}
+                onChangeText={setCompany}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text className="text-xs text-muted uppercase mb-2">Grubość (mm)</Text>
+              <QuantityStepper
+                value={thicknessMm}
+                onChangeText={setThicknessMm}
+                step={0.5}
+              />
+            </View>
+          </View>
 
           {stages.map((stage, stageIdx) => (
             <View
@@ -447,8 +512,115 @@ export function TechnologiesScreen() {
       )}
 
       {families.length > 0 && (
+        <>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 10 }}
+          >
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable
+                onPress={() => setFilterCompany("all")}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: filterCompany === "all" ? COLORS.primary : COLORS.border,
+                  backgroundColor: filterCompany === "all" ? COLORS.primary : COLORS.surface,
+                }}
+              >
+                <Text
+                  style={{
+                    color: filterCompany === "all" ? COLORS.background : COLORS.foreground,
+                    fontSize: 13,
+                    fontWeight: "700",
+                  }}
+                >
+                  Wszystkie firmy
+                </Text>
+              </Pressable>
+              {companies.map((c) => {
+                const active = filterCompany === c;
+                return (
+                  <Pressable
+                    key={c}
+                    onPress={() => setFilterCompany(active ? "all" : c)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: active ? COLORS.primary : COLORS.border,
+                      backgroundColor: active ? COLORS.primary : COLORS.surface,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: active ? COLORS.background : COLORS.foreground,
+                        fontSize: 13,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {c}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          <View
+            className="bg-surface border border-border rounded-2xl p-3 mb-5"
+            style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+          >
+            <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+              Grubość (mm)
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Field
+                placeholder="od"
+                value={filterThicknessFrom}
+                onChangeText={setFilterThicknessFrom}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <Text style={{ color: COLORS.muted }}>—</Text>
+            <View style={{ flex: 1 }}>
+              <Field
+                placeholder="do"
+                value={filterThicknessTo}
+                onChangeText={setFilterThicknessTo}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            {(filterThicknessFrom || filterThicknessTo) && (
+              <Pressable
+                onPress={() => {
+                  setFilterThicknessFrom("");
+                  setFilterThicknessTo("");
+                }}
+              >
+                <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                  Wyczyść
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </>
+      )}
+
+      {filteredFamilies.length === 0 && families.length > 0 && (
+        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+          <Text className="text-sm text-muted">
+            Żadna technologia nie pasuje do wybranych filtrów.
+          </Text>
+        </View>
+      )}
+
+      {filteredFamilies.length > 0 && (
         <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
-          {families.map(([active, ...history], i) => (
+          {filteredFamilies.map(([active, ...history], i) => (
             <View
               key={active.code}
               style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: COLORS.border }}
@@ -469,6 +641,8 @@ export function TechnologiesScreen() {
                   <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
                     {active.code} · v{active.version}
                     {history.length > 0 ? ` · ${history.length} starszych wersji` : ""}
+                    {active.company ? ` · ${active.company}` : ""}
+                    {active.thicknessMm ? ` · ${active.thicknessMm} mm` : ""}
                   </Text>
                 </View>
                 <Pressable onPress={() => startEdit(active)} style={{ marginRight: 14 }}>

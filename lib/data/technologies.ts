@@ -31,6 +31,10 @@ export type TechnologyRow = {
   version: number;
   isActive: boolean;
   createdAt: string;
+  // Metadane pod filtrowanie (patrz 016_faza1b_firma_grubosc.sql) — nie
+  // część receptury, więc NIE wersjonowane jak stages/materials poniżej.
+  company: string | null;
+  thicknessMm: string | null;
   technology_stages: TechnologyStageRow[];
 };
 
@@ -38,7 +42,7 @@ export type TechnologyRow = {
 // ale JS/TS trzyma się camelCase — aliasy "camelCase:snake_case" w select
 // tłumaczą jedno na drugie, żeby reszta kodu nie musiała znać realnych nazw kolumn.
 const TECHNOLOGY_SELECT =
-  "id, code, name, version, isActive:is_active, createdAt, " +
+  "id, code, name, version, isActive:is_active, createdAt, company, thicknessMm:thickness_mm, " +
   "technology_stages(id, name, orderIndex:order_index, " +
   "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, linkedMaterialId:linked_material_id))";
 
@@ -92,4 +96,22 @@ export async function saveTechnology(
   });
   if (error) throw new Error(error.message);
   return data as number;
+}
+
+/**
+ * Firma i grubość (mm) — metadane pod filtrowanie (patrz
+ * 016_faza1b_firma_grubosc.sql), osobna funkcja od `saveTechnology` bo
+ * nie są częścią receptury: edycja NIE tworzy nowej wersji.
+ */
+export async function updateTechnologyMeta(
+  technologyId: number,
+  company: string | null,
+  thicknessMm: number | null,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_technology_meta", {
+    p_technology_id: technologyId,
+    p_company: company,
+    p_thickness_mm: thicknessMm,
+  });
+  if (error) throw new Error(error.message);
 }

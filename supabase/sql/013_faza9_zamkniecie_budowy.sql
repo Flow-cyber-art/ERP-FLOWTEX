@@ -72,7 +72,7 @@ declare
   v_decision text;
   v_reason text;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_build from builds where id = p_build_id for update;
   if not found then

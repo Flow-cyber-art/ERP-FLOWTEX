@@ -147,7 +147,7 @@ as $$
 declare
   v_material materials;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   if exists (select 1 from materials where index = p_index) then
     raise exception 'Materiał z indeksem "%" już istnieje.', p_index;
@@ -180,7 +180,7 @@ declare
   v_material materials;
   v_delta decimal;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_material from materials where id = p_material_id for update;
   if not found then
@@ -218,7 +218,7 @@ declare
   v_material_id integer;
   v_price decimal;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_order from material_orders where id = p_order_id for update;
   if not found then
@@ -270,7 +270,7 @@ declare
   v_planned decimal;
   v_price decimal;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select status into v_status from builds where id = p_build_id for update;
   if not found then
@@ -341,7 +341,7 @@ declare
   v_end text;
   v_result_materials jsonb := '[]'::jsonb;
 begin
-  perform assert_role(array['Admin', 'Brygadzista']);
+  perform assert_role(array['Admin', 'Brygadzista']::app_role[]);
 
   select status into v_build_status from builds where id = p_build_id for update;
   if not found then
@@ -454,7 +454,7 @@ declare
   v_total_extra_costs decimal;
   v_total_cost decimal;
 begin
-  perform assert_role(array['Admin']);
+  perform assert_role(array['Admin']::app_role[]);
 
   select * into v_build from builds where id = p_build_id for update;
   if not found then

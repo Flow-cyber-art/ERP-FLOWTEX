@@ -13,6 +13,7 @@ import {
 import { useAppData } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
 import type { AppRole } from "@/lib/data/auth";
+import { signOut } from "@/lib/data/auth";
 import {
   type AdminUser,
   createAdminUser,
@@ -30,12 +31,17 @@ import {
 // tu (mimo że to też "konfiguracja firmy") — mają własną pozycję w
 // nawigacji (patrz app/(tabs)/index.tsx), bo na desktopie zasługują na
 // stałą widoczność, a na mobile dzielą miejsce z zakładką Magazyn.
-type AdminTab = "team" | "hours" | "accounts";
+type AdminTab = "team" | "hours" | "accounts" | "settings";
 
 const TAB_META: Record<AdminTab, { title: string; description: string }> = {
   team: { title: "Zespół", description: "Pracownicy, dniówka i stawki." },
   hours: { title: "Rozliczenie godzin", description: "Godziny przepracowane per pracownik." },
   accounts: { title: "Konta logowania", description: "Dostęp do aplikacji per osoba." },
+  // Miejsce na ustawienia aplikacji, które nie pasują do żadnej z
+  // powyższych sekcji (np. wylogowanie — celowo NIE jest to osobna
+  // pozycja w nawigacji, żeby nie dało się wylogować przypadkowym
+  // dotknięciem paska zakładek — patrz app/(tabs)/index.tsx).
+  settings: { title: "Ustawienia", description: "Ustawienia aplikacji." },
 };
 
 export function AdminScreen() {
@@ -56,6 +62,7 @@ export function AdminScreen() {
               ["team", "Zespół i dniówka"],
               ["hours", "Rozliczenie godzin"],
               ["accounts", "Konta logowania"],
+              ["settings", "Ustawienia"],
             ] as const
           ).map(([value, label]) => (
             <Pressable
@@ -88,10 +95,39 @@ export function AdminScreen() {
         <AdminTeamSection />
       ) : section === "hours" ? (
         <HrSection />
-      ) : (
+      ) : section === "accounts" ? (
         <AdminAccountsSection />
+      ) : (
+        <AdminSettingsSection />
       )}
     </>
+  );
+}
+
+// Sekcja na przyszłe ustawienia aplikacji. Na razie tylko wylogowanie —
+// celowo na samym końcu i z potwierdzeniem, żeby nie dało się go
+// nacisnąć przez przypadek.
+function AdminSettingsSection() {
+  return (
+    <View className="bg-surface border border-border rounded-2xl p-4">
+      <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
+        Tutaj z czasem pojawią się kolejne ustawienia aplikacji.
+      </Text>
+      <Button
+        label="Wyloguj"
+        secondary
+        onPress={() =>
+          confirmAction(
+            "Wylogować się?",
+            "Będzie trzeba zalogować się ponownie.",
+            "Wyloguj",
+            () => {
+              signOut();
+            },
+          )
+        }
+      />
+    </View>
   );
 }
 

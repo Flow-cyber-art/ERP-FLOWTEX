@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { COLORS, Field, formatPLN, ScreenHeader } from "@/components/report-ui";
+import { Pressable, Text, View } from "react-native";
+import { COLORS, formatPLN, ScreenHeader, SearchablePicker } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
 /**
@@ -175,7 +175,7 @@ export function SettlementScreen() {
       />
 
       <Pressable
-        onPress={() => setPickerOpen(!pickerOpen)}
+        onPress={() => setPickerOpen(true)}
         className="bg-surface border border-border rounded-2xl p-4 mb-3"
         style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
       >
@@ -189,82 +189,54 @@ export function SettlementScreen() {
           </Text>
         </View>
         <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-          {pickerOpen ? "Zwiń" : "Zmień"}
+          Zmień
         </Text>
       </Pressable>
 
-      {pickerOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-3 mb-5">
-          <Field
-            placeholder="🔍 Szukaj budowy…"
-            value={buildQuery}
-            onChangeText={setBuildQuery}
-          />
-
-          <Pressable
-            onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
-            style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}
-          >
-            <View
-              style={{
-                width: 18,
-                height: 18,
-                borderRadius: 4,
-                borderWidth: 1,
-                borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
-                backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {showArchivedBuilds && (
-                <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
-                  ✓
-                </Text>
-              )}
-            </View>
-            <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
-              Pokaż zarchiwizowane
+      <Pressable
+        onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
+        style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}
+      >
+        <View
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 4,
+            borderWidth: 1,
+            borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
+            backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {showArchivedBuilds && (
+            <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
+              ✓
             </Text>
-          </Pressable>
-
-          <ScrollView style={{ maxHeight: 260, marginTop: 10 }} nestedScrollEnabled>
-            {filteredBuilds.map((b) => {
-              const isSelected = build?.id === b.id;
-              return (
-                <Pressable
-                  key={b.id}
-                  onPress={() => {
-                    setSelectedId(b.id);
-                    setPickerOpen(false);
-                  }}
-                  style={{
-                    paddingVertical: 10,
-                    borderBottomWidth: 1,
-                    borderBottomColor: COLORS.border,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: isSelected ? COLORS.primary : COLORS.foreground,
-                      fontWeight: "700",
-                      fontSize: 13,
-                    }}
-                  >
-                    {isSelected ? "✓ " : ""}
-                    {b.number} · {b.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-            {filteredBuilds.length === 0 && (
-              <Text style={{ color: COLORS.muted, fontSize: 13, paddingVertical: 10 }}>
-                Brak budów pasujących do wyszukiwania.
-              </Text>
-            )}
-          </ScrollView>
+          )}
         </View>
-      )}
+        <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
+          Pokaż zarchiwizowane budowy w wyszukiwarce
+        </Text>
+      </Pressable>
+
+      <SearchablePicker
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        query={buildQuery}
+        onQueryChange={setBuildQuery}
+        placeholder="🔍 Szukaj budowy…"
+        selectedKey={build?.id}
+        onSelect={(key) => {
+          setSelectedId(key);
+          setPickerOpen(false);
+        }}
+        emptyLabel="Brak budów pasujących do wyszukiwania."
+        items={filteredBuilds.map((b) => ({
+          key: b.id,
+          title: `${b.number} · ${b.name}`,
+        }))}
+      />
 
       {!build ? (
         <View className="bg-surface border border-border rounded-2xl p-5 items-center">

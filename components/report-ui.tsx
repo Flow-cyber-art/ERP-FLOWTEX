@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -1009,6 +1010,179 @@ export type ReportCardData = {
 // "Raporty" (przekrojowo po wszystkich budowach) jak i w szczegółach
 // pojedynczej budowy — żeby wygląd i logika zatwierdzania raportu nie
 // rozjeżdżały się w dwóch miejscach.
+// Nagłówek sekcji ze wspólnym rytmem odstępów — wydzielone z ReportCard,
+// żeby ten sam "duży odstęp + wytłuszczony nagłówek + licznik" dało się
+// odtworzyć w innych szczegółowych kartach (rozliczenie budowy, magazyn,
+// zamówienia), które dziś każde robią to inaczej i płasko. Separator
+// między pozycjami zostaje w geście wywołującego (child listy) — celowo
+// NIE ma go między sekcjami, tylko odstęp (zasada Gestalt: bliskość).
+export function DetailSection({
+  label,
+  count,
+  children,
+  style,
+}: {
+  label: string;
+  count?: number | string;
+  children: ReactNode;
+  style?: object;
+}) {
+  return (
+    <View style={[{ marginTop: 24 }, style]}>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 10,
+        }}
+      >
+        <Text
+          style={{ color: COLORS.muted, fontSize: 12, fontWeight: "800" }}
+          className="uppercase"
+        >
+          {label}
+        </Text>
+        {count !== undefined && (
+          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+            {count}
+          </Text>
+        )}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+export type SearchablePickerItem = {
+  key: string;
+  title: string;
+  subtitle?: string;
+};
+
+// Wyszukiwany modal wyboru z listy — wydzielone z saved-reports-screen.tsx
+// (wybór budowy). manager-screen.tsx i settlement-screen.tsx miały
+// wcześniej DOSŁOWNIE tę samą funkcję (rozwijany inline picker z
+// wyszukiwarką), skopiowaną osobno w każdym pliku — jeden wspólny
+// komponent zamiast trzech wariantów tego samego. Modal (nie inline
+// rozwijanie) skaluje się lepiej przy długich listach i nie przesuwa
+// reszty ekranu w dół.
+export function SearchablePicker({
+  visible,
+  onClose,
+  query,
+  onQueryChange,
+  placeholder = "Szukaj…",
+  items,
+  selectedKey,
+  onSelect,
+  emptyLabel = "Brak pozycji pasujących do wyszukiwania.",
+}: {
+  visible: boolean;
+  onClose: () => void;
+  query: string;
+  onQueryChange: (q: string) => void;
+  placeholder?: string;
+  items: SearchablePickerItem[];
+  selectedKey?: string;
+  onSelect: (key: string) => void;
+  emptyLabel?: string;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.5)",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 20,
+        }}
+      >
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          className="bg-surface border border-border rounded-2xl"
+          style={{ maxHeight: "70%", overflow: "hidden", width: "100%", maxWidth: 480 }}
+        >
+          <View
+            className="border-border"
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              borderBottomWidth: 1,
+              paddingHorizontal: 14,
+              paddingVertical: 4,
+            }}
+          >
+            <MaterialIcons name="search" size={18} color={COLORS.muted} />
+            <TextInput
+              autoFocus
+              value={query}
+              onChangeText={onQueryChange}
+              placeholder={placeholder}
+              placeholderTextColor={COLORS.muted}
+              style={{
+                flex: 1,
+                color: COLORS.foreground,
+                fontSize: 14,
+                paddingVertical: 10,
+                paddingHorizontal: 8,
+              }}
+            />
+          </View>
+          <ScrollView>
+            {items.map((item, i) => {
+              const selected = selectedKey === item.key;
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => onSelect(item.key)}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    borderTopWidth: i === 0 ? 0 : 1,
+                    borderTopColor: COLORS.border,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: pressed ? COLORS.background : "transparent",
+                  })}
+                >
+                  <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+                    <Text
+                      style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    {item.subtitle && (
+                      <Text
+                        style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}
+                        numberOfLines={1}
+                      >
+                        {item.subtitle}
+                      </Text>
+                    )}
+                  </View>
+                  {selected && (
+                    <MaterialIcons name="check" size={18} color={COLORS.primary} />
+                  )}
+                </Pressable>
+              );
+            })}
+            {items.length === 0 && (
+              <Text style={{ color: COLORS.muted, fontSize: 13, padding: 14 }}>
+                {emptyLabel}
+              </Text>
+            )}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 const ReportCard = ({
   report,
   build,
@@ -1107,25 +1281,7 @@ const ReportCard = ({
               to samo "MATERIAŁY / KOSZTY / ZESPÓŁ" jedno pod drugim bez
               oddechu sprawiało, że całość czytała się jak jeden nierozróżnialny
               blob, mimo że treściowo to cztery różne grupy informacji. */}
-          <View style={{ marginTop: 24 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                marginBottom: 10,
-              }}
-            >
-              <Text
-                style={{ color: COLORS.muted, fontSize: 12, fontWeight: "800" }}
-                className="uppercase"
-              >
-                Materiały
-              </Text>
-              <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
-                {Object.keys(report.materialValues).length}
-              </Text>
-            </View>
+          <DetailSection label="Materiały" count={Object.keys(report.materialValues).length}>
             {Object.keys(report.materialValues).length === 0 ? (
               <Text className="text-sm text-muted py-1">
                 Nie zgłoszono zużycia materiałów.
@@ -1232,28 +1388,10 @@ const ReportCard = ({
                 },
               )
             )}
-          </View>
+          </DetailSection>
 
           {report.extraCosts && report.extraCosts.length > 0 && (
-            <View style={{ marginTop: 24 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "baseline",
-                  marginBottom: 10,
-                }}
-              >
-                <Text
-                  style={{ color: COLORS.muted, fontSize: 12, fontWeight: "800" }}
-                  className="uppercase"
-                >
-                  Koszty dodatkowe
-                </Text>
-                <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
-                  {report.extraCosts.length}
-                </Text>
-              </View>
+            <DetailSection label="Koszty dodatkowe" count={report.extraCosts.length}>
               {report.extraCosts.map((cost) => (
                 <View
                   key={cost.id}
@@ -1306,23 +1444,13 @@ const ReportCard = ({
                   zł
                 </Text>
               </View>
-            </View>
+            </DetailSection>
           )}
 
-          <View style={{ marginTop: 24 }}>
-            <View style={{ marginBottom: 10 }}>
-              <Text
-                style={{ color: COLORS.muted, fontSize: 12, fontWeight: "800" }}
-                className="uppercase"
-              >
-                Zespół
-              </Text>
-              <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
-                {report.people.length}{" "}
-                {report.people.length === 1 ? "osoba" : "osoby"} ·{" "}
-                {totalHours.toFixed(2)} godz.
-              </Text>
-            </View>
+          <DetailSection
+            label="Zespół"
+            count={`${report.people.length} ${report.people.length === 1 ? "osoba" : "osoby"} · ${totalHours.toFixed(2)} godz.`}
+          >
             {report.people.length === 0 ? (
               <Text className="text-sm text-muted py-1">
                 Nie dodano osób do raportu.
@@ -1353,7 +1481,7 @@ const ReportCard = ({
                 );
               })
             )}
-          </View>
+          </DetailSection>
 
           <View style={{ marginTop: 24 }}>
             {approved ? (

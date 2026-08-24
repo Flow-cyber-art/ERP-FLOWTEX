@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import {
@@ -7,6 +7,7 @@ import {
   IconBadge,
   StatusBadge,
   ScreenHeader,
+  SearchablePicker,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
@@ -196,106 +197,23 @@ export function SavedReportsScreen() {
             <MaterialIcons name="expand-more" size={20} color={COLORS.muted} />
           </Pressable>
 
-          <Modal
+          <SearchablePicker
             visible={pickerOpen}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setPickerOpen(false)}
-          >
-            <Pressable
-              onPress={() => setPickerOpen(false)}
-              style={{
-                flex: 1,
-                backgroundColor: "rgba(0,0,0,0.5)",
-                justifyContent: "center",
-                alignItems: "center",
-                padding: 20,
-              }}
-            >
-              <Pressable
-                onPress={(e) => e.stopPropagation()}
-                className="bg-surface border border-border rounded-2xl"
-                style={{ maxHeight: "70%", overflow: "hidden", width: "100%", maxWidth: 480 }}
-              >
-                <View
-                  className="border-border"
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    borderBottomWidth: 1,
-                    paddingHorizontal: 14,
-                    paddingVertical: 4,
-                  }}
-                >
-                  <MaterialIcons name="search" size={18} color={COLORS.muted} />
-                  <TextInput
-                    autoFocus
-                    value={pickerQuery}
-                    onChangeText={setPickerQuery}
-                    placeholder="Szukaj budowy..."
-                    placeholderTextColor={COLORS.muted}
-                    style={{
-                      flex: 1,
-                      color: COLORS.foreground,
-                      fontSize: 14,
-                      paddingVertical: 10,
-                      paddingHorizontal: 8,
-                    }}
-                  />
-                </View>
-                <ScrollView>
-                  <Pressable
-                    onPress={() => pickBuild("all")}
-                    style={({ pressed }) => ({
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      backgroundColor: pressed ? COLORS.background : "transparent",
-                    })}
-                  >
-                    <Text style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
-                      Wszystkie budowy
-                    </Text>
-                    {selectedBuildId === "all" && (
-                      <MaterialIcons name="check" size={18} color={COLORS.primary} />
-                    )}
-                  </Pressable>
-                  {pickerBuilds.map((b) => (
-                    <Pressable
-                      key={b.id}
-                      onPress={() => pickBuild(b.id)}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: 14,
-                        paddingVertical: 12,
-                        borderTopWidth: 1,
-                        borderTopColor: COLORS.border,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        backgroundColor: pressed ? COLORS.background : "transparent",
-                      })}
-                    >
-                      <Text style={{ color: COLORS.foreground, fontSize: 14 }} numberOfLines={1}>
-                        <Text style={{ fontWeight: "700" }}>{b.number}</Text> · {b.name}
-                      </Text>
-                      {selectedBuildId === b.id && (
-                        <MaterialIcons name="check" size={18} color={COLORS.primary} />
-                      )}
-                    </Pressable>
-                  ))}
-                  {pickerBuilds.length === 0 && (
-                    <Text
-                      style={{ color: COLORS.muted, fontSize: 13, padding: 14 }}
-                    >
-                      Brak budów pasujących do wyszukiwania.
-                    </Text>
-                  )}
-                </ScrollView>
-              </Pressable>
-            </Pressable>
-          </Modal>
+            onClose={() => setPickerOpen(false)}
+            query={pickerQuery}
+            onQueryChange={setPickerQuery}
+            placeholder="Szukaj budowy..."
+            selectedKey={selectedBuildId}
+            onSelect={(key) => pickBuild(key as string | "all")}
+            emptyLabel="Brak budów pasujących do wyszukiwania."
+            items={[
+              { key: "all", title: "Wszystkie budowy" },
+              ...pickerBuilds.map((b) => ({
+                key: b.id,
+                title: `${b.number} · ${b.name}`,
+              })),
+            ]}
+          />
         </>
       )}
 

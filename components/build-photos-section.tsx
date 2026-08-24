@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Text, View } from "react-native";
-import { Button, COLORS } from "@/components/report-ui";
+import { Button, COLORS, notify } from "@/components/report-ui";
 import { listBuildPhotos, uploadBuildPhoto } from "@/lib/data/drive-photos";
 
 const lastSeenKey = (buildId: number) => `build-photos-last-seen:${buildId}`;
@@ -20,9 +20,14 @@ const lastSeenKey = (buildId: number) => `build-photos-last-seen:${buildId}`;
 export function BuildPhotosSection({
   buildId,
   driveFolderUrl,
+  showFolderLink = true,
 }: {
   buildId: number;
   driveFolderUrl: string | null;
+  // Brygadzista dołącza zdjęcia z poziomu apki i nie ma powodu wychodzić
+  // do zewnętrznego folderu (Drive) — link "Otwórz folder ↗" jest tylko
+  // dla Admina, patrz report-screen.tsx.
+  showFolderLink?: boolean;
 }) {
   const [newCount, setNewCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -71,8 +76,16 @@ export function BuildPhotosSection({
         setProgress({ done: i + 1, total: assets.length });
       }
       refreshNewCount();
+      notify(
+        "Zdjęcia wysłane",
+        assets.length === 1
+          ? "Zdjęcie zostało wysłane."
+          : `Wysłano ${assets.length} zdjęć.`,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie udało się wysłać zdjęcia.");
+      const message = err instanceof Error ? err.message : "Nie udało się wysłać zdjęcia.";
+      setError(message);
+      notify("Nie udało się wysłać zdjęć", message);
     } finally {
       setUploading(false);
     }
@@ -113,11 +126,13 @@ export function BuildPhotosSection({
 
   return (
     <View>
-      <Button
-        label={newCount > 0 ? `Otwórz folder ↗ · ${newCount} nowe` : "Otwórz folder ↗"}
-        secondary
-        onPress={openFolder}
-      />
+      {showFolderLink && (
+        <Button
+          label={newCount > 0 ? `Otwórz folder ↗ · ${newCount} nowe` : "Otwórz folder ↗"}
+          secondary
+          onPress={openFolder}
+        />
+      )}
       {uploading ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
           <ActivityIndicator color={COLORS.primary} />

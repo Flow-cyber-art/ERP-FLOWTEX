@@ -64,12 +64,12 @@ export function ReportScreen() {
     updateBuildPhotosUrl,
     setTab,
     warehouseBatches,
-    selectedBatchId,
     setSelectedBatchId,
-    plannedAmount,
     setPlannedAmount,
     draftAssignments,
-    addToDraft,
+    addMaterialToDraft,
+    updateDraftQuantity,
+    removeFromDraft,
     commitAssignments,
   } = useAppData();
 
@@ -410,29 +410,35 @@ export function ReportScreen() {
                 }}
               >
                 <Text style={{ color: COLORS.muted, fontSize: 11 }}>ZDJĘCIA BUDOWY</Text>
-                <Pressable
-                  disabled={reportApproved || !activeBuild}
-                  onPress={() => {
-                    setEditingPhotos(!editingPhotos);
-                    setPhotosUrlInput(activeBuild?.photosUrl || "");
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: reportApproved ? COLORS.muted : COLORS.primary,
-                      fontSize: 13,
-                      fontWeight: "700",
+                {/* Link do zewnętrznego katalogu (Drive) i jego zmiana są
+                    tylko dla Admina — Brygadzista dołącza zdjęcia z poziomu
+                    apki (BuildPhotosSection niżej) i nie musi ani nie
+                    powinien widzieć/zmieniać samego folderu. */}
+                {devRole !== "Brygadzista" && (
+                  <Pressable
+                    disabled={reportApproved || !activeBuild}
+                    onPress={() => {
+                      setEditingPhotos(!editingPhotos);
+                      setPhotosUrlInput(activeBuild?.photosUrl || "");
                     }}
                   >
-                    {editingPhotos
-                      ? "Zwiń"
-                      : activeBuild?.photosUrl
-                        ? "Zmień"
-                        : "+ Dodaj link"}
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={{
+                        color: reportApproved ? COLORS.muted : COLORS.primary,
+                        fontSize: 13,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {editingPhotos
+                        ? "Zwiń"
+                        : activeBuild?.photosUrl
+                          ? "Zmień"
+                          : "+ Dodaj link"}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
-              {editingPhotos && (
+              {devRole !== "Brygadzista" && editingPhotos && (
                 <View style={{ marginTop: 10 }}>
                   <Field
                     placeholder="https://drive.google.com/..."
@@ -474,6 +480,7 @@ export function ReportScreen() {
                   <BuildPhotosSection
                     buildId={Number(activeBuild.id)}
                     driveFolderUrl={activeBuild.photosUrl ?? null}
+                    showFolderLink={devRole !== "Brygadzista"}
                   />
                 </View>
               )}
@@ -644,26 +651,31 @@ export function ReportScreen() {
                             a.material!.name.localeCompare(b.material!.name),
                           )
                           .map(({ batch, material }) => {
-                            const selected = selectedBatchId === String(batch.id);
+                            const alreadyAdded = draftAssignments.some(
+                              (a) => a.batchId === String(batch.id),
+                            );
                             return (
                               <Pressable
                                 key={batch.id}
-                                onPress={() => setSelectedBatchId(String(batch.id))}
+                                disabled={alreadyAdded}
+                                onPress={() => addMaterialToDraft(String(batch.id))}
                                 style={{
                                   paddingVertical: 12,
                                   borderBottomWidth: 1,
                                   borderBottomColor: COLORS.border,
-                                  backgroundColor: selected
+                                  backgroundColor: alreadyAdded
                                     ? COLORS.successBg
                                     : "transparent",
-                                  borderRadius: selected ? 8 : 0,
-                                  paddingHorizontal: selected ? 8 : 0,
+                                  borderRadius: alreadyAdded ? 8 : 0,
+                                  paddingHorizontal: alreadyAdded ? 8 : 0,
+                                  opacity: alreadyAdded ? 0.6 : 1,
                                 }}
                               >
                                 <Text
                                   style={{ color: COLORS.foreground, fontWeight: "700" }}
                                 >
                                   {material!.name}
+                                  {alreadyAdded ? " · dodano" : ""}
                                 </Text>
                                 <Text
                                   style={{
@@ -687,22 +699,6 @@ export function ReportScreen() {
                         )}
                       </ScrollView>
 
-                      {selectedBatchId && (
-                        <>
-                          <Text className="text-xs text-muted uppercase mt-4">
-                            Ilość
-                          </Text>
-                          <QuantityStepper
-                            style={{ marginTop: 8 }}
-                            value={plannedAmount}
-                            onChangeText={setPlannedAmount}
-                          />
-                          <View style={{ marginTop: 12 }}>
-                            <Button label="+ Dodaj do listy" onPress={addToDraft} />
-                          </View>
-                        </>
-                      )}
-
                       {draftAssignments.length > 0 && (
                         <View
                           style={{
@@ -725,17 +721,35 @@ export function ReportScreen() {
                                 style={{
                                   flexDirection: "row",
                                   justifyContent: "space-between",
+                                  alignItems: "center",
                                   paddingVertical: 8,
                                   borderBottomWidth: 1,
                                   borderBottomColor: COLORS.border,
+                                  gap: 8,
                                 }}
                               >
-                                <Text className="text-xs text-foreground">
+                                <Text
+                                  className="text-xs text-foreground"
+                                  style={{ flex: 1 }}
+                                  numberOfLines={1}
+                                >
                                   {material?.name}
                                 </Text>
-                                <Text className="text-xs text-primary font-bold">
-                                  {draft.quantity} {material?.unit}
-                                </Text>
+                                <QuantityStepper
+                                  value={draft.quantity ? String(draft.quantity) : ""}
+                                  onChangeText={(v) => updateDraftQuantity(draft.batchId, v)}
+                                  unit={material?.unit}
+                                />
+                                <Pressable
+                                  onPress={() => removeFromDraft(draft.batchId)}
+                                  hitSlop={8}
+                                >
+                                  <MaterialIcons
+                                    name="close"
+                                    size={18}
+                                    color={COLORS.muted}
+                                  />
+                                </Pressable>
                               </View>
                             );
                           })}

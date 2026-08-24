@@ -195,7 +195,7 @@ function useAppDataState(
       ? "worker"
       : initialRole === "Admin"
         ? "warehouse"
-        : "report",
+        : "savedReports",
   );
   // Które zakładki zostały już choć raz odwiedzone w tej sesji — steruje
   // `enabled` zapytań, które nie są potrzebne od razu na starcie (patrz
@@ -1099,6 +1099,28 @@ function useAppDataState(
       ]);
     setPlannedAmount("");
   };
+  // Klik na materiał w wyszukiwarce dodaje go od razu do listy oczekującej
+  // (z ilością 0, edytowalną w miejscu) zamiast wymuszać osobny krok
+  // "wpisz ilość → Dodaj do listy" — przy kolejnym materiale użytkownik
+  // po prostu klika następną pozycję, bez cofania się do pustego pola.
+  const addMaterialToDraft = (batchId: string) => {
+    if (draftAssignments.some((a) => a.batchId === batchId)) return;
+    const batch = warehouseBatches.find((b) => String(b.id) === batchId);
+    if (!batch) return;
+    setDraftAssignments([
+      ...draftAssignments,
+      { batchId, materialId: String(batch.materialId), quantity: 0 },
+    ]);
+  };
+  const updateDraftQuantity = (batchId: string, value: string) => {
+    const quantity = Number(value) || 0;
+    setDraftAssignments(
+      draftAssignments.map((a) => (a.batchId === batchId ? { ...a, quantity } : a)),
+    );
+  };
+  const removeFromDraft = (batchId: string) => {
+    setDraftAssignments(draftAssignments.filter((a) => a.batchId !== batchId));
+  };
   const commitAssignments = async () => {
     if (!draftAssignments.length) return;
     // Patrz komentarz w addToDraft — activeBuild?.id jest tym, co
@@ -1118,11 +1140,15 @@ function useAppDataState(
         batchId: Number(d.batchId),
         quantity: d.quantity,
       }))
-      .filter((i) => !Number.isNaN(i.batchId));
+      .filter((i) => !Number.isNaN(i.batchId) && i.quantity > 0);
     if (Number.isNaN(numericBuildId) || !items.length) {
       notify(
-        "Poczekaj na synchronizację",
-        "Budowa lub partia jeszcze się nie zsynchronizowały z serwerem — spróbuj ponownie za chwilę.",
+        items.length
+          ? "Poczekaj na synchronizację"
+          : "Podaj ilość",
+        items.length
+          ? "Budowa lub partia jeszcze się nie zsynchronizowały z serwerem — spróbuj ponownie za chwilę."
+          : "Wpisz ilość dla przynajmniej jednego materiału z listy.",
       );
       return;
     }
@@ -2096,6 +2122,9 @@ function useAppDataState(
     shortages,
     belowMinimumMaterials,
     addToDraft,
+    addMaterialToDraft,
+    updateDraftQuantity,
+    removeFromDraft,
     commitAssignments,
     saveMaterial,
     saveBuild,

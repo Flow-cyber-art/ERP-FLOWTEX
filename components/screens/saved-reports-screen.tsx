@@ -208,13 +208,14 @@ export function SavedReportsScreen() {
                 flex: 1,
                 backgroundColor: "rgba(0,0,0,0.5)",
                 justifyContent: "center",
+                alignItems: "center",
                 padding: 20,
               }}
             >
               <Pressable
                 onPress={(e) => e.stopPropagation()}
                 className="bg-surface border border-border rounded-2xl"
-                style={{ maxHeight: "70%", overflow: "hidden" }}
+                style={{ maxHeight: "70%", overflow: "hidden", width: "100%", maxWidth: 480 }}
               >
                 <View
                   className="border-border"

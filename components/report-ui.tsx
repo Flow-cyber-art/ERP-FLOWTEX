@@ -1102,98 +1102,165 @@ const ReportCard = ({
             </Text>
           )}
 
-          <Text className="text-xs text-muted uppercase mt-4 mb-1">
-            Materiały
-          </Text>
-          {Object.keys(report.materialValues).length === 0 ? (
-            <Text className="text-sm text-muted py-1">
-              Nie zgłoszono zużycia materiałów.
-            </Text>
-          ) : (
-            Object.entries(report.materialValues).map(
-              ([materialId, used], i) => {
-                const material = materials.find((m) => m.id === materialId);
-                const plan = planned.find(
-                  (a) => a.materialId === materialId,
-                )?.planned;
-                const usedNum = Number(used) || 0;
-                const differs = plan !== undefined && usedNum !== plan;
-                const reason = report.reasons[materialId];
-                const cost = report.materialCosts?.[materialId];
-                return (
-                  <View
-                    key={materialId}
-                    style={{
-                      paddingVertical: 8,
-                      borderTopWidth: i > 0 ? 1 : 0,
-                      borderTopColor: COLORS.border,
-                    }}
-                  >
+          {/* Sekcje rozdzielone dużym odstępem pionowym (zasada Gestalt:
+              bliskość = przynależność) zamiast jednakowo ciasnych bloków —
+              to samo "MATERIAŁY / KOSZTY / ZESPÓŁ" jedno pod drugim bez
+              oddechu sprawiało, że całość czytała się jak jeden nierozróżnialny
+              blob, mimo że treściowo to cztery różne grupy informacji. */}
+          <View style={{ marginTop: 24 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                marginBottom: 10,
+              }}
+            >
+              <Text
+                style={{ color: COLORS.muted, fontSize: 12, fontWeight: "800" }}
+                className="uppercase"
+              >
+                Materiały
+              </Text>
+              <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                {Object.keys(report.materialValues).length}
+              </Text>
+            </View>
+            {Object.keys(report.materialValues).length === 0 ? (
+              <Text className="text-sm text-muted py-1">
+                Nie zgłoszono zużycia materiałów.
+              </Text>
+            ) : (
+              Object.entries(report.materialValues).map(
+                ([materialId, used], i) => {
+                  const material = materials.find((m) => m.id === materialId);
+                  const plan = planned.find(
+                    (a) => a.materialId === materialId,
+                  )?.planned;
+                  const usedNum = Number(used) || 0;
+                  const ratio = plan ? usedNum / plan : null;
+                  // Zielony = w normie, pomarańczowy = lekkie przekroczenie,
+                  // czerwony = znaczne — żeby nie trzeba było porównywać dwóch
+                  // liczb w głowie, sam kolor/pasek już to mówi.
+                  const barColor =
+                    ratio === null || ratio <= 1
+                      ? COLORS.success
+                      : ratio <= 1.15
+                        ? COLORS.warning
+                        : COLORS.danger;
+                  const differs = plan !== undefined && usedNum !== plan;
+                  const reason = report.reasons[materialId];
+                  const cost = report.materialCosts?.[materialId];
+                  return (
                     <View
+                      key={materialId}
                       style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
+                        paddingVertical: 10,
+                        borderTopWidth: i > 0 ? 1 : 0,
+                        borderTopColor: COLORS.border,
                       }}
                     >
-                      <Text className="text-sm text-foreground flex-1 pr-2">
+                      <Text className="text-sm font-semibold text-foreground">
                         {material?.name || materialId}
                       </Text>
-                      <View style={{ alignItems: "flex-end" }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "baseline",
+                          marginTop: 4,
+                        }}
+                      >
                         <Text
                           style={{
                             color: differs ? COLORS.warning : COLORS.foreground,
                             fontWeight: "800",
-                            fontSize: 13,
+                            fontSize: 15,
                           }}
                         >
                           {usedNum} {material?.unit}
-                          {plan !== undefined ? ` / plan ${plan}` : ""}
                         </Text>
-                        {cost !== undefined && (
-                          <Text
-                            style={{
-                              color: COLORS.muted,
-                              fontSize: 11,
-                              marginTop: 2,
-                            }}
-                          >
-                            {formatPLN(cost)}
-                          </Text>
-                        )}
+                        <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                          {plan !== undefined ? `z ${plan} ${material?.unit} planu` : ""}
+                        </Text>
                       </View>
+                      {plan !== undefined && plan > 0 && (
+                        <View
+                          style={{
+                            height: 4,
+                            borderRadius: 2,
+                            backgroundColor: COLORS.background,
+                            marginTop: 6,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <View
+                            style={{
+                              height: 4,
+                              borderRadius: 2,
+                              width: `${Math.min(100, (usedNum / plan) * 100)}%`,
+                              backgroundColor: barColor,
+                            }}
+                          />
+                        </View>
+                      )}
+                      {cost !== undefined && (
+                        <Text
+                          style={{
+                            color: COLORS.muted,
+                            fontSize: 12,
+                            marginTop: 4,
+                            textAlign: "right",
+                          }}
+                        >
+                          {formatPLN(cost)}
+                        </Text>
+                      )}
+                      {reason ? (
+                        <Text
+                          style={{
+                            color: COLORS.warning,
+                            fontSize: 12,
+                            marginTop: 4,
+                          }}
+                        >
+                          Powód odchylenia: {reason}
+                        </Text>
+                      ) : null}
                     </View>
-                    {reason ? (
-                      <Text
-                        style={{
-                          color: COLORS.warning,
-                          fontSize: 12,
-                          marginTop: 3,
-                        }}
-                      >
-                        Powód odchylenia: {reason}
-                      </Text>
-                    ) : null}
-                  </View>
-                );
-              },
-            )
-          )}
+                  );
+                },
+              )
+            )}
+          </View>
 
           {report.extraCosts && report.extraCosts.length > 0 && (
-            <>
-              <Text className="text-xs text-muted uppercase mt-4 mb-1">
-                Dodatkowe koszty
-              </Text>
-              {report.extraCosts.map((cost, i) => (
+            <View style={{ marginTop: 24 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  marginBottom: 10,
+                }}
+              >
+                <Text
+                  style={{ color: COLORS.muted, fontSize: 12, fontWeight: "800" }}
+                  className="uppercase"
+                >
+                  Koszty dodatkowe
+                </Text>
+                <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                  {report.extraCosts.length}
+                </Text>
+              </View>
+              {report.extraCosts.map((cost) => (
                 <View
                   key={cost.id}
                   style={{
                     flexDirection: "row",
                     justifyContent: "space-between",
-                    paddingVertical: 6,
-                    borderTopWidth: i > 0 ? 1 : 0,
-                    borderTopColor: COLORS.border,
+                    paddingVertical: 5,
                   }}
                 >
                   <Text
@@ -1206,7 +1273,7 @@ const ReportCard = ({
                   <Text
                     style={{
                       color: COLORS.foreground,
-                      fontWeight: "800",
+                      fontWeight: "700",
                       fontSize: 13,
                     }}
                   >
@@ -1218,19 +1285,20 @@ const ReportCard = ({
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
-                  paddingTop: 8,
-                  marginTop: 4,
+                  paddingTop: 10,
+                  marginTop: 6,
                   borderTopWidth: 1,
                   borderTopColor: COLORS.border,
                 }}
               >
                 <Text
-                  style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}
+                  style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "800" }}
+                  className="uppercase"
                 >
                   Razem
                 </Text>
                 <Text
-                  style={{ color: COLORS.primary, fontWeight: "800", fontSize: 13 }}
+                  style={{ color: COLORS.primary, fontWeight: "800", fontSize: 15 }}
                 >
                   {report.extraCosts
                     .reduce((sum, c) => sum + c.amount, 0)
@@ -1238,44 +1306,56 @@ const ReportCard = ({
                   zł
                 </Text>
               </View>
-            </>
+            </View>
           )}
 
-          <Text className="text-xs text-muted uppercase mt-4 mb-1">
-            Zespół · {totalHours.toFixed(2)} godz. łącznie
-          </Text>
-          {report.people.length === 0 ? (
-            <Text className="text-sm text-muted py-1">
-              Nie dodano osób do raportu.
-            </Text>
-          ) : (
-            report.people.map((person, i) => {
-              const employee = employees.find(
-                (e) => e.id === person.employeeId,
-              );
-              return (
-                <View
-                  key={person.employeeId}
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    paddingVertical: 8,
-                    borderTopWidth: i > 0 ? 1 : 0,
-                    borderTopColor: COLORS.border,
-                  }}
-                >
-                  <Text className="text-sm text-foreground">
-                    {employee?.name || person.employeeId}
-                  </Text>
-                  <Text className="text-sm text-muted">
-                    {person.start}–{person.end}
-                  </Text>
-                </View>
-              );
-            })
-          )}
+          <View style={{ marginTop: 24 }}>
+            <View style={{ marginBottom: 10 }}>
+              <Text
+                style={{ color: COLORS.muted, fontSize: 12, fontWeight: "800" }}
+                className="uppercase"
+              >
+                Zespół
+              </Text>
+              <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                {report.people.length}{" "}
+                {report.people.length === 1 ? "osoba" : "osoby"} ·{" "}
+                {totalHours.toFixed(2)} godz.
+              </Text>
+            </View>
+            {report.people.length === 0 ? (
+              <Text className="text-sm text-muted py-1">
+                Nie dodano osób do raportu.
+              </Text>
+            ) : (
+              report.people.map((person, i) => {
+                const employee = employees.find(
+                  (e) => e.id === person.employeeId,
+                );
+                return (
+                  <View
+                    key={person.employeeId}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      paddingVertical: 8,
+                      borderTopWidth: i > 0 ? 1 : 0,
+                      borderTopColor: COLORS.border,
+                    }}
+                  >
+                    <Text className="text-sm text-foreground">
+                      {employee?.name || person.employeeId}
+                    </Text>
+                    <Text className="text-sm text-muted">
+                      {person.start}–{person.end}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
 
-          <View style={{ marginTop: 14 }}>
+          <View style={{ marginTop: 24 }}>
             {approved ? (
               <Text
                 style={{
@@ -1285,7 +1365,7 @@ const ReportCard = ({
                   paddingVertical: 6,
                 }}
               >
-                Raport zatwierdzony
+                ✓ Raport zatwierdzony
               </Text>
             ) : (
               <Button label="Zatwierdź raport" onPress={onApprove} />

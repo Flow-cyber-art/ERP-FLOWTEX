@@ -23,10 +23,22 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SignJWT, importPKCS8 } from "https://esm.sh/jose@5";
 
+// Wywoływane też z web (Vercel), nie tylko z aplikacji natywnej — bez tych
+// nagłówków przeglądarka blokuje request na etapie CORS preflight (OPTIONS),
+// zanim ciało funkcji w ogóle się wykona (stąd błąd widoczny w konsoli, nie
+// w logach Edge Function). "*" jest bezpieczne tutaj: funkcja i tak wymaga
+// ważnego JWT-a w Authorization, więc origin sam w sobie niczego nie
+// autoryzuje.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 }
 
@@ -116,6 +128,10 @@ async function findOrCreateFolder(
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return json({ error: "Brak nagłówka autoryzacji." }, 401);
 

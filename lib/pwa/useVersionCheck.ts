@@ -1,9 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { BUILD_VERSION } from "@/constants/build-version";
 import { clearServiceWorkerCache } from "@/lib/pwa/registerServiceWorker";
-
-const CHECK_INTERVAL_MS = 5 * 60 * 1000; // co 5 minut
 
 /**
  * Wykrywanie nowej wersji appki wdrożonej na serwerze.
@@ -15,16 +13,27 @@ const CHECK_INTERVAL_MS = 5 * 60 * 1000; // co 5 minut
  *   odpytywany na żywo z serwera (zawsze `cache: "no-store"`, nigdy nie
  *   trafia do cache'a service workera — patrz public/sw.js).
  * - Jeśli różnią się → na serwerze jest nowszy build niż ten, który ma
- *   klient w pamięci. Czyścimy cache statycznych assetów service workera
- *   i przeładowujemy stronę, żeby ściągnąć nową wersję.
+ *   klient w pamięci.
  *
- * Sprawdzane: co CHECK_INTERVAL_MS oraz przy każdym powrocie apki na
- * pierwszy plan (np. przełączenie karty/aplikacji z powrotem).
+ * Sprawdzane: od razu przy montowaniu i za każdym razem, gdy apka wraca
+ * na pierwszy plan (np. przełączenie karty/aplikacji z powrotem —
+ * `AppState` → `"active"`). Bez osobnego interwału cyklicznego: apkę
+ * odłożoną w tło (nie zamkniętą) sprawdzamy dokładnie w momencie, kiedy
+ * ktoś do niej wraca, więc dobijanie co kilka minut w tle i tak nie
+ * wykryje nic wcześniej niż to zdarzenie — tylko zużywa baterię/dane.
+ *
+ * W ODRÓŻNIENIU OD POPRZEDNIEJ WERSJI: nie czyści cache'a i nie
+ * przeładowuje strony automatycznie — tylko zgłasza, że jest nowa wersja
+ * (`updateAvailable`), żeby UI mogło pokazać baner i zostawić decyzję
+ * "kiedy" użytkownikowi (`applyUpdate`). Bezwarunkowy auto-reload w
+ * trakcie wypełniania np. raportu dziennego (dane trzymane lokalnie,
+ * jeszcze niewysłane) mógłby po cichu skasować niezapisaną pracę.
  *
  * Web-only — na natywnym iOS/Android aktualizacje idą przez App/Play
  * Store, więc hook jest tam no-opem.
  */
 export function useVersionCheck() {
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const checkingRef = useRef(false);
 
   useEffect(() => {
@@ -40,11 +49,7 @@ export function useVersionCheck() {
         if (!response.ok) return;
         const data: { version?: string } = await response.json();
         if (data.version && data.version !== BUILD_VERSION) {
-          console.info(
-            `[version-check] nowy build na serwerze (${data.version} ≠ ${BUILD_VERSION}) — aktualizuję…`,
-          );
-          await clearServiceWorkerCache();
-          window.location.reload();
+          setUpdateAvailable(true);
         }
       } catch {
         // Brak sieci / błąd fetcha — po prostu spróbujemy przy
@@ -55,14 +60,20 @@ export function useVersionCheck() {
     };
 
     checkVersion();
-    const intervalId = setInterval(checkVersion, CHECK_INTERVAL_MS);
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") checkVersion();
     });
 
     return () => {
-      clearInterval(intervalId);
       subscription.remove();
     };
   }, []);
+
+  const applyUpdate = useCallback(async () => {
+    if (Platform.OS !== "web") return;
+    await clearServiceWorkerCache();
+    window.location.reload();
+  }, []);
+
+  return { updateAvailable, applyUpdate };
 }

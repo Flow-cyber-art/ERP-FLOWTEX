@@ -6,6 +6,7 @@ import {
   COLORS,
   todayLabelPL,
   Button,
+  confirmAction,
   Field,
   IconBadge,
   notify,
@@ -251,6 +252,22 @@ export function ReportScreen() {
     <>
       <ScreenHeader
         title="Zużycie dzienne"
+        action={
+          !reportApproved ? (
+            <Button
+              label="Anuluj"
+              secondary
+              onPress={() =>
+                confirmAction(
+                  "Anulować raport?",
+                  "Niezapisane zmiany w tym raporcie zostaną utracone.",
+                  "Anuluj raport",
+                  () => setTab("savedReports"),
+                )
+              }
+            />
+          ) : undefined
+        }
       />
 
       <ReportStepper step={reportStep} />

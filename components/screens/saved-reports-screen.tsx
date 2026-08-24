@@ -10,7 +10,8 @@ import {
 import { useAppData } from "@/contexts/app-data";
 
 export function SavedReportsScreen() {
-  const { builds, savedReports, openSavedReport, startNewReport } = useAppData();
+  const { builds, savedReports, openSavedReport, startNewReport, devRole, myProfileId } =
+    useAppData();
 
   // Wybór budowy PRZED listą — z czasem raportów robi się sporo, więc
   // jedna wspólna lista wszystkich budów naraz przestaje być użyteczna.
@@ -33,10 +34,24 @@ export function SavedReportsScreen() {
     setSelectedBuildId("all");
   };
 
+  // Brygadzista widzi tylko swoje raporty — nie ma po co porównywać się z
+  // innymi brygadzistami na tej samej/innej budowie, to tylko szum.
+  // Raporty bez znanego autora (submittedByProfileId null — sprzed 025,
+  // albo lokalne jeszcze niezsynchronizowane) zostają widoczne: nie da
+  // się ich przypisać komuś INNEMU, więc bezpieczniej pokazać niż ukryć
+  // być może własną, jeszcze niewysłaną pracę. Admin i Pracownik widzą
+  // bez zmian — to ograniczenie dotyczy wyłącznie Brygadzisty.
+  const mineOnly =
+    devRole === "Brygadzista"
+      ? savedReports.filter(
+          (r) => !r.submittedByProfileId || r.submittedByProfileId === myProfileId,
+        )
+      : savedReports;
+
   const reportsInScope =
     selectedBuildId === "all"
-      ? savedReports.filter((r) => visibleBuilds.some((b) => b.id === r.buildId))
-      : savedReports.filter((r) => r.buildId === selectedBuildId);
+      ? mineOnly.filter((r) => visibleBuilds.some((b) => b.id === r.buildId))
+      : mineOnly.filter((r) => r.buildId === selectedBuildId);
 
   const sorted = [...reportsInScope].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),

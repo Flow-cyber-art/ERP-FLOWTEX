@@ -20,7 +20,7 @@ import {
   subscribeSafeAreaInsets,
 } from "@/lib/_core/manus-runtime";
 import { registerServiceWorker } from "@/lib/pwa/registerServiceWorker";
-import { useVersionCheck } from "@/lib/pwa/useVersionCheck";
+import { UpdateAvailableBanner } from "@/components/update-available-banner";
 import { useViewportHeight } from "@/lib/_core/use-viewport-height";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -57,14 +57,11 @@ export default function RootLayout() {
   }, []);
 
   // PWA (web-only): rejestracja service workera dla trybu offline
-  // (statyczne assety) oraz cykliczne sprawdzanie, czy na serwerze nie
-  // pojawił się nowszy build — jeśli tak, cache jest czyszczony i strona
-  // przeładowywana. Zobacz lib/pwa/*.
+  // (statyczne assety). Sprawdzanie nowszego builda na serwerze —
+  // <UpdateAvailableBanner /> niżej, przez lib/pwa/useVersionCheck.ts.
   useEffect(() => {
     registerServiceWorker();
   }, []);
-
-  useVersionCheck();
 
   // WEB-ONLY: wymusza przeliczenie wysokości viewportu po starcie.
   // Bez tego w standalone PWA layout zostaje z wysokością zapamiętaną
@@ -128,6 +125,7 @@ export default function RootLayout() {
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
+        <UpdateAvailableBanner />
         {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
         {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
         {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}

@@ -579,7 +579,7 @@ export default function HomeScreen() {
   return (
     <AuthGate>
       {(profile) => (
-        <AppDataProvider initialRole={profile.role}>
+        <AppDataProvider initialRole={profile.role} myProfileId={profile.id}>
           <HomeScreenInner />
         </AppDataProvider>
       )}

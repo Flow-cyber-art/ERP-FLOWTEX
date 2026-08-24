@@ -109,6 +109,11 @@ export type SavedReport = {
   km?: number;
   kmRateApplied?: number;
   kmCost?: number;
+  // Kto faktycznie wysłał ten raport (profiles.id) — null dla raportów
+  // wysłanych zanim ta kolumna zaczęła być wypełniana (025) oraz dla
+  // lokalnych, jeszcze niezsynchronizowanych wpisów. Używane wyłącznie do
+  // filtrowania "Moje raporty" u Brygadzisty (saved-reports-screen.tsx).
+  submittedByProfileId?: string | null;
 };
 
 import {
@@ -171,6 +176,7 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
     km: row.km != null ? Number(row.km) : undefined,
     kmRateApplied: row.kmRateApplied != null ? Number(row.kmRateApplied) : undefined,
     kmCost: row.kmCost != null ? Number(row.kmCost) : undefined,
+    submittedByProfileId: row.submittedByProfileId,
   };
 }
 
@@ -182,6 +188,7 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
 // losing access to shared data.
 function useAppDataState(
   initialRole: "Admin" | "Brygadzista" | "Pracownik" = "Brygadzista",
+  myProfileId: string | null = null,
 ) {
   const [tab, setTab] = useState(
     initialRole === "Pracownik"
@@ -1952,6 +1959,7 @@ function useAppDataState(
   return {
     tab,
     devRole,
+    myProfileId,
     workerPeriod,
     teamPeriod,
     supervisedEmployeeIds,
@@ -2118,11 +2126,13 @@ const AppDataContext = createContext<AppData | null>(null);
 export function AppDataProvider({
   children,
   initialRole,
+  myProfileId,
 }: {
   children: ReactNode;
   initialRole?: "Admin" | "Brygadzista" | "Pracownik";
+  myProfileId?: string | null;
 }) {
-  const value = useAppDataState(initialRole);
+  const value = useAppDataState(initialRole, myProfileId ?? null);
   return (
     <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
   );

@@ -32,22 +32,19 @@ export async function uploadBuildPhoto(
 
 export type BuildPhotoRow = {
   id: number;
-  buildId: number;
-  uploadedByName: string;
-  driveFileUrl: string;
-  thumbnailUrl: string | null;
-  driveFolderName: string;
   createdAt: string;
 };
 
 // Czytane wprost z Supabase (RLS: select dla każdego zalogowanego, patrz
 // 021_google_drive_zdjecia.sql) — bez wołania edge function, to zwykły
-// odczyt tabeli. Galeria in-app (builds-screen.tsx, report-screen.tsx),
-// żeby nikt na co dzień nie musiał otwierać samego Google Drive.
+// odczyt tabeli. Używane tylko do policzenia "ile nowych zdjęć od
+// ostatniego otwarcia folderu" (build-photos-section.tsx) — samych zdjęć
+// apka nie wyświetla, Google Drive i tak zawsze pokazuje wszystko
+// poprawnie po otwarciu linku.
 export async function listBuildPhotos(buildId: number): Promise<BuildPhotoRow[]> {
   const { data, error } = await supabase
     .from("build_photos")
-    .select("id, buildId, uploadedByName, driveFileUrl, thumbnailUrl, driveFolderName, createdAt")
+    .select("id, createdAt")
     .eq("buildId", buildId)
     .order("createdAt", { ascending: false });
   if (error) throw new Error(error.message);

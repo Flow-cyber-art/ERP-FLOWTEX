@@ -1,45 +1,54 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Text, View } from "react-native";
 import { Button, COLORS } from "@/components/report-ui";
-import {
-  listBuildPhotos,
-  uploadBuildPhoto,
-  type BuildPhotoRow,
-} from "@/lib/data/drive-photos";
+import { listBuildPhotos, uploadBuildPhoto } from "@/lib/data/drive-photos";
 
-// Dołączanie i przeglądanie zdjęć budowy — w całości w apce, bez
-// przechodzenia do Google Drive/logowania Gmailem. Współdzielone przez
-// builds-screen.tsx (Admin) i report-screen.tsx (Brygadzista, raport
-// dzienny) — ten sam formularz, ta sama galeria miniatur w obu miejscach.
+const lastSeenKey = (buildId: number) => `build-photos-last-seen:${buildId}`;
+
+// Dołączanie zdjęć budowy — w całości w apce, bez logowania do Google
+// Drive (aparat/galeria → auto-upload). Współdzielone przez
+// builds-screen.tsx (Admin) i report-screen.tsx (Brygadzista).
 //
-// Dlaczego galeria w ogóle: konta ludzi w apce logują się przez Supabase
-// Auth, nie mają (i nie muszą mieć) dostępu do Shared Drive konta
-// serwisowego — link "Otwórz folder" wymaga osobnego logowania Gmailem i
-// prośby o dostęp, na którą nikt nie odpowie (konto serwisowe to nie
-// osoba). Miniatury (thumbnailUrl, drive-photos edge function nadaje im
-// "anyone with the link: reader") pozwalają oglądać zdjęcia wprost w
-// apce — Drive zostaje czystym magazynem plików w tle, nie czymś, do
-// czego trzeba wchodzić na co dzień.
+// Świadomie BEZ miniatur/galerii w apce: Drive i tak zawsze pokazuje
+// wszystko poprawnie po otwarciu linku, więc nie ma sensu dublować tego
+// w środku apki. Jedyne, czego brakowało bez tego, to wiedza "czy jest
+// coś nowego, zanim w ogóle otworzę Drive" — stąd licznik nowych zdjęć
+// (per urządzenie, w AsyncStorage: kiedy ostatnio KTOŚ NA TYM URZĄDZENIU
+// kliknął "Otwórz folder"), zerowany przy kliknięciu linku.
 export function BuildPhotosSection({
   buildId,
-  hasDriveFolder,
+  driveFolderUrl,
 }: {
   buildId: number;
-  hasDriveFolder: boolean;
+  driveFolderUrl: string | null;
 }) {
-  const [photos, setPhotos] = useState<BuildPhotoRow[] | null>(null);
+  const [newCount, setNewCount] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = () => {
-    listBuildPhotos(buildId)
-      .then(setPhotos)
-      .catch((err) => setError(err instanceof Error ? err.message : "Błąd wczytywania zdjęć."));
+  const refreshNewCount = () => {
+    Promise.all([listBuildPhotos(buildId), AsyncStorage.getItem(lastSeenKey(buildId))])
+      .then(([photos, lastSeen]) => {
+        const lastSeenAt = lastSeen ? new Date(lastSeen).getTime() : 0;
+        setNewCount(photos.filter((p) => new Date(p.createdAt).getTime() > lastSeenAt).length);
+      })
+      .catch(() => {
+        // Cichy fallback — licznik "nowych" to tylko wygoda, nie krytyczna
+        // informacja, nie ma sensu straszyć błędem przy samym wejściu.
+      });
   };
 
-  useEffect(reload, [buildId]);
+  useEffect(refreshNewCount, [buildId]);
+
+  const openFolder = () => {
+    if (!driveFolderUrl) return;
+    Linking.openURL(driveFolderUrl);
+    AsyncStorage.setItem(lastSeenKey(buildId), new Date().toISOString());
+    setNewCount(0);
+  };
 
   const uploadPickedPhotos = async (assets: ImagePicker.ImagePickerAsset[]) => {
     if (assets.length === 0) return;
@@ -55,7 +64,7 @@ export function BuildPhotosSection({
         await uploadBuildPhoto(buildId, fileName, mimeType, asset.base64);
         setProgress({ done: i + 1, total: assets.length });
       }
-      reload();
+      refreshNewCount();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nie udało się wysłać zdjęcia.");
     } finally {
@@ -88,7 +97,7 @@ export function BuildPhotosSection({
     if (!result.canceled) await uploadPickedPhotos(result.assets);
   };
 
-  if (!hasDriveFolder) {
+  if (!driveFolderUrl) {
     return (
       <Text style={{ color: COLORS.muted, fontSize: 12 }}>
         Ta budowa nie ma jeszcze katalogu na zdjęcia.
@@ -98,15 +107,20 @@ export function BuildPhotosSection({
 
   return (
     <View>
+      <Button
+        label={newCount > 0 ? `Otwórz folder ↗ · ${newCount} nowe` : "Otwórz folder ↗"}
+        secondary
+        onPress={openFolder}
+      />
       {uploading ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
           <ActivityIndicator color={COLORS.primary} />
           <Text style={{ color: COLORS.muted, fontSize: 12 }}>
             Wysyłanie zdjęć{progress ? ` (${progress.done}/${progress.total})` : "…"}
           </Text>
         </View>
       ) : (
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
           <View style={{ flex: 1 }}>
             <Button label="📷 Zrób zdjęcie" secondary onPress={takePhoto} />
           </View>
@@ -117,40 +131,6 @@ export function BuildPhotosSection({
       )}
       {error && (
         <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>{error}</Text>
-      )}
-
-      {photos && photos.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {photos.map((p) => (
-              <Pressable
-                key={p.id}
-                onPress={() => Linking.openURL(p.driveFileUrl)}
-                style={{
-                  width: 84,
-                  height: 84,
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  backgroundColor: COLORS.background,
-                  borderWidth: 1,
-                  borderColor: COLORS.border,
-                }}
-              >
-                {p.thumbnailUrl ? (
-                  <Image
-                    source={{ uri: p.thumbnailUrl }}
-                    style={{ width: "100%", height: "100%" }}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ fontSize: 22 }}>🖼</Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
       )}
     </View>
   );

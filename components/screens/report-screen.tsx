@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   COLORS,
   todayLabelPL,
@@ -392,30 +392,7 @@ export function ReportScreen() {
                   alignItems: "center",
                 }}
               >
-                {activeBuild?.photosUrl ? (
-                  <Pressable
-                    onPress={() => Linking.openURL(activeBuild.photosUrl!)}
-                    style={{ flex: 1, marginRight: 8 }}
-                  >
-                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                      ZDJĘCIA BUDOWY
-                    </Text>
-                    <Text
-                      style={{
-                        color: COLORS.primary,
-                        fontWeight: "700",
-                        fontSize: 13,
-                        marginTop: 2,
-                      }}
-                    >
-                      Otwórz folder ↗
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <Text style={{ color: COLORS.muted, fontSize: 12, flex: 1 }}>
-                    Brak linku do zdjęć tej budowy.
-                  </Text>
-                )}
+                <Text style={{ color: COLORS.muted, fontSize: 11 }}>ZDJĘCIA BUDOWY</Text>
                 <Pressable
                   disabled={reportApproved || !activeBuild}
                   onPress={() => {
@@ -479,7 +456,7 @@ export function ReportScreen() {
                 <View style={{ marginTop: 12 }}>
                   <BuildPhotosSection
                     buildId={Number(activeBuild.id)}
-                    hasDriveFolder={activeBuild.driveFolderId != null}
+                    driveFolderUrl={activeBuild.photosUrl ?? null}
                   />
                 </View>
               )}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { DateField } from "@/components/date-field";
 import {
   COLORS,
@@ -1197,9 +1197,9 @@ export function BuildsScreen() {
             );
           })()}
 
-          {/* Zdjęcia budowy — na razie zwykły link (np. do udostępnionego
-              folderu na Google Drive), wklejany ręcznie. Kliknięcie
-              otwiera go w przeglądarce/apce Drive, nie w ERP. */}
+          {/* Zdjęcia budowy — katalog na Google Drive (utworzony przyciskiem
+              niżej albo, dla starszych budów, wklejony ręcznie jako zwykły
+              link) + dołączanie zdjęć wprost z apki (build-photos-section.tsx). */}
           <View
             style={{
               marginTop: 12,
@@ -1215,33 +1215,7 @@ export function BuildsScreen() {
                 alignItems: "center",
               }}
             >
-              {b.photosUrl ? (
-                <Pressable
-                  onPress={() => Linking.openURL(b.photosUrl!)}
-                  style={{ flex: 1, marginRight: 8 }}
-                >
-                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                    ZDJĘCIA
-                  </Text>
-                  <Text
-                    style={{
-                      color: COLORS.primary,
-                      fontWeight: "700",
-                      fontSize: 13,
-                      marginTop: 2,
-                    }}
-                    numberOfLines={1}
-                  >
-                    Otwórz folder ↗
-                  </Text>
-                </Pressable>
-              ) : (
-                <Text style={{ color: COLORS.muted, fontSize: 12, flex: 1 }}>
-                  {creatingDriveFolderId === b.id
-                    ? "Tworzenie katalogu…"
-                    : "Brak katalogu na zdjęcia."}
-                </Text>
-              )}
+              <Text style={{ color: COLORS.muted, fontSize: 11 }}>ZDJĘCIA</Text>
               {!b.photosUrl && (
                 <Pressable
                   disabled={creatingDriveFolderId === b.id}
@@ -1266,7 +1240,9 @@ export function BuildsScreen() {
                   <Text
                     style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}
                   >
-                    Stwórz katalog na zdjęcia
+                    {creatingDriveFolderId === b.id
+                      ? "Tworzenie katalogu…"
+                      : "Stwórz katalog na zdjęcia"}
                   </Text>
                 </Pressable>
               )}
@@ -1283,7 +1259,7 @@ export function BuildsScreen() {
                   {editingPhotosBuildId === b.id
                     ? "Zwiń"
                     : b.photosUrl
-                      ? "Zmień"
+                      ? "Zmień link"
                       : "…lub wklej link ręcznie"}
                 </Text>
               </Pressable>
@@ -1312,11 +1288,9 @@ export function BuildsScreen() {
                 </View>
               </View>
             )}
-            {b.driveFolderId != null && (
-              <View style={{ marginTop: 12 }}>
-                <BuildPhotosSection buildId={Number(b.id)} hasDriveFolder />
-              </View>
-            )}
+            <View style={{ marginTop: 10 }}>
+              <BuildPhotosSection buildId={Number(b.id)} driveFolderUrl={b.photosUrl ?? null} />
+            </View>
           </View>
 
           {isClosed && b.settlement ? (

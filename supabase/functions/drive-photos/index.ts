@@ -286,39 +286,23 @@ Deno.serve(async (req) => {
 
       const uploaded = await driveFetch(
         accessToken,
-        "/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink,thumbnailLink",
+        "/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink",
         {
           method: "POST",
           headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
           body: bodyParts,
         },
       );
-
-      // Miniatura (thumbnailLink) — wymaga, żeby plik był publicznie
-      // czytelny linkiem, inaczej Google zwraca URL, który i tak wymaga
-      // logowania. Stąd uprawnienie "anyone with the link: reader" na
-      // każdym wgranym zdjęciu — pozwala apce wyświetlić miniaturę i
-      // otworzyć zdjęcie w przeglądarce BEZ logowania do Gmaila/Drive.
-      // Zdjęcia budowy nie są danymi wrażliwymi (plac budowy, materiały),
-      // a link i tak nigdzie nie jest publicznie wypisany — to ten sam
-      // kompromis co "link do udostępnienia" w każdym innym narzędziu.
-      try {
-        await driveFetch(accessToken, `/drive/v3/files/${uploaded.id}/permissions?supportsAllDrives=true`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "anyone", role: "reader" }),
-        });
-      } catch {
-        // Niekrytyczne — zdjęcie i tak jest wgrane, tylko podgląd w apce
-        // może wymagać logowania. Nie przerywamy uploadu z tego powodu.
-      }
+      // Osobne uprawnienie per plik nie jest potrzebne — folder budowy i
+      // każdy jego podfolder dnia/osoby (findOrCreateFolder wyżej) już
+      // mają "anyone with the link: reader", a to wystarcza do otwarcia
+      // zdjęcia linkiem bez logowania do Gmaila/Drive.
 
       await admin.from("build_photos").insert({
         buildId,
         uploadedByName: uploaderName,
         driveFileId: uploaded.id,
         driveFileUrl: uploaded.webViewLink,
-        thumbnailUrl: uploaded.thumbnailLink ?? null,
         driveFolderName: subfolderName,
       });
 

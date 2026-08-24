@@ -43,11 +43,17 @@ export function BuildPhotosSection({
 
   useEffect(refreshNewCount, [buildId]);
 
-  const openFolder = () => {
+  const openFolder = async () => {
     if (!driveFolderUrl) return;
-    Linking.openURL(driveFolderUrl);
-    AsyncStorage.setItem(lastSeenKey(buildId), new Date().toISOString());
+    // Zapis MUSI się dokończyć przed nawigacją — na webie Linking.openURL
+    // potrafi przenieść całą stronę, a AsyncStorage (na webie de facto
+    // IndexedDB) jest asynchroniczny; bez await-a nawigacja czasem
+    // przerywała zapis w połowie, więc po powrocie licznik pokazywał
+    // starą wartość, mimo że setNewCount(0) lokalnie zadziałało (ale przy
+    // pełnym przeładowaniu strony ten lokalny stan i tak ginie).
     setNewCount(0);
+    await AsyncStorage.setItem(lastSeenKey(buildId), new Date().toISOString());
+    Linking.openURL(driveFolderUrl);
   };
 
   const uploadPickedPhotos = async (assets: ImagePicker.ImagePickerAsset[]) => {

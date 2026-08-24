@@ -11,6 +11,7 @@ import {
   StatusBadge,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 
 const BUILD_ORDER_STATUS_LABEL: Record<string, string> = {
   robocze: "Robocze",
@@ -94,16 +95,19 @@ export function OrdersScreen() {
   // pola.
   const [nameFieldFocused, setNameFieldFocused] = useState(false);
   const materialSuggestions = useMemo(() => {
-    const q = orderMaterialName.trim().toLowerCase();
-    if (!q) return [];
-    return materials
-      .filter((m) => `${m.name} ${m.index}`.toLowerCase().includes(q))
-      .slice(0, 6);
+    // Nie tylko "zawiera podciąg" — też prawdopodobne literówki (Piasek
+    // pukany -> Piasek płukany), patrz lib/material-name-match.ts.
+    const matches = matchMaterialNames(
+      orderMaterialName,
+      materials.map((m) => ({ id: m.id, name: m.name })),
+    );
+    const byId = new Map(materials.map((m) => [m.id, m]));
+    return matches.map((m) => byId.get(m.candidate.id)).filter((m): m is (typeof materials)[number] => !!m);
   }, [orderMaterialName, materials]);
   const showSuggestions =
     nameFieldFocused && orderMaterialName.trim().length > 0;
   const exactMaterialMatch = materials.find(
-    (m) => m.name.trim().toLowerCase() === orderMaterialName.trim().toLowerCase(),
+    (m) => normalizeMaterialName(m.name) === normalizeMaterialName(orderMaterialName),
   );
   // Ilość faktycznie dostarczona — edytowalna per zamówienie tuż przed
   // przyjęciem na magazyn, bo dostawca mógł przywieźć inną ilość niż zamówiono.

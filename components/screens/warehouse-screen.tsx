@@ -3,7 +3,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Button,
   COLORS,
@@ -14,6 +14,7 @@ import {
   UNIT_OPTIONS,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 
 export function WarehouseScreen() {
   const {
@@ -24,6 +25,7 @@ export function WarehouseScreen() {
     setShowMaterial,
     setNewMaterial,
     filtered,
+    materials,
     warehouseBatches,
     saveMaterial,
     updateMaterialPrice,
@@ -33,6 +35,23 @@ export function WarehouseScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
   const [stockInput, setStockInput] = useState("");
+  // Podpowiedzi przy dodawaniu NOWEGO materiału — ten sam mechanizm co w
+  // Zamówieniach (orders-screen.tsx), żeby nie powstał cichy duplikat pod
+  // nieco inną nazwą/literówką tego, co już jest w magazynie.
+  const [newNameFocused, setNewNameFocused] = useState(false);
+  const newMaterialSuggestions = useMemo(() => {
+    const matches = matchMaterialNames(
+      newMaterial.name,
+      materials.map((m) => ({ id: m.id, name: m.name })),
+    );
+    const byId = new Map(materials.map((m) => [m.id, m]));
+    return matches.map((m) => byId.get(m.candidate.id)).filter((m): m is (typeof materials)[number] => !!m);
+  }, [newMaterial.name, materials]);
+  const showNewMaterialSuggestions =
+    newNameFocused && newMaterial.name.trim().length > 0;
+  const exactNewMaterialMatch = materials.find(
+    (m) => normalizeMaterialName(m.name) === normalizeMaterialName(newMaterial.name),
+  );
 
   return (
     <>
@@ -49,7 +68,53 @@ export function WarehouseScreen() {
           onChangeText={(v: string) =>
             setNewMaterial({ ...newMaterial, name: v })
           }
+          onFocus={() => setNewNameFocused(true)}
+          onBlur={() => {
+            // Małe opóźnienie, żeby tapnięcie w podpowiedź zdążyło się
+            // zarejestrować zanim lista zniknie (ten sam wzorzec co w
+            // orders-screen.tsx).
+            setTimeout(() => setNewNameFocused(false), 150);
+          }}
         />
+        {showNewMaterialSuggestions && newMaterialSuggestions.length > 0 && (
+          <View
+            style={{
+              backgroundColor: COLORS.background,
+              borderRadius: 10,
+              marginTop: 6,
+              overflow: "hidden",
+            }}
+          >
+            {newMaterialSuggestions.map((m) => (
+              <Pressable
+                key={m.id}
+                onPress={() => {
+                  setNewMaterial({ ...newMaterial, name: m.name, unit: m.unit });
+                  setNewNameFocused(false);
+                }}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderBottomWidth: 1,
+                  borderBottomColor: COLORS.border,
+                }}
+              >
+                <Text style={{ color: COLORS.foreground, fontSize: 13, fontWeight: "600" }}>
+                  {m.name}
+                </Text>
+                <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                  {m.index} · na magazynie: {m.stock ?? 0} {m.unit}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {exactNewMaterialMatch && (
+          <Text style={{ color: COLORS.warning, fontSize: 11, marginTop: 4 }}>
+            Materiał o tej nazwie już jest w magazynie ({exactNewMaterialMatch.index}) —
+            może lepiej dopisać do niego partię/skorygować stan, zamiast tworzyć duplikat?
+          </Text>
+        )}
         <Field
           placeholder="Indeks"
           value={newMaterial.index}

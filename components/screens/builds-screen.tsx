@@ -6,6 +6,7 @@ import {
   addDaysISO,
   Button,
   confirmAction,
+  DetailSection,
   Field,
   formatPLN,
   IconBadge,
@@ -1294,18 +1295,10 @@ export function BuildsScreen() {
           </View>
 
           {isClosed && b.settlement ? (
-            <View
-              style={{
-                marginTop: 16,
-                paddingTop: 16,
-                borderTopWidth: 1,
-                borderTopColor: COLORS.border,
-              }}
+            <DetailSection
+              label="Rozliczenie końcowe"
+              count={`zamknięto ${b.settlement.closedAt.slice(0, 10)}`}
             >
-              <Text className="text-xs text-muted uppercase mb-3">
-                Rozliczenie końcowe · zamknięto{" "}
-                {b.settlement.closedAt.slice(0, 10)}
-              </Text>
               <View
                 style={{
                   flexDirection: "row",
@@ -1429,7 +1422,7 @@ export function BuildsScreen() {
                   {formatPLN(b.settlement.totalCost)}
                 </Text>
               </View>
-            </View>
+            </DetailSection>
           ) : (
             (() => {
               const buildAssignmentsList = assignments.filter(
@@ -1469,17 +1462,7 @@ export function BuildsScreen() {
               )
                 return null;
               return (
-                <View
-                  style={{
-                    marginTop: 16,
-                    paddingTop: 16,
-                    borderTopWidth: 1,
-                    borderTopColor: COLORS.border,
-                  }}
-                >
-                  <Text className="text-xs text-muted uppercase mb-3">
-                    Koszty na bieżąco
-                  </Text>
+                <DetailSection label="Koszty na bieżąco">
                   <View
                     style={{
                       flexDirection: "row",
@@ -1551,7 +1534,7 @@ export function BuildsScreen() {
                       {formatPLN(totalCostSoFar)}
                     </Text>
                   </View>
-                </View>
+                </DetailSection>
               );
             })()
           )}

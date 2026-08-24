@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import {
   Button,
   COLORS,
+  DetailSection,
   Field,
   formatPLN,
   QuantityStepper,
@@ -259,10 +260,11 @@ export function WarehouseScreen() {
                 const prices = batches.map((b) => Number(b.unitPrice));
                 const minPrice = Math.min(...prices);
                 return (
-                  <View style={{ marginBottom: 14 }}>
-                    <Text className="text-xs text-muted uppercase mb-2">
-                      Partie w magazynie ({batches.length})
-                    </Text>
+                  <DetailSection
+                    label="Partie w magazynie"
+                    count={batches.length}
+                    style={{ marginTop: 0, marginBottom: 14 }}
+                  >
                     {batches.map((b) => {
                       const price = Number(b.unitPrice);
                       return (
@@ -314,7 +316,7 @@ export function WarehouseScreen() {
                         </View>
                       );
                     })}
-                  </View>
+                  </DetailSection>
                 );
               })()}
               <Text className="text-xs text-muted uppercase mb-2">

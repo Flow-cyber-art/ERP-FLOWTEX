@@ -4,6 +4,7 @@ import {
   COLORS,
   Button,
   confirmAction,
+  DetailSection,
   Field,
   IconBadge,
   QuantityStepper,
@@ -344,9 +345,7 @@ export function OrdersScreen() {
           zamówieniami, zamiast rozproszone po poszczególnych budowach. */}
       {buildOrders.length > 0 && (
         <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
-          <Text className="text-xs text-muted uppercase mb-3">
-            Zamówienia z planu budów
-          </Text>
+          <DetailSection label="Zamówienia z planu budów" count={buildOrders.length} style={{ marginTop: 0 }}>
           {buildOrders.map((order) => {
             const build = builds.find((b) => b.id === String(order.buildId));
             const isReceiving = buildOrderReceivingId === order.id;
@@ -623,6 +622,7 @@ export function OrdersScreen() {
               </View>
             );
           })}
+          </DetailSection>
         </View>
       )}
 

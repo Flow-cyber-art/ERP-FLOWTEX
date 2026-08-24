@@ -71,6 +71,7 @@ export function ReportScreen() {
     updateDraftQuantity,
     removeFromDraft,
     commitAssignments,
+    removeBuildAssignment,
   } = useAppData();
 
   const editingReport = editingReportId
@@ -159,7 +160,15 @@ export function ReportScreen() {
       .includes(pomocniczeQuery.trim().toLowerCase());
   });
 
-  const renderMaterialRow = (a: (typeof buildAssignments)[number], i: number) => {
+  // removable: tylko materiały pomocnicze (dodane ręcznie z magazynu w tym
+  // raporcie) mają "✕" do cofnięcia pomyłki — materiały z planu technologii
+  // przypisują się automatycznie przy przyjęciu zamówienia i nie da się ich
+  // tak po prostu odpiąć od budowy.
+  const renderMaterialRow = (
+    a: (typeof buildAssignments)[number],
+    i: number,
+    removable: boolean,
+  ) => {
     const m = materials.find((x) => x.id === a.materialId);
     const currentValue = Number(reportValues[a.materialId] || 0);
     const different =
@@ -220,6 +229,24 @@ export function ReportScreen() {
               })
             }
           />
+          {removable && !reportApproved && (
+            <Pressable
+              onPress={() =>
+                confirmAction(
+                  "Usunąć materiał?",
+                  `Materiał "${m?.name ?? ""}" zostanie odpięty od budowy, a przydzielona ilość wróci do magazynu.`,
+                  "Usuń",
+                  () => {
+                    if (activeBuild) removeBuildAssignment(activeBuild.id, a.materialId);
+                  },
+                )
+              }
+              hitSlop={8}
+              style={{ marginLeft: 8 }}
+            >
+              <MaterialIcons name="close" size={18} color={COLORS.muted} />
+            </Pressable>
+          )}
         </View>
         {currentValue > a.planned && (
           // Ostrzeżenie PRZED wysłaniem raportu, nie dopiero przy
@@ -532,7 +559,7 @@ export function ReportScreen() {
                             const assignment = assignmentByMaterialName.get(
                               p.materialName.trim().toLowerCase(),
                             );
-                            if (assignment) return renderMaterialRow(assignment, i);
+                            if (assignment) return renderMaterialRow(assignment, i, false);
                             return (
                               <View
                                 key={p.id}
@@ -582,7 +609,7 @@ export function ReportScreen() {
                   style={{ marginBottom: 8 }}
                 />
               )}
-              {filteredPomocnicze.map((a, i) => renderMaterialRow(a, i))}
+              {filteredPomocnicze.map((a, i) => renderMaterialRow(a, i, true))}
               {pomocniczeAssignments.length === 0 && (
                 <Text style={{ color: COLORS.muted, fontSize: 12 }}>
                   Brak materiałów pomocniczych przypisanych do budowy.

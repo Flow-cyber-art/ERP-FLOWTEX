@@ -65,6 +65,23 @@ export async function assignMaterialBatchesToBuild(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Odwrotność assignMaterialBatchesToBuild — cofa pomyłkowo dodane
+ * przypisanie materiału pomocniczego (zwraca ilość do partii źródłowej,
+ * usuwa lot(y) i wpis w build_materials). Zablokowane po stronie RPC,
+ * jeśli materiał został już częściowo zużyty w raporcie.
+ */
+export async function unassignMaterialFromBuild(
+  buildId: number,
+  materialId: number,
+): Promise<void> {
+  const { error } = await supabase.rpc("unassign_material_from_build", {
+    p_build_id: buildId,
+    p_material_id: materialId,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export type BuildMaterialLotRow = {
   id: number;
   buildId: number;

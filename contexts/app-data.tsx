@@ -37,6 +37,7 @@ import {
 } from "@/lib/data/orders";
 import {
   assignMaterialBatchesToBuild,
+  unassignMaterialFromBuild,
   listBuildMaterialLots as listBuildMaterialLotsRemote,
   listBuildMaterials,
   type AssignMaterialBatchItem,
@@ -794,6 +795,10 @@ function useAppDataState(
     mutationFn: (vars: { buildId: number; items: AssignMaterialBatchItem[] }) =>
       assignMaterialBatchesToBuild(vars.buildId, vars.items),
   });
+  const unassignMaterialMutation = useMutation({
+    mutationFn: (vars: { buildId: number; materialId: number }) =>
+      unassignMaterialFromBuild(vars.buildId, vars.materialId),
+  });
   const completeBuildStageMutation = useMutation({
     mutationFn: (vars: { buildId: number; stageName: string }) =>
       completeBuildStageRemote(vars.buildId, vars.stageName),
@@ -1189,6 +1194,29 @@ function useAppDataState(
       setShowAssignment(false);
     } catch (error) {
       reportMutationError(error, "Nie udało się przypisać materiałów do budowy.");
+    }
+  };
+  // Cofnięcie pomyłkowo dodanego materiału pomocniczego (odwrotność
+  // commitAssignments powyżej) — zwraca ilość do partii źródłowej po
+  // stronie bazy (unassign_material_from_build, 026), zablokowane tam,
+  // jeśli materiał został już częściowo zużyty w raporcie.
+  const removeBuildAssignment = async (buildId: string, materialId: string) => {
+    const numericBuildId = Number(buildId);
+    const numericMaterialId = Number(materialId);
+    if (Number.isNaN(numericBuildId) || Number.isNaN(numericMaterialId)) return;
+    try {
+      await unassignMaterialMutation.mutateAsync({
+        buildId: numericBuildId,
+        materialId: numericMaterialId,
+      });
+      await Promise.all([
+        invalidate("buildMaterials"),
+        invalidate("materials"),
+        invalidate("warehouseBatches"),
+        invalidate("buildMaterialLots"),
+      ]);
+    } catch (error) {
+      reportMutationError(error, "Nie udało się usunąć przypisania materiału.");
     }
   };
   // Status etapu technologii (Faza 6) — wyłącznie brygadzista/admin, ręcznie.
@@ -2148,6 +2176,7 @@ function useAppDataState(
     updateDraftQuantity,
     removeFromDraft,
     commitAssignments,
+    removeBuildAssignment,
     saveMaterial,
     saveBuild,
     saveWorkdayHours,

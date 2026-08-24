@@ -1163,6 +1163,28 @@ function useAppDataState(
         invalidate("warehouseBatches"),
         invalidate("buildMaterialLots"),
       ]);
+      // Materiał, który brygadzista dopiero co przypisał do budowy z tego
+      // raportu, ma od razu widnieć na liście "Materiały pomocnicze" Z
+      // wpisaną dziś zużytą ilością — bez tego pozycja pojawiała się na
+      // liście, ale ze steperem wyzerowanym, jakby ilość nigdy nie została
+      // podana (a była, tylko w innym polu — ilości przydziału z magazynu,
+      // nie dziennego zużycia).
+      const committedByMaterial = new Map<string, number>();
+      for (const d of draftAssignments) {
+        if (d.quantity <= 0) continue;
+        committedByMaterial.set(
+          d.materialId,
+          (committedByMaterial.get(d.materialId) || 0) + d.quantity,
+        );
+      }
+      if (committedByMaterial.size) {
+        const nextReportValues = { ...reportValues };
+        for (const [materialId, delta] of committedByMaterial) {
+          const current = Number(nextReportValues[materialId] || 0);
+          nextReportValues[materialId] = String(Math.round((current + delta) * 1000) / 1000);
+        }
+        setReportValues(nextReportValues);
+      }
       setDraftAssignments([]);
       setShowAssignment(false);
     } catch (error) {

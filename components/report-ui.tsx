@@ -90,6 +90,7 @@ type Build = {
   durationDays: number;
   status: BuildStatus;
   photosUrl?: string | null;
+  driveFolderId?: string | null;
   settlement?: BuildSettlement;
   // Faza 0/2 modułu Technologia.
   clientName?: string | null;

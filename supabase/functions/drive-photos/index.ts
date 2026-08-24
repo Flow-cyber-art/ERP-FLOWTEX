@@ -112,7 +112,7 @@ async function findOrCreateFolder(
   if (list.files?.length > 0) {
     return { id: list.files[0].id, webViewLink: list.files[0].webViewLink };
   }
-  return driveFetch(
+  const created = await driveFetch(
     accessToken,
     "/drive/v3/files?supportsAllDrives=true&fields=id,webViewLink",
     {
@@ -125,6 +125,22 @@ async function findOrCreateFolder(
       }),
     },
   );
+  // "Anyone with the link: reader" — bez tego otwarcie linku wymaga
+  // logowania na konto realnie dodane do Shared Drive, a jedyne takie
+  // konto to konto serwisowe (nie jest osobą, nie odpowie na prośbę o
+  // dostęp). Nadajemy tylko przy TWORZENIU (nie przy każdym znalezieniu
+  // istniejącego folderu) — jedno wywołanie API na cały cykl życia folderu.
+  try {
+    await driveFetch(accessToken, `/drive/v3/files/${created.id}/permissions?supportsAllDrives=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "anyone", role: "reader" }),
+    });
+  } catch {
+    // Niekrytyczne — folder i tak istnieje, tylko podgląd może wymagać
+    // logowania. Nie przerywamy z tego powodu.
+  }
+  return created;
 }
 
 Deno.serve(async (req) => {
@@ -270,7 +286,7 @@ Deno.serve(async (req) => {
 
       const uploaded = await driveFetch(
         accessToken,
-        "/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink",
+        "/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink,thumbnailLink",
         {
           method: "POST",
           headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
@@ -278,11 +294,31 @@ Deno.serve(async (req) => {
         },
       );
 
+      // Miniatura (thumbnailLink) — wymaga, żeby plik był publicznie
+      // czytelny linkiem, inaczej Google zwraca URL, który i tak wymaga
+      // logowania. Stąd uprawnienie "anyone with the link: reader" na
+      // każdym wgranym zdjęciu — pozwala apce wyświetlić miniaturę i
+      // otworzyć zdjęcie w przeglądarce BEZ logowania do Gmaila/Drive.
+      // Zdjęcia budowy nie są danymi wrażliwymi (plac budowy, materiały),
+      // a link i tak nigdzie nie jest publicznie wypisany — to ten sam
+      // kompromis co "link do udostępnienia" w każdym innym narzędziu.
+      try {
+        await driveFetch(accessToken, `/drive/v3/files/${uploaded.id}/permissions?supportsAllDrives=true`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "anyone", role: "reader" }),
+        });
+      } catch {
+        // Niekrytyczne — zdjęcie i tak jest wgrane, tylko podgląd w apce
+        // może wymagać logowania. Nie przerywamy uploadu z tego powodu.
+      }
+
       await admin.from("build_photos").insert({
         buildId,
         uploadedByName: uploaderName,
         driveFileId: uploaded.id,
         driveFileUrl: uploaded.webViewLink,
+        thumbnailUrl: uploaded.thumbnailLink ?? null,
         driveFolderName: subfolderName,
       });
 

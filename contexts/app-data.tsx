@@ -583,6 +583,7 @@ function useAppDataState(
           durationDays: b.durationDays,
           status: b.status,
           photosUrl: b.photosUrl,
+          driveFolderId: b.driveFolderId,
           settlement: existing?.settlement,
           clientName: b.clientName,
           address: b.address,

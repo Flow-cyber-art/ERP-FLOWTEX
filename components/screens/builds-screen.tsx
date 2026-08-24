@@ -16,6 +16,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
+import { BuildPhotosSection } from "@/components/build-photos-section";
 
 export function BuildsScreen() {
   const {
@@ -1309,6 +1310,11 @@ export function BuildsScreen() {
                     }}
                   />
                 </View>
+              </View>
+            )}
+            {b.driveFolderId != null && (
+              <View style={{ marginTop: 12 }}>
+                <BuildPhotosSection buildId={Number(b.id)} hasDriveFolder />
               </View>
             )}
           </View>

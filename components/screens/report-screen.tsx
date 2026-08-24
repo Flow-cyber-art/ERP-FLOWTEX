@@ -1,8 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import {
   COLORS,
   todayLabelPL,
@@ -17,7 +16,7 @@ import {
   TimeOptionsList,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
-import { uploadBuildPhoto } from "@/lib/data/drive-photos";
+import { BuildPhotosSection } from "@/components/build-photos-section";
 
 export function ReportScreen() {
   const {
@@ -97,67 +96,6 @@ export function ReportScreen() {
   // brygadzisty przy budowie, na której właśnie raportuje.
   const [editingPhotos, setEditingPhotos] = useState(false);
   const [photosUrlInput, setPhotosUrlInput] = useState("");
-  // Dołączanie zdjęć do katalogu budowy na Google Drive (patrz
-  // lib/data/drive-photos.ts) — aparat albo galeria, uploadOne robi jedno
-  // zdjęcie na raz (żeby pasek postępu miał sens: "2 z 5"), a nie
-  // Promise.all — kolejne zdjęcia i tak trafiają do tego samego
-  // podfolderu {data}_{ja}, więc kolejność nie ma znaczenia.
-  const [uploadingPhotos, setUploadingPhotos] = useState(false);
-  const [photoUploadProgress, setPhotoUploadProgress] = useState<{ done: number; total: number } | null>(
-    null,
-  );
-  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
-
-  const uploadPickedPhotos = async (assets: ImagePicker.ImagePickerAsset[]) => {
-    if (!activeBuild || assets.length === 0) return;
-    setPhotoUploadError(null);
-    setUploadingPhotos(true);
-    setPhotoUploadProgress({ done: 0, total: assets.length });
-    try {
-      for (let i = 0; i < assets.length; i++) {
-        const asset = assets[i];
-        if (!asset.base64) continue;
-        const fileName = asset.fileName || `zdjecie-${Date.now()}-${i}.jpg`;
-        const mimeType = asset.mimeType || "image/jpeg";
-        await uploadBuildPhoto(Number(activeBuild.id), fileName, mimeType, asset.base64);
-        setPhotoUploadProgress({ done: i + 1, total: assets.length });
-      }
-    } catch (err) {
-      setPhotoUploadError(
-        err instanceof Error ? err.message : "Nie udało się wysłać zdjęcia.",
-      );
-    } finally {
-      setUploadingPhotos(false);
-    }
-  };
-
-  const pickPhotosFromLibrary = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setPhotoUploadError("Brak zgody na dostęp do galerii.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      quality: 0.6,
-      base64: true,
-    });
-    if (!result.canceled) await uploadPickedPhotos(result.assets);
-  };
-
-  const takePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setPhotoUploadError("Brak zgody na dostęp do aparatu.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.6,
-      base64: true,
-    });
-    if (!result.canceled) await uploadPickedPhotos(result.assets);
-  };
 
   // Ostrzeżenie o pustym kroku (materiały/zespół) przy próbie przejścia
   // dalej: pierwsze wciśnięcie "Dalej" na pustym kroku tylko pokazuje
@@ -532,38 +470,17 @@ export function ReportScreen() {
                   </View>
                 </View>
               )}
-              {/* Dołączanie zdjęć wprost do katalogu budowy na Drive
-                  (lib/data/drive-photos.ts) — wymaga, żeby Admin wcześniej
-                  stworzył katalog (builds-screen.tsx), inaczej edge
-                  function zwróci czytelny błąd niżej. */}
+              {/* Dołączanie i przeglądanie zdjęć budowy — w całości w apce
+                  (lib/data/drive-photos.ts + components/build-photos-section.tsx),
+                  bez logowania do Google Drive. Wymaga, żeby Admin wcześniej
+                  stworzył katalog (builds-screen.tsx), inaczej komponent
+                  pokaże czytelny komunikat zamiast przycisków. */}
               {activeBuild && !reportApproved && (
                 <View style={{ marginTop: 12 }}>
-                  {uploadingPhotos ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <ActivityIndicator color={COLORS.primary} />
-                      <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                        Wysyłanie zdjęć{photoUploadProgress ? ` (${photoUploadProgress.done}/${photoUploadProgress.total})` : "…"}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                      <View style={{ flex: 1 }}>
-                        <Button label="📷 Zrób zdjęcie" secondary onPress={takePhoto} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Button
-                          label="🖼 Dołącz z galerii"
-                          secondary
-                          onPress={pickPhotosFromLibrary}
-                        />
-                      </View>
-                    </View>
-                  )}
-                  {photoUploadError && (
-                    <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
-                      {photoUploadError}
-                    </Text>
-                  )}
+                  <BuildPhotosSection
+                    buildId={Number(activeBuild.id)}
+                    hasDriveFolder={activeBuild.driveFolderId != null}
+                  />
                 </View>
               )}
             </View>

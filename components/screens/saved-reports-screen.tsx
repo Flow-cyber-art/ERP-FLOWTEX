@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import {
   COLORS,
@@ -8,6 +9,8 @@ import {
   ScreenHeader,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+
+type StatusFilter = "all" | "pending" | "approved";
 
 export function SavedReportsScreen() {
   const { builds, savedReports, openSavedReport, startNewReport, devRole, myProfileId } =
@@ -22,6 +25,10 @@ export function SavedReportsScreen() {
   const [selectedBuildId, setSelectedBuildId] = useState<string | "all">(
     "all",
   );
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+
   const visibleBuilds = useMemo(
     () =>
       builds.filter((b) =>
@@ -53,13 +60,46 @@ export function SavedReportsScreen() {
       ? mineOnly.filter((r) => visibleBuilds.some((b) => b.id === r.buildId))
       : mineOnly.filter((r) => r.buildId === selectedBuildId);
 
-  const sorted = [...reportsInScope].sort((a, b) =>
-    b.updatedAt.localeCompare(a.updatedAt),
-  );
   const approvedCount = reportsInScope.filter(
     (r) => r.status === "approved",
   ).length;
   const pendingCount = reportsInScope.length - approvedCount;
+
+  const filteredByStatus = reportsInScope.filter((r) => {
+    if (statusFilter === "approved") return r.status === "approved";
+    if (statusFilter === "pending") return r.status !== "approved";
+    return true;
+  });
+
+  const sorted = [...filteredByStatus].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
+  );
+
+  const selectedBuild = builds.find((b) => b.id === selectedBuildId);
+  const selectedBuildLabel =
+    selectedBuildId === "all"
+      ? "Wszystkie budowy"
+      : selectedBuild
+        ? `${selectedBuild.number} · ${selectedBuild.name}`
+        : "Wszystkie budowy";
+
+  const pickerBuilds = visibleBuilds.filter((b) => {
+    const q = pickerQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      b.number.toLowerCase().includes(q) || b.name.toLowerCase().includes(q)
+    );
+  });
+
+  const openPicker = () => {
+    setPickerQuery("");
+    setPickerOpen(true);
+  };
+
+  const pickBuild = (id: string | "all") => {
+    setSelectedBuildId(id);
+    setPickerOpen(false);
+  };
 
   return (
     <>
@@ -134,116 +174,186 @@ export function SavedReportsScreen() {
             </Pressable>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ marginBottom: 16 }}
+          <Text className="text-xs text-muted uppercase mb-1.5">Budowa</Text>
+          <Pressable
+            onPress={openPicker}
+            className="bg-surface border border-border rounded-2xl mb-4"
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+            }}
           >
-            <View style={{ flexDirection: "row", gap: 8 }}>
+            <Text
+              className="text-foreground"
+              style={{ fontSize: 14, fontWeight: "700" }}
+              numberOfLines={1}
+            >
+              {selectedBuildLabel}
+            </Text>
+            <MaterialIcons name="expand-more" size={20} color={COLORS.muted} />
+          </Pressable>
+
+          <Modal
+            visible={pickerOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setPickerOpen(false)}
+          >
+            <Pressable
+              onPress={() => setPickerOpen(false)}
+              style={{
+                flex: 1,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                justifyContent: "center",
+                padding: 20,
+              }}
+            >
               <Pressable
-                onPress={() => setSelectedBuildId("all")}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: selectedBuildId === "all" ? COLORS.primary : COLORS.border,
-                  backgroundColor: selectedBuildId === "all" ? COLORS.primary : COLORS.surface,
-                }}
+                onPress={(e) => e.stopPropagation()}
+                className="bg-surface border border-border rounded-2xl"
+                style={{ maxHeight: "70%", overflow: "hidden" }}
               >
-                <Text
+                <View
+                  className="border-border"
                   style={{
-                    color: selectedBuildId === "all" ? COLORS.background : COLORS.foreground,
-                    fontSize: 13,
-                    fontWeight: "700",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    borderBottomWidth: 1,
+                    paddingHorizontal: 14,
+                    paddingVertical: 4,
                   }}
                 >
-                  Wszystkie budowy
-                </Text>
-              </Pressable>
-              {visibleBuilds.map((b) => {
-                const active = selectedBuildId === b.id;
-                const count = savedReports.filter((r) => r.buildId === b.id).length;
-                return (
-                  <Pressable
-                    key={b.id}
-                    onPress={() => setSelectedBuildId(b.id)}
+                  <MaterialIcons name="search" size={18} color={COLORS.muted} />
+                  <TextInput
+                    autoFocus
+                    value={pickerQuery}
+                    onChangeText={setPickerQuery}
+                    placeholder="Szukaj budowy..."
+                    placeholderTextColor={COLORS.muted}
                     style={{
-                      paddingHorizontal: 14,
-                      paddingVertical: 8,
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      borderColor: active ? COLORS.primary : COLORS.border,
-                      backgroundColor: active ? COLORS.primary : COLORS.surface,
+                      flex: 1,
+                      color: COLORS.foreground,
+                      fontSize: 14,
+                      paddingVertical: 10,
+                      paddingHorizontal: 8,
                     }}
+                  />
+                </View>
+                <ScrollView>
+                  <Pressable
+                    onPress={() => pickBuild("all")}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      backgroundColor: pressed ? COLORS.background : "transparent",
+                    })}
                   >
-                    <Text
-                      style={{
-                        color: active ? COLORS.background : COLORS.foreground,
-                        fontSize: 13,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {b.number} · {b.name} ({count})
+                    <Text style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
+                      Wszystkie budowy
                     </Text>
+                    {selectedBuildId === "all" && (
+                      <MaterialIcons name="check" size={18} color={COLORS.primary} />
+                    )}
                   </Pressable>
-                );
-              })}
-              {visibleBuilds.length === 0 && (
-                <Text style={{ color: COLORS.muted, fontSize: 13, alignSelf: "center" }}>
-                  Brak budów w tym widoku.
-                </Text>
-              )}
-            </View>
-          </ScrollView>
+                  {pickerBuilds.map((b) => (
+                    <Pressable
+                      key={b.id}
+                      onPress={() => pickBuild(b.id)}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 14,
+                        paddingVertical: 12,
+                        borderTopWidth: 1,
+                        borderTopColor: COLORS.border,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        backgroundColor: pressed ? COLORS.background : "transparent",
+                      })}
+                    >
+                      <Text style={{ color: COLORS.foreground, fontSize: 14 }} numberOfLines={1}>
+                        <Text style={{ fontWeight: "700" }}>{b.number}</Text> · {b.name}
+                      </Text>
+                      {selectedBuildId === b.id && (
+                        <MaterialIcons name="check" size={18} color={COLORS.primary} />
+                      )}
+                    </Pressable>
+                  ))}
+                  {pickerBuilds.length === 0 && (
+                    <Text
+                      style={{ color: COLORS.muted, fontSize: 13, padding: 14 }}
+                    >
+                      Brak budów pasujących do wyszukiwania.
+                    </Text>
+                  )}
+                </ScrollView>
+              </Pressable>
+            </Pressable>
+          </Modal>
         </>
       )}
 
       {reportsInScope.length > 0 && (
         <View
-          className="bg-surface border border-border rounded-2xl mb-5"
-          style={{ flexDirection: "row", overflow: "hidden" }}
+          className="bg-surface border border-border rounded-2xl overflow-hidden mb-5"
+          style={{ flexDirection: "row" }}
         >
-          <View style={{ flex: 1, padding: 16 }}>
-            <Text className="text-xs text-muted uppercase">Wszystkich</Text>
-            <Text className="text-3xl font-bold text-foreground mt-1">
-              {reportsInScope.length}
-            </Text>
-          </View>
-          <View style={{ width: 1, backgroundColor: COLORS.border }} />
-          <View style={{ flex: 1, padding: 16 }}>
-            <Text className="text-xs text-muted uppercase">Do edycji</Text>
-            <Text
-              style={{ color: COLORS.primary }}
-              className="text-3xl font-bold mt-1"
-            >
-              {pendingCount}
-            </Text>
-          </View>
-          <View style={{ width: 1, backgroundColor: COLORS.border }} />
-          <View style={{ flex: 1, padding: 16 }}>
-            <Text className="text-xs text-muted uppercase">Zatwierdzone</Text>
-            <Text
-              style={{ color: COLORS.success }}
-              className="text-3xl font-bold mt-1"
-            >
-              {approvedCount}
-            </Text>
-          </View>
+          {(
+            [
+              { key: "all", label: "Wszystkie", count: reportsInScope.length },
+              { key: "pending", label: "Do edycji", count: pendingCount },
+              { key: "approved", label: "Zatwierdzone", count: approvedCount },
+            ] as { key: StatusFilter; label: string; count: number }[]
+          ).map((tab, i) => {
+            const active = statusFilter === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => setStatusFilter(tab.key)}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  alignItems: "center",
+                  borderLeftWidth: i === 0 ? 0 : 1,
+                  borderLeftColor: COLORS.border,
+                  backgroundColor: active ? COLORS.primary : "transparent",
+                }}
+              >
+                <Text
+                  style={{
+                    color: active ? COLORS.background : COLORS.foreground,
+                    fontWeight: "700",
+                    fontSize: 12,
+                  }}
+                >
+                  {tab.label} ({tab.count})
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       )}
 
       {sorted.length === 0 ? (
         <View className="bg-surface border border-border rounded-2xl p-5 items-center">
-          <IconBadge name="description" />
+          <IconBadge name={statusFilter === "pending" ? "check-circle" : "description"} />
           <Text className="text-base font-bold text-foreground mt-3">
-            Brak zapisanych raportów
+            {statusFilter === "pending" && reportsInScope.length > 0
+              ? "Wszystkie raporty są aktualne"
+              : "Brak zapisanych raportów"}
           </Text>
-          <Text className="text-sm text-muted mt-2 text-center">
-            {selectedBuildId === "all"
-              ? "Zapisane raporty pojawią się tutaj po zakończeniu raportu dziennego."
-              : "Ta budowa nie ma jeszcze żadnych raportów."}
-          </Text>
+          {!(statusFilter === "pending" && reportsInScope.length > 0) && (
+            <Text className="text-sm text-muted mt-2 text-center">
+              {selectedBuildId === "all"
+                ? "Zapisane raporty pojawią się tutaj po zakończeniu raportu dziennego."
+                : "Ta budowa nie ma jeszcze żadnych raportów."}
+            </Text>
+          )}
         </View>
       ) : (
         sorted.map((report) => {
@@ -262,45 +372,39 @@ export function SavedReportsScreen() {
                 padding: 14,
                 marginBottom: 12,
                 opacity: pressed ? 0.75 : 1,
-                flexDirection: "row",
-                alignItems: "center",
               })}
             >
-              <IconBadge name={approved ? "lock" : "edit-note"} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text className="text-lg font-bold text-foreground">
-                    {report.buildNumber}
-                  </Text>
-                  <Text className="text-xs text-muted">{report.date}</Text>
-                </View>
-                <Text className="text-sm text-muted mt-0.5" numberOfLines={1}>
-                  {report.buildName}
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                }}
+              >
+                <Text className="text-base font-bold text-foreground" numberOfLines={1}>
+                  {report.buildNumber} · {report.buildName}
                 </Text>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginTop: 10,
-                  }}
-                >
-                  <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                    {peopleCount} {peopleCount === 1 ? "osoba" : "osoby"} ·{" "}
-                    {materialsCount}{" "}
-                    {materialsCount === 1 ? "materiał" : "materiały"}
-                  </Text>
-                  <StatusBadge
-                    status={approved ? "ok" : "warning"}
-                    label={approved ? "Zatwierdzony" : "Do edycji"}
-                  />
-                </View>
+                <Text className="text-xs text-muted" style={{ marginLeft: 8 }}>
+                  {report.date}
+                </Text>
+              </View>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginTop: 10,
+                }}
+              >
+                <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                  {peopleCount} {peopleCount === 1 ? "osoba" : "osoby"} ·{" "}
+                  {materialsCount}{" "}
+                  {materialsCount === 1 ? "materiał" : "materiały"}
+                </Text>
+                <StatusBadge
+                  status={approved ? "ok" : "warning"}
+                  label={approved ? "Zatwierdzony" : "Do edycji"}
+                />
               </View>
             </Pressable>
           );

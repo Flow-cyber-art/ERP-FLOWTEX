@@ -92,13 +92,25 @@ function HomeScreenInner() {
     setWarehouseView,
     belowMinimumMaterials,
     orders,
+    shortages,
     reportsPendingApprovalCount,
     reportsNeedingFixCount,
   } = useAppData();
   const shortageCount = belowMinimumMaterials.length;
-  const pendingOrdersCount = orders.filter(
-    (o) => o.status === "do realizacji",
-  ).length;
+  // Badge Zamówień: zamówienia już zgłoszone ("do realizacji") + braki,
+  // które JESZCZE nie mają żadnego zamówienia (status "brak" w
+  // orders-screen.tsx — tam samo, żeby liczba na ikonie zgadzała się z
+  // tym, co faktycznie widać po wejściu w zakładkę). Bez tego materiał,
+  // który dopiero co spadł do zera, nie podświetlał w ogóle Zamówień —
+  // widać go było wyłącznie po wejściu w sam ekran.
+  const pendingOrdersCount =
+    orders.filter((o) => o.status === "do realizacji").length +
+    shortages.filter(
+      (row) =>
+        !orders.some(
+          (o) => o.materialId === row.material.id && o.status !== "dostarczone",
+        ),
+    ).length;
   // Nie używamy useWindowDimensions() bezpośrednio: przy statycznym eksporcie
   // (`expo export -p web`) ten hook potrafi po hydratacji zwrócić nieaktualną
   // wartość i "obudzić się" dopiero po realnym evencie resize (np. otwarcie/

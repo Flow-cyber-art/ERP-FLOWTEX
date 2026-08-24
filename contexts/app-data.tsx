@@ -30,6 +30,7 @@ import {
 } from "@/lib/data/employees";
 import {
   createOrder as createOrderRemote,
+  deleteOrder as deleteOrderRemote,
   listOrders,
   markOrderOrdered as markOrderOrderedRemote,
   receiveOrder as receiveOrderRemote,
@@ -808,6 +809,9 @@ function useAppDataState(
   const createOrderMutation = useMutation({ mutationFn: createOrderRemote });
   const markOrderOrderedMutation = useMutation({
     mutationFn: (vars: { orderId: number }) => markOrderOrderedRemote(vars.orderId),
+  });
+  const deleteOrderMutation = useMutation({
+    mutationFn: (vars: { orderId: number }) => deleteOrderRemote(vars.orderId),
   });
   const receiveOrderMutation = useMutation({
     mutationFn: (vars: {
@@ -1732,6 +1736,19 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się oznaczyć zamówienia jako złożone.");
     }
   };
+  // Kasowanie pomyłkowego/zduplikowanego zamówienia — tylko dopóki jest
+  // "do realizacji" (delete_material_order odrzuci inny status, patrz
+  // supabase/sql/023_usuwanie_zamowien_material_orders.sql).
+  const deleteOrder = async (orderId: string) => {
+    const numericId = Number(orderId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await deleteOrderMutation.mutateAsync({ orderId: numericId });
+      await invalidate("orders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się usunąć zamówienia.");
+    }
+  };
   // Krok 3: dostawa dotarła. Ilość jest edytowalna w tym miejscu, bo dostawca
   // może przywieźć inaczej niż zamówiono — to ta wartość trafia na stan
   // magazynowy, nie pierwotnie zamówiona. Jeśli zamówienie nie było powiązane
@@ -2085,6 +2102,7 @@ function useAppDataState(
     createOrder,
     createOrderFromShortage,
     markOrderOrdered,
+    deleteOrder,
     receiveOrder,
     addPersonToDraft,
     addExtraCostToDraft,

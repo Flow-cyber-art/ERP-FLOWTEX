@@ -65,6 +65,7 @@ export function OrdersScreen() {
     createOrder,
     createOrderFromShortage,
     markOrderOrdered,
+    deleteOrder,
     receiveOrder,
   } = useAppData();
 
@@ -713,22 +714,47 @@ export function OrdersScreen() {
                 </Pressable>
               )}
               {row.status === "do realizacji" && row.orderId && (
-                <Pressable
-                  onPress={() => markOrderOrdered(row.orderId!)}
-                  style={({ pressed }) => ({
-                    marginLeft: 10,
-                    borderWidth: 1,
-                    borderColor: COLORS.primary,
-                    borderRadius: 8,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    opacity: pressed ? 0.7 : 1,
-                  })}
-                >
-                  <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
-                    Złożono u dostawcy
-                  </Text>
-                </Pressable>
+                <>
+                  <Pressable
+                    onPress={() => markOrderOrdered(row.orderId!)}
+                    style={({ pressed }) => ({
+                      marginLeft: 10,
+                      borderWidth: 1,
+                      borderColor: COLORS.primary,
+                      borderRadius: 8,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
+                      Złożono u dostawcy
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() =>
+                      confirmAction(
+                        "Usunąć zamówienie?",
+                        `${row.name} · ${row.qtyLabel}. Tej operacji nie da się cofnąć.`,
+                        "Usuń",
+                        () => deleteOrder(row.orderId!),
+                      )
+                    }
+                    style={({ pressed }) => ({
+                      marginLeft: 8,
+                      borderWidth: 1,
+                      borderColor: COLORS.danger,
+                      borderRadius: 8,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
+                      Usuń
+                    </Text>
+                  </Pressable>
+                </>
               )}
               {row.status === "zamówione" && row.orderId && !isReceiving && (
                 <Pressable

@@ -61,6 +61,13 @@ export async function markOrderOrdered(orderId: number): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+// Tylko zamówienia jeszcze niezłożone u dostawcy ("do realizacji") — patrz
+// delete_material_order w supabase/sql/023_usuwanie_zamowien_material_orders.sql.
+export async function deleteOrder(orderId: number): Promise<void> {
+  const { error } = await supabase.rpc("delete_material_order", { p_order_id: orderId });
+  if (error) throw new Error(error.message);
+}
+
 export async function receiveOrder(
   orderId: number,
   receivedQuantity: number,

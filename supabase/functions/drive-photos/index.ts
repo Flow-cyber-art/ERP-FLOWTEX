@@ -256,6 +256,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Priorytet nazwy w nazwie podfolderu: Nazwa wyświetlana (Ustawienia —
+    // user_metadata.full_name, patrz lib/data/auth.ts) > nazwa pracownika
+    // (employees.name, jeśli konto ma powiązanego pracownika) > e-mail,
+    // jako ostateczny fallback gdy nikt nie ustawił nic czytelniejszego.
     let uploaderName = user.email ?? "użytkownik";
     if (callerProfile.employeeId) {
       const { data: employee } = await admin
@@ -264,6 +268,10 @@ Deno.serve(async (req) => {
         .eq("id", callerProfile.employeeId)
         .maybeSingle();
       if (employee?.name) uploaderName = employee.name;
+    }
+    const displayName = user.user_metadata?.full_name;
+    if (typeof displayName === "string" && displayName.trim()) {
+      uploaderName = displayName.trim();
     }
     const today = new Date().toISOString().slice(0, 10);
     const subfolderName = `${today}_${uploaderName}`.replace(/[\\/]/g, "-");

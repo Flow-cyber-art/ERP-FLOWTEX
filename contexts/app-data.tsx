@@ -1090,6 +1090,28 @@ function useAppDataState(
   const buildAssignments = assignments.filter(
     (a) => a.buildId === activeBuild?.id,
   );
+  // Krzyżyk na karcie "Brak" w Zamówieniach (patrz orders-screen.tsx) —
+  // materiał, który akurat wyzerował magazyn, ale Admin wie, że go NIE
+  // zamawia teraz (np. ma go gdzie indziej, po innej cenie, i doda ręcznie
+  // później). Zapamiętujemy ILE brakowało w chwili odrzucenia — jeśli
+  // brak później URÓŚNIE (kolejne przypisanie zjadło jeszcze więcej), alert
+  // wraca, bo to już inny, większy niedobór niż ten odrzucony.
+  const [dismissedShortages, setDismissedShortages] = useState<Record<string, number>>({});
+  useEffect(() => {
+    AsyncStorage.getItem("dismissed-shortages").then((raw) => {
+      if (!raw) return;
+      try {
+        setDismissedShortages(JSON.parse(raw));
+      } catch {}
+    });
+  }, []);
+  const dismissShortage = (materialId: string, missing: number) => {
+    setDismissedShortages((prev) => {
+      const next = { ...prev, [materialId]: missing };
+      AsyncStorage.setItem("dismissed-shortages", JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  };
   const shortages = useMemo(() => {
     const needed = new Map<string, number>();
     assignments.forEach((a) =>
@@ -1101,8 +1123,15 @@ function useAppDataState(
         needed: needed.get(m.id) || 0,
         missing: Math.max(0, (needed.get(m.id) || 0) - m.stock),
       }))
-      .filter((row) => row.missing > 0);
-  }, [materials, assignments]);
+      .filter(
+        (row) =>
+          row.missing > 0 &&
+          !(
+            dismissedShortages[row.material.id] !== undefined &&
+            dismissedShortages[row.material.id] >= row.missing
+          ),
+      );
+  }, [materials, assignments, dismissedShortages]);
   // Materiały poniżej własnego stanu minimalnego (m.min, patrz + Dodaj
   // materiał w warehouse-screen.tsx) — inny sygnał niż `shortages`
   // powyżej (tam "brakuje do planu budów", tu "trzeba dokupić, żeby
@@ -2246,6 +2275,7 @@ function useAppDataState(
     activeBuild,
     buildAssignments,
     shortages,
+    dismissShortage,
     belowMinimumMaterials,
     addToDraft,
     addMaterialToDraft,

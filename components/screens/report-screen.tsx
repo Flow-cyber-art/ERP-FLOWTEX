@@ -248,10 +248,12 @@ export function ReportScreen() {
             </Pressable>
           )}
         </View>
-        {currentValue > a.planned && (
-          // Ostrzeżenie PRZED wysłaniem raportu, nie dopiero przy
-          // rozliczeniu budowy — brygadzista widzi na bieżąco, że
-          // wpisana ilość przekracza to, co zaplanowano.
+        {devRole === "Admin" && currentValue > a.planned && (
+          // Ostrzeżenie tylko dla Admina — Brygadzista i tak wpisuje
+          // realne zużycie z budowy, zna założony plan i nie potrzebuje
+          // appki oceniającej, czy się w nim zmieścił (dotyczy zarówno
+          // materiałów z technologii, jak i pomocniczych — obie sekcje
+          // renderują się przez tę samą funkcję).
           <Text
             style={{
               color: COLORS.warning,

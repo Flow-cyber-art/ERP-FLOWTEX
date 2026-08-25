@@ -577,7 +577,13 @@ function useAppDataState(
   const closeBuildPin = settingsQuery.data?.closeBuildPin ?? null;
 
   useEffect(() => {
-    if (!buildsQuery.data?.length) return;
+    // `.data === undefined` = zapytanie jeszcze się nie wykonało (nie
+    // nadpisuj lokalnego stanu/danych demo w trakcie ładowania). Ale gdy
+    // Supabase realnie zwróci pustą tablicę (np. po wyczyszczeniu bazy),
+    // TO TEŻ jest prawidłowy wynik — trzeba go zsynchronizować, inaczej
+    // apka na zawsze zostaje przy poprzednim stanie / danych demo
+    // (initialBuilds w report-ui.tsx), mimo że w bazie nic już nie ma.
+    if (buildsQuery.data === undefined) return;
     setBuilds((previous) =>
       buildsQuery.data.map((b) => {
         // Zachowaj lokalnie policzony snapshot rozliczenia (settlement),
@@ -605,7 +611,9 @@ function useAppDataState(
   }, [buildsQuery.data]);
 
   useEffect(() => {
-    if (!materialsQuery.data?.length) return;
+    // Patrz komentarz przy buildsQuery wyżej — pusta tablica z Supabase to
+    // prawidłowy wynik ("magazyn faktycznie pusty"), nie brak danych.
+    if (materialsQuery.data === undefined) return;
     const rows = materialsQuery.data.map((m) => ({
       id: String(m.id),
       name: m.name,
@@ -636,7 +644,9 @@ function useAppDataState(
   }, [materialsQuery.data]);
 
   useEffect(() => {
-    if (!employeesQuery.data?.length) return;
+    // Patrz komentarz przy buildsQuery wyżej — pusty zespół z Supabase to
+    // prawidłowy wynik, nie brak danych.
+    if (employeesQuery.data === undefined) return;
     setEmployees(
       employeesQuery.data.map((e) => ({
         id: String(e.id),

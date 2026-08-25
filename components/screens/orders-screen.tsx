@@ -52,6 +52,7 @@ export function OrdersScreen() {
     orderMaterialName,
     orderQuantity,
     orderSaved,
+    orderCart,
     setOrderMaterialName,
     setOrderQuantity,
     setOrderSaved,
@@ -64,7 +65,9 @@ export function OrdersScreen() {
     cancelBuildOrder,
     deleteBuildOrder,
     receiveBuildOrder,
-    createOrder,
+    addToOrderCart,
+    removeFromOrderCart,
+    submitOrderCart,
     createOrderFromShortage,
     markOrderOrdered,
     deleteOrder,
@@ -327,8 +330,52 @@ export function OrdersScreen() {
             onChangeText={setOrderQuantity}
           />
           <View style={{ marginTop: 12 }}>
-            <Button label="Utwórz zamówienie" onPress={createOrder} />
+            <Button label="+ Dodaj do koszyka" onPress={addToOrderCart} />
           </View>
+
+          {orderCart.length > 0 && (
+            <View style={{ marginTop: 16 }}>
+              <Text
+                style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}
+                className="uppercase"
+              >
+                Koszyk ({orderCart.length})
+              </Text>
+              {orderCart.map((item) => (
+                <View
+                  key={item.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: COLORS.background,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={{ color: COLORS.foreground, fontSize: 13, flex: 1 }}
+                    numberOfLines={1}
+                  >
+                    {item.materialName}{" "}
+                    <Text style={{ color: COLORS.muted }}>
+                      · {item.quantity} {item.unit}
+                    </Text>
+                  </Text>
+                  <Pressable onPress={() => removeFromOrderCart(item.id)} style={{ marginLeft: 10 }}>
+                    <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
+                      Usuń
+                    </Text>
+                  </Pressable>
+                </View>
+              ))}
+              <View style={{ marginTop: 6 }}>
+                <Button label="Utwórz zamówienie" onPress={submitOrderCart} />
+              </View>
+            </View>
+          )}
           {orderSaved && (
             <Text
               style={{ color: COLORS.success, fontWeight: "700", marginTop: 10 }}

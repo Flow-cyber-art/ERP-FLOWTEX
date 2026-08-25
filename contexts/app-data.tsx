@@ -928,6 +928,16 @@ function useAppDataState(
   const [orderMaterialName, setOrderMaterialName] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
   const [orderSaved, setOrderSaved] = useState(false);
+  // Koszyk zamówienia ręcznego ("Zamów materiał spoza listy") — pozycje
+  // zbierane lokalnie, zanim cokolwiek trafi do bazy. Wcześniej każde
+  // "Utwórz zamówienie" od razu tworzyło osobne zamówienie w Supabase;
+  // teraz "Dodaj do koszyka" tylko dokłada wiersz tutaj, a dopiero
+  // finalne zatwierdzenie (submitOrderCart) tworzy zamówienia — po
+  // jednym na każdą pozycję koszyka, bo `material_orders` nie ma
+  // nagłówka+pozycji jak `orders`/`order_items` (Faza 3).
+  const [orderCart, setOrderCart] = useState<
+    { id: string; materialName: string; quantity: number; unit: string; materialId?: string }[]
+  >([]);
   useEffect(() => {
     AsyncStorage.getItem("budowy-simulator").then((raw) => {
       if (raw) {
@@ -1778,7 +1788,10 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się skorygować stanu magazynowego.");
     }
   };
-  const createOrder = async () => {
+  // Dokłada bieżąco wpisany materiał+ilość do koszyka (patrz orderCart
+  // wyżej) — NIE tworzy jeszcze zamówienia w bazie. Formularz czyści się
+  // od razu, żeby dało się dopisać kolejną pozycję.
+  const addToOrderCart = () => {
     const quantity = Number(orderQuantity);
     if (!orderMaterialName.trim() || !quantity || quantity <= 0) return;
     const matched = materials.find(
@@ -1786,16 +1799,38 @@ function useAppDataState(
         m.name.trim().toLowerCase() ===
         orderMaterialName.trim().toLowerCase(),
     );
-    try {
-      await createOrderMutation.mutateAsync({
-        materialId: matched ? Number(matched.id) : undefined,
+    setOrderCart((prev) => [
+      ...prev,
+      {
+        id: `cart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         materialName: orderMaterialName.trim(),
         quantity,
         unit: matched?.unit || "szt.",
-      });
+        materialId: matched?.id,
+      },
+    ]);
+    setOrderMaterialName("");
+    setOrderQuantity("");
+  };
+  const removeFromOrderCart = (id: string) => {
+    setOrderCart((prev) => prev.filter((item) => item.id !== id));
+  };
+  // Finalne zatwierdzenie koszyka: tworzy jedno zamówienie w Supabase per
+  // pozycja koszyka (material_orders nie ma nagłówka+pozycji), dopiero
+  // teraz — nie przy każdym dodaniu do koszyka.
+  const submitOrderCart = async () => {
+    if (orderCart.length === 0) return;
+    try {
+      for (const item of orderCart) {
+        await createOrderMutation.mutateAsync({
+          materialId: item.materialId ? Number(item.materialId) : undefined,
+          materialName: item.materialName,
+          quantity: item.quantity,
+          unit: item.unit,
+        });
+      }
       await invalidate("orders");
-      setOrderMaterialName("");
-      setOrderQuantity("");
+      setOrderCart([]);
       setOrderSaved(true);
     } catch (error) {
       reportMutationError(error, "Nie udało się złożyć zamówienia.");
@@ -2118,6 +2153,7 @@ function useAppDataState(
     orderMaterialName,
     orderQuantity,
     orderSaved,
+    orderCart,
     setTab,
     setDevRole,
     setWorkerPeriod,
@@ -2198,7 +2234,9 @@ function useAppDataState(
     updateCloseBuildPin: updateCloseBuildPinValue,
     updateMaterialPrice,
     updateMaterialStock,
-    createOrder,
+    addToOrderCart,
+    removeFromOrderCart,
+    submitOrderCart,
     createOrderFromShortage,
     markOrderOrdered,
     deleteOrder,

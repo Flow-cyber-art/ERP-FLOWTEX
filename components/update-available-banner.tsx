@@ -18,34 +18,41 @@ export function UpdateAvailableBanner() {
   if (!updateAvailable) return null;
 
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        backgroundColor: COLORS.warning,
-        paddingHorizontal: 16,
-        paddingTop: insets.top + 10,
-        paddingBottom: 10,
-      }}
-    >
-      <Text style={{ color: COLORS.background, fontSize: 13, fontWeight: "700", flex: 1 }}>
-        Dostępna nowa wersja aplikacji.
-      </Text>
-      <Pressable
-        onPress={applyUpdate}
+    // Tło paska rozciąga się na całą szerokość (jak pasek statusu), ale
+    // TREŚĆ wewnątrz trzyma się tego samego ograniczenia szerokości co
+    // reszta appki na desktopie (ScreenContainer: lg:max-w-[1040px]
+    // lg:self-center, patrz components/screen-container.tsx) — inaczej na
+    // szerokim ekranie pasek wyglądał inaczej (od krawędzi do krawędzi)
+    // niż treść pod nim (wyśrodkowana, węższa).
+    <View style={{ backgroundColor: COLORS.warning, paddingTop: insets.top }}>
+      <View
+        className="w-full lg:max-w-[1040px] lg:self-center"
         style={{
-          backgroundColor: COLORS.background,
-          borderRadius: 8,
-          paddingHorizontal: 12,
-          paddingVertical: 6,
-          marginLeft: 10,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 16,
+          paddingVertical: 10,
         }}
       >
-        <Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 13 }}>
-          Odśwież
+        <Text style={{ color: COLORS.background, fontSize: 13, fontWeight: "700", flex: 1 }}>
+          Dostępna nowa wersja aplikacji.
         </Text>
-      </Pressable>
+        <Pressable
+          onPress={applyUpdate}
+          style={{
+            backgroundColor: COLORS.background,
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            marginLeft: 10,
+          }}
+        >
+          <Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 13 }}>
+            Odśwież
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

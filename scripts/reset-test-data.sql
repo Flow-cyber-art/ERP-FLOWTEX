@@ -3,6 +3,15 @@
 -- config appki — kmRate; wyczyszczenie go zepsułoby appkę, bo id jest
 -- tam stałym `true`, nie danymi testowymi).
 --
+-- Realne logowanie/role idą przez Supabase Auth (`auth.users` +
+-- `profiles`, patrz supabase/sql/003_auth_rls.sql) — te dwie tabele
+-- NIE SĄ tu wymienione i NIE SĄ tym skryptem ruszane, więc konto
+-- admin@flowtex.pl (i każde inne konto logowania) przetrwa reset.
+-- Panel "Konta logowania" dodatkowo chroni to konto przed usunięciem
+-- i odebraniem roli Admin (patrz PROTECTED_ADMIN_EMAIL w
+-- supabase/functions/admin-users/index.ts) — reset danych testowych
+-- nigdy nie zablokuje dostępu administracyjnego.
+--
 -- Kasuje WSZYSTKO inne, w tym `technologies` / `technology_stages` /
 -- `technology_materials`, zgodnie z prośbą. RESTART IDENTITY zeruje
 -- też liczniki serial (nowe rekordy znów zaczną się od id=1).

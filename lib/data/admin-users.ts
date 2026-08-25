@@ -8,6 +8,18 @@ export type AdminUser = {
   email: string | null;
 };
 
+// Konto głównego Admina — chronione po stronie serwera (Edge Function
+// admin-users, patrz supabase/functions/admin-users/index.ts) przed
+// usunięciem i odebraniem roli Admin, żeby zarządzanie kontami nie mogło
+// nigdy zablokować dostępu do panelu admina. Ta stała jest tylko do UI
+// (wyszarzenie przycisków) — jeśli zmienisz docelowy email, ustaw też
+// sekret PROTECTED_ADMIN_EMAIL dla Edge Function, inaczej ochrona
+// serwerowa nadal będzie pilnować starego adresu.
+export const PROTECTED_ADMIN_EMAIL = "admin@flowtex.pl";
+
+export const isProtectedAdminEmail = (email: string | null | undefined): boolean =>
+  (email ?? "").trim().toLowerCase() === PROTECTED_ADMIN_EMAIL;
+
 async function invoke<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await supabase.functions.invoke("admin-users", {
     body: { action, ...payload },

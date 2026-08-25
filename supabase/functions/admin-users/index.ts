@@ -23,6 +23,30 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// Konto "głównego" Admina — chronione przed usunięciem i odebraniem roli
+// Admin przez TEN endpoint, nawet przez innego Admina. Bez tego zabezpieczenia
+// jeden nieostrożny klik w panelu "Konta logowania" (albo czyszczenie bazy
+// testowej, patrz scripts/reset-test-data.sql) może zablokować dostęp do
+// funkcji administracyjnych na dobre — a jedyną drogą powrotną jest ręczny
+// SQL w Supabase Dashboardzie (patrz SUPABASE_SETUP.md, krok 5.2-5.3).
+//
+// Nadpisywalne zmienną środowiskową Edge Function (Supabase Dashboard ->
+// Edge Functions -> admin-users -> Settings -> dodaj sekret
+// PROTECTED_ADMIN_EMAIL), żeby nie trzeba było zmieniać kodu przy zmianie
+// docelowego adresu głównego admina.
+const PROTECTED_ADMIN_EMAIL = (
+  Deno.env.get("PROTECTED_ADMIN_EMAIL") ?? "admin@flowtex.pl"
+).trim().toLowerCase();
+
+async function isProtectedAdmin(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data.user?.email) return false;
+  return data.user.email.trim().toLowerCase() === PROTECTED_ADMIN_EMAIL;
+}
+
 Deno.serve(async (req) => {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return json({ error: "Brak nagłówka autoryzacji." }, 401);
@@ -120,6 +144,12 @@ Deno.serve(async (req) => {
     const role = body.role;
     const employeeId = body.employeeId ? Number(body.employeeId) : null;
     if (!userId || !role) return json({ error: "Wymagany userId i rola." }, 400);
+    if (role !== "Admin" && (await isProtectedAdmin(admin, userId))) {
+      return json(
+        { error: "Nie można odebrać roli Admin głównemu kontu administratora." },
+        400,
+      );
+    }
     const { error } = await admin
       .from("profiles")
       .update({ role, employeeId })
@@ -133,6 +163,9 @@ Deno.serve(async (req) => {
     if (!userId) return json({ error: "Wymagany userId." }, 400);
     if (userId === user.id) {
       return json({ error: "Nie można usunąć własnego konta." }, 400);
+    }
+    if (await isProtectedAdmin(admin, userId)) {
+      return json({ error: "Nie można usunąć głównego konta administratora." }, 400);
     }
     await admin.from("profiles").delete().eq("id", userId);
     const { error } = await admin.auth.admin.deleteUser(userId);

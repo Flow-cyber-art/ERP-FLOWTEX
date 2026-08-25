@@ -107,6 +107,18 @@ do testowania widoczności paneli przed podłączeniem Supabase Auth").
    dodania/usunięcia/zresetowania konta — bootstrap z kroków 2–3 działa
    niezależnie od tego (to czysty Dashboard, bez Edge Function).
 
+   **Ochrona konta głównego admina**: funkcja `admin-users` na stałe
+   blokuje usunięcie i odebranie roli Admin kontu `admin@flowtex.pl`
+   (patrz stała `PROTECTED_ADMIN_EMAIL` w
+   [`supabase/functions/admin-users/index.ts`](./supabase/functions/admin-users/index.ts))
+   — nawet innemu Adminowi. Dzięki temu panel "Konta logowania" nie
+   może nigdy zablokować dostępu do funkcji administracyjnych. Jeśli
+   docelowy email głównego admina jest inny niż `admin@flowtex.pl`,
+   ustaw sekret **Edge Functions → admin-users → Settings → Secrets →
+   `PROTECTED_ADMIN_EMAIL`** na właściwy adres (bez tego ochrona nadal
+   będzie pilnować `admin@flowtex.pl`, a nowe konto będzie można
+   usunąć/zdegradować jak każde inne).
+
 **Model ról** (mała firma, jedna brygada na jedną budowę na raz — bez
 granulacji "który brygadzista widzi którą budowę"):
 - **Admin** — pełny dostęp: magazyn, budowy, zamówienia, pracownicy,

@@ -19,6 +19,7 @@ import {
   type AdminUser,
   createAdminUser,
   deleteAdminUser,
+  isProtectedAdminEmail,
   listAdminUsers,
   setAdminUserPassword,
   setAdminUserRole,
@@ -842,55 +843,72 @@ function AdminAccountsSection() {
                     Zmień hasło
                   </Text>
                 </Pressable>
-                <Pressable
-                  onPress={() =>
-                    confirmAction(
-                      "Usuń konto",
-                      `Usunąć konto ${u.email ?? u.id}? Tej operacji nie można cofnąć.`,
-                      "Usuń",
-                      async () => {
-                        try {
-                          await deleteAdminUser(u.id);
-                          reload();
-                        } catch (err) {
-                          setLoadError(err instanceof Error ? err.message : "Błąd.");
-                        }
-                      },
-                    )
-                  }
-                >
-                  <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
-                    Usuń
+                {isProtectedAdminEmail(u.email) ? (
+                  <Text style={{ color: COLORS.muted, fontSize: 11, fontStyle: "italic" }}>
+                    Konto główne
                   </Text>
-                </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() =>
+                      confirmAction(
+                        "Usuń konto",
+                        `Usunąć konto ${u.email ?? u.id}? Tej operacji nie można cofnąć.`,
+                        "Usuń",
+                        async () => {
+                          try {
+                            await deleteAdminUser(u.id);
+                            reload();
+                          } catch (err) {
+                            setLoadError(err instanceof Error ? err.message : "Błąd.");
+                          }
+                        },
+                      )
+                    }
+                  >
+                    <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
+                      Usuń
+                    </Text>
+                  </Pressable>
+                )}
               </View>
               {editId === u.id && (
                 <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+                  {isProtectedAdminEmail(u.email) && (
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}>
+                      To konto główne administratora — rola Admin jest chroniona i nie da się jej
+                      tu odebrać.
+                    </Text>
+                  )}
                   <Text className="text-xs text-muted uppercase mb-2">Rola</Text>
                   <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                    {ROLE_OPTIONS.map((role) => (
-                      <Pressable
-                        key={role}
-                        onPress={() => setEditRole(role)}
-                        style={{
-                          backgroundColor: editRole === role ? COLORS.primary : COLORS.background,
-                          borderRadius: 10,
-                          paddingHorizontal: 10,
-                          paddingVertical: 8,
-                          borderWidth: 1,
-                          borderColor: editRole === role ? COLORS.primary : COLORS.border,
-                        }}
-                      >
-                        <Text
+                    {ROLE_OPTIONS.map((role) => {
+                      const disabled = isProtectedAdminEmail(u.email) && role !== "Admin";
+                      return (
+                        <Pressable
+                          key={role}
+                          disabled={disabled}
+                          onPress={() => setEditRole(role)}
                           style={{
-                            color: editRole === role ? COLORS.background : COLORS.foreground,
-                            fontWeight: "700",
+                            backgroundColor: editRole === role ? COLORS.primary : COLORS.background,
+                            borderRadius: 10,
+                            paddingHorizontal: 10,
+                            paddingVertical: 8,
+                            borderWidth: 1,
+                            borderColor: editRole === role ? COLORS.primary : COLORS.border,
+                            opacity: disabled ? 0.4 : 1,
                           }}
                         >
-                          {role}
-                        </Text>
-                      </Pressable>
-                    ))}
+                          <Text
+                            style={{
+                              color: editRole === role ? COLORS.background : COLORS.foreground,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {role}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                   {employees.length > 0 && (
                     <>

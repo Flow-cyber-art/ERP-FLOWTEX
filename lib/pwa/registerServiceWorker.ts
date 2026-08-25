@@ -31,13 +31,24 @@ export function registerServiceWorker() {
  * potrafiło zgubić część skompilowanych klas Tailwind (np. ograniczenie
  * szerokości layoutu na desktopie). Timeout 2s to zabezpieczenie na
  * wypadek, gdyby SW nie odpowiedział (np. brak aktywnego workera).
+ *
+ * `navigator.serviceWorker.ready` samo w sobie NIE ma żadnego timeoutu —
+ * to Promise, które wisi w nieskończoność, jeśli rejestracja SW nigdy nie
+ * dojdzie do skutku (np. nieudany/przerwany install na słabszym
+ * połączeniu). `.catch(() => null)` łapie tylko odrzucenie, nie
+ * "zawieszenie" — bez osobnego wyścigu z timeoutem przycisk "Odśwież"
+ * potrafił wyglądać na martwy (widoczny, klikalny, ale bez żadnego
+ * efektu), bo cała funkcja czekała w nieskończoność na ten pierwszy krok.
  */
 export async function clearServiceWorkerCache() {
   if (Platform.OS !== "web") return;
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
     return;
   }
-  const registration = await navigator.serviceWorker.ready.catch(() => null);
+  const registration = await Promise.race([
+    navigator.serviceWorker.ready.catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+  ]);
   const active = registration?.active;
   if (!active) return;
 

@@ -773,6 +773,26 @@ function useAppDataState(
   // komunikatem zamiast cichego, potencjalnie niespójnego zapisu lokalnego.
   const invalidate = (key: string) =>
     queryClient.invalidateQueries({ queryKey: [key, "list"] });
+
+  // Zamówienia/Magazyn polegają na Realtime do świeżości danych
+  // (staleTime: Infinity na tych zapytaniach) — ale uśpiona karta w
+  // przeglądarce / telefon w tle potrafi po cichu zerwać kanał Realtime
+  // (patrz lib/data/use-realtime-sync.ts), więc zmiana zrobiona na innym
+  // urządzeniu nie zawsze dociera, dopóki ktoś nie zrobi pełnego reloadu.
+  // Dodatkowe zabezpieczenie: wymuś odświeżenie za każdym razem, gdy
+  // ktoś faktycznie PRZEJDZIE na daną zakładkę, niezależnie od Realtime.
+  useEffect(() => {
+    if (tab === "orders") {
+      invalidate("orders");
+      invalidate("buildOrders");
+      invalidate("materials");
+    } else if (tab === "warehouse") {
+      invalidate("materials");
+      invalidate("warehouseBatches");
+      queryClient.invalidateQueries({ queryKey: ["technologies"] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
   const createMaterialMutation = useMutation({ mutationFn: createMaterial });
   const updateMaterialPriceMutation = useMutation({
     mutationFn: (vars: { materialId: number; unitPrice: number }) =>

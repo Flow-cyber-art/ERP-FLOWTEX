@@ -1,3 +1,4 @@
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { AppRole } from "@/lib/data/auth";
 
@@ -24,7 +25,21 @@ async function invoke<T>(action: string, payload: Record<string, unknown> = {}):
   const { data, error } = await supabase.functions.invoke("admin-users", {
     body: { action, ...payload },
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Gdy Edge Function odpowie statusem innym niż 2xx (nasz `json()` w
+    // supabase/functions/admin-users/index.ts zawsze zwraca wtedy body
+    // `{ error: "konkretny powód" }`), supabase-js NIE czyta tego body —
+    // `error.message` to wtedy zawsze ten sam generyczny tekst "Edge
+    // Function returned a non-2xx status code", niezależnie od
+    // faktycznej przyczyny (zajęty email, zła rola, itd.). Trzeba
+    // ręcznie doczytać prawdziwy komunikat z `error.context` (surowy
+    // Response) — patrz FunctionsHttpError w @supabase/supabase-js.
+    if (error instanceof FunctionsHttpError) {
+      const body = await error.context.json().catch(() => null);
+      throw new Error(body?.error || error.message);
+    }
+    throw new Error(error.message);
+  }
   if (data?.error) throw new Error(data.error);
   return data as T;
 }

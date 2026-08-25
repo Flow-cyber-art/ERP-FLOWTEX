@@ -8,7 +8,6 @@ import {
   formatPLN,
   IconBadge,
   QuantityStepper,
-  ScreenHeader,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
@@ -35,29 +34,24 @@ import {
 // stałą widoczność, a na mobile dzielą miejsce z zakładką Magazyn.
 type AdminTab = "team" | "hours" | "accounts" | "settings";
 
-const TAB_META: Record<AdminTab, { title: string; description: string }> = {
-  team: { title: "Zespół", description: "Pracownicy, dniówka i stawki." },
-  hours: { title: "Rozliczenie godzin", description: "Godziny przepracowane per pracownik." },
-  accounts: { title: "Konta logowania", description: "Dostęp do aplikacji per osoba." },
-  // Miejsce na ustawienia aplikacji, które nie pasują do żadnej z
-  // powyższych sekcji (np. wylogowanie — celowo NIE jest to osobna
-  // pozycja w nawigacji, żeby nie dało się wylogować przypadkowym
-  // dotknięciem paska zakładek — patrz app/(tabs)/index.tsx).
-  settings: { title: "Ustawienia", description: "Ustawienia aplikacji." },
-};
-
 export function AdminScreen() {
   const [section, setSection] = useState<AdminTab>("team");
 
   return (
     <>
-      <ScreenHeader
-        title={TAB_META[section].title}
-        description={TAB_META[section].description}
-      />
-
+      {/* Bez ScreenHeader tutaj — jego tytuł ("Zespół", "Rozliczenie
+          godzin"...) tylko powtarzał to, co już mówi podświetlony
+          przycisk poniżej, i zabierał miejsce bez potrzeby. Przyciski
+          same pełnią rolę i nawigacji, i wskaźnika aktualnej sekcji. */}
       <View className="bg-surface border border-border rounded-2xl p-2 mb-5">
-        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 6,
+            justifyContent: "center",
+          }}
+        >
           {(
             [
               ["team", "Zespół i dniówka"],
@@ -70,9 +64,9 @@ export function AdminScreen() {
               key={value}
               onPress={() => setSection(value)}
               style={{
-                flex: 1,
                 borderRadius: 10,
                 paddingVertical: 10,
+                paddingHorizontal: 16,
                 alignItems: "center",
                 backgroundColor:
                   section === value ? COLORS.primary : "transparent",

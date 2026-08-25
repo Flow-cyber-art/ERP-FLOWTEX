@@ -744,7 +744,7 @@ export function BuildsScreen() {
                   <View style={{ marginTop: 10 }}>
                     {technologies.length === 0 ? (
                       <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                        Brak technologii — dodaj ją najpierw w Zespół → Technologie.
+                        Brak technologii — dodaj ją najpierw w zakładce Technologie.
                       </Text>
                     ) : (
                       <>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIndicator,
   Modal,
@@ -67,6 +68,7 @@ const emptyStage = (): DraftStage => ({
 
 export function TechnologiesScreen() {
   const { materials } = useAppData();
+  const queryClient = useQueryClient();
 
   const [technologies, setTechnologies] = useState<TechnologyRow[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -314,6 +316,13 @@ export function TechnologiesScreen() {
       );
       setEditorOpen(false);
       reload();
+      // Ten ekran ma własną, niezależną listę (listAllTechnologies +
+      // reload() wyżej) — bez tego appka (m.in. picker przypisywania
+      // technologii do budowy w Budowach) korzysta z osobnego,
+      // cache'owanego zapytania React Query (`useAppData().technologies`,
+      // staleTime: Infinity), które realtime i tak w końcu odświeży, ale
+      // nie natychmiast w tej samej sesji.
+      await queryClient.invalidateQueries({ queryKey: ["technologies"] });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Błąd.");
     } finally {

@@ -1320,15 +1320,16 @@ function useAppDataState(
   };
   const saveBuild = async () => {
     const duration = Number(newBuild.durationDays);
-    if (
-      !newBuild.number ||
-      !newBuild.name ||
-      !newBuild.manager ||
-      !newBuild.startDate ||
-      !duration ||
-      duration <= 0
-    )
+    const missing: string[] = [];
+    if (!newBuild.number) missing.push("Numer budowy");
+    if (!newBuild.name) missing.push("Nazwa");
+    if (!newBuild.manager) missing.push("Osoba odpowiedzialna");
+    if (!newBuild.startDate) missing.push("Data rozpoczęcia");
+    if (!duration || duration <= 0) missing.push("Czas trwania (dni)");
+    if (missing.length > 0) {
+      notify("Uzupełnij wymagane pola", missing.join(", "));
       return;
+    }
     try {
       const build = await createBuildMutation.mutateAsync({
         number: newBuild.number,

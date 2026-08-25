@@ -29,6 +29,14 @@ const REALTIME_TABLES: { table: string; queryKey: string }[] = [
   { table: "material_batches", queryKey: "warehouseBatches" },
   { table: "build_material_lots", queryKey: "buildMaterialLots" },
   { table: "build_stage_status", queryKey: "buildStageStatuses" },
+  // Brakowało tego wpisu od zawsze (moduł Technologia nie miał osobnej
+  // migracji realtime) — technologiesQuery w app-data.tsx ma
+  // `staleTime: Infinity` i klucz `["technologies", "active"]`, więc bez
+  // tego wpisu nowo dodana technologia nigdy nie pojawiała się w
+  // pickerze przypisywania do budowy, dopóki ktoś nie zrobił pełnego
+  // przeładowania strony. Wymaga też włączenia Realtime na tabeli
+  // `technologies` w Supabase — patrz supabase/sql/030_realtime_technologies.sql.
+  { table: "technologies", queryKey: "technologies" },
 ];
 
 export function useRealtimeSync(queryClient: QueryClient) {
@@ -40,7 +48,12 @@ export function useRealtimeSync(queryClient: QueryClient) {
         "postgres_changes",
         { event: "*", schema: "public", table },
         () => {
-          queryClient.invalidateQueries({ queryKey: [queryKey, "list"] });
+          // Prefiksowe dopasowanie React Query (domyślne, bez `exact`)
+          // unieważnia każdy klucz zaczynający się od [queryKey, ...] —
+          // działa to zarówno dla ["materials", "list"], jak i dla
+          // ["technologies", "active"], więc nie trzeba tu zgadywać
+          // dokładnego sufiksu klucza per tabela.
+          queryClient.invalidateQueries({ queryKey: [queryKey] });
         },
       );
     }

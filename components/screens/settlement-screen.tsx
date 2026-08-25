@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { COLORS, formatPLN, ScreenHeader, SearchablePicker } from "@/components/report-ui";
+import { ComparisonBarChart, DonutChart, KpiTile } from "@/components/charts";
 import { useAppData } from "@/contexts/app-data";
 
 /**
@@ -166,6 +167,23 @@ export function SettlementScreen() {
   const contractValue = Number(build?.contractValue) || 0;
   const profit = contractValue - totalCost;
   const margin = contractValue > 0 ? (profit / contractValue) * 100 : null;
+
+  const areaM2 = Number(build?.areaM2) || 0;
+  const costPerM2 = areaM2 > 0 ? totalCost / areaM2 : null;
+  const durationDays = build?.durationDays ?? 0;
+  const costPerDay = durationDays > 0 ? totalCost / durationDays : null;
+
+  const costBreakdown = useMemo(
+    () =>
+      [
+        { key: "tech", label: "Materiały technologiczne", value: materialsCostTech, color: COLORS.primary },
+        { key: "aux", label: "Materiały pomocnicze", value: materialsCostAux, color: "#7BA6D9" },
+        { key: "labor", label: "Robocizna", value: laborCost, color: "#9C7BD9" },
+        { key: "km", label: "Kilometrówka", value: kmCost, color: COLORS.success },
+        { key: "extra", label: "Koszty dodatkowe", value: extraCostsTotal, color: COLORS.warning },
+      ].filter((seg) => seg.value > 0),
+    [materialsCostTech, materialsCostAux, laborCost, kmCost, extraCostsTotal],
+  );
 
   return (
     <>
@@ -433,6 +451,90 @@ export function SettlementScreen() {
                   {margin != null ? `${margin.toFixed(1)}%` : "—"}
                 </Text>
               </View>
+            </View>
+          </View>
+
+          <View className="bg-surface border border-border rounded-2xl p-4 mt-3">
+            <Text style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 16, marginBottom: 2 }}>
+              Raport domknięcia budowy
+            </Text>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 16 }}>
+              {isClosed
+                ? "Podsumowanie dla właściciela / zarządu na podstawie zamrożonego rozliczenia."
+                : "Podgląd na żywo — ostateczne liczby po zamknięciu budowy."}
+            </Text>
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+              <KpiTile label="Kontrakt" value={formatPLN(contractValue)} />
+              <KpiTile label="Koszt budowy" value={formatPLN(totalCost)} color={COLORS.primary} />
+              <KpiTile
+                label="Zysk"
+                value={formatPLN(profit)}
+                color={profit < 0 ? COLORS.danger : COLORS.success}
+              />
+              <KpiTile
+                label="Marża"
+                value={margin != null ? `${margin.toFixed(1)}%` : "—"}
+                color={margin != null && margin < 0 ? COLORS.danger : COLORS.success}
+              />
+              <KpiTile
+                label="Koszt / m²"
+                value={costPerM2 != null ? formatPLN(costPerM2) : "—"}
+              />
+              <KpiTile
+                label="Koszt / dzień"
+                value={costPerDay != null ? formatPLN(costPerDay) : "—"}
+              />
+              <KpiTile label="Czas trwania" value={durationDays > 0 ? `${durationDays} dni` : "—"} />
+              <KpiTile label="Powierzchnia" value={areaM2 > 0 ? `${areaM2} m²` : "—"} />
+            </View>
+
+            {costBreakdown.length > 0 && (
+              <>
+                <Text
+                  style={{
+                    color: COLORS.muted,
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}
+                >
+                  Struktura kosztów
+                </Text>
+                <DonutChart
+                  data={costBreakdown}
+                  centerLabel="koszt"
+                  centerValue={formatPLN(totalCost)}
+                />
+              </>
+            )}
+
+            <View style={{ marginTop: 20 }}>
+              <Text
+                style={{
+                  color: COLORS.muted,
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  marginBottom: 10,
+                }}
+              >
+                Kontrakt vs koszt
+              </Text>
+              <ComparisonBarChart
+                items={[
+                  {
+                    key: "budget",
+                    label: build.number,
+                    a: { key: "contract", label: "Kontrakt", value: contractValue, color: COLORS.primary },
+                    b: {
+                      key: "cost",
+                      label: "Koszt budowy",
+                      value: totalCost,
+                      color: totalCost > contractValue ? COLORS.danger : COLORS.success,
+                    },
+                  },
+                ]}
+              />
             </View>
           </View>
         </>

@@ -20,8 +20,17 @@ export function registerServiceWorker() {
 
 /**
  * Wysyła do aktywnego service workera komunikat każący mu wyczyścić
- * cache statycznych assetów. Używane przez useVersionCheck, gdy wykryje
- * nowszy build na serwerze.
+ * cache statycznych assetów i CZEKA na potwierdzenie, że cache faktycznie
+ * został wyczyszczony (przez MessageChannel, patrz public/sw.js), zanim
+ * wywołujący zrobi window.location.reload().
+ *
+ * Wcześniej funkcja tylko wysyłała komunikat i wracała natychmiast, a
+ * czyszczenie cache'a w SW działo się asynchronicznie w tle (wewnątrz
+ * event.waitUntil) — reload wygrywał ten wyścig i strona ładowała się
+ * z mieszanki starych (jeszcze niewyczyszczonych) i nowych assetów, co
+ * potrafiło zgubić część skompilowanych klas Tailwind (np. ograniczenie
+ * szerokości layoutu na desktopie). Timeout 2s to zabezpieczenie na
+ * wypadek, gdyby SW nie odpowiedział (np. brak aktywnego workera).
  */
 export async function clearServiceWorkerCache() {
   if (Platform.OS !== "web") return;
@@ -29,5 +38,16 @@ export async function clearServiceWorkerCache() {
     return;
   }
   const registration = await navigator.serviceWorker.ready.catch(() => null);
-  registration?.active?.postMessage({ type: "CLEAR_CACHE" });
+  const active = registration?.active;
+  if (!active) return;
+
+  await new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    const timeout = setTimeout(resolve, 2000);
+    channel.port1.onmessage = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    active.postMessage({ type: "CLEAR_CACHE" }, [channel.port2]);
+  });
 }

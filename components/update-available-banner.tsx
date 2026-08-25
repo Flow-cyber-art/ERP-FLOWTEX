@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/components/report-ui";
 import { useVersionCheck } from "@/lib/pwa/useVersionCheck";
 
@@ -8,6 +9,11 @@ import { useVersionCheck } from "@/lib/pwa/useVersionCheck";
 // dziennego straciłby niezapisaną pracę przy nagłym reloadzie w tle.
 export function UpdateAvailableBanner() {
   const { updateAvailable, applyUpdate } = useVersionCheck();
+  // Banner renderuje się w app/_layout.tsx NAD Stackiem, poza
+  // ScreenContainerem każdego ekranu (patrz components/screen-container.tsx),
+  // więc nie dziedziczy jego SafeAreaView — bez własnego insets.top
+  // nachodził na pasek statusu/zegar na telefonie.
+  const insets = useSafeAreaInsets();
 
   if (!updateAvailable) return null;
 
@@ -19,7 +25,8 @@ export function UpdateAvailableBanner() {
         justifyContent: "space-between",
         backgroundColor: COLORS.warning,
         paddingHorizontal: 16,
-        paddingVertical: 10,
+        paddingTop: insets.top + 10,
+        paddingBottom: 10,
       }}
     >
       <Text style={{ color: COLORS.background, fontSize: 13, fontWeight: "700", flex: 1 }}>

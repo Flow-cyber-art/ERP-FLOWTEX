@@ -94,6 +94,12 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
   }
   if (event.data?.type === "CLEAR_CACHE") {
+    // Odpowiadamy na porcie zwrotnym DOPIERO gdy cache faktycznie zniknie
+    // — inaczej strona wywołująca reload wyścigowo trafiała na mieszankę
+    // starych (z cache'a) i nowych (z sieci) assetów, np. HTML z jednego
+    // builda + CSS z drugiego, co gubiło część klas Tailwind (m.in.
+    // ograniczenie szerokości layoutu). Patrz registerServiceWorker.ts.
+    const replyPort = event.ports && event.ports[0];
     event.waitUntil(
       (async () => {
         const keys = await caches.keys();
@@ -102,6 +108,7 @@ self.addEventListener("message", (event) => {
             .filter((key) => key.startsWith("budowy-static-"))
             .map((key) => caches.delete(key)),
         );
+        replyPort?.postMessage({ type: "CACHE_CLEARED" });
       })(),
     );
   }

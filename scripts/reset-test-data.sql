@@ -1,16 +1,32 @@
--- Czyszczenie bazy do stanu testowego: zostaje TYLKO tabela `users`
--- (żeby dało się zalogować) oraz `settings` (jednowierszowy globalny
--- config appki — kmRate; wyczyszczenie go zepsułoby appkę, bo id jest
--- tam stałym `true`, nie danymi testowymi).
+-- Czyszczenie bazy do stanu testowego: zostają TYLKO konta logowania
+-- (`auth.users`, żeby dało się zalogować hasłem, którego już używasz) i
+-- `settings` (jednowierszowy globalny config appki — kmRate; jego
+-- wyczyszczenie zepsułoby appkę, bo id jest tam stałym `true`, nie
+-- danymi testowymi).
 --
--- Realne logowanie/role idą przez Supabase Auth (`auth.users` +
--- `profiles`, patrz supabase/sql/003_auth_rls.sql) — te dwie tabele
--- NIE SĄ tu wymienione i NIE SĄ tym skryptem ruszane, więc konto
--- admin@flowtex.pl (i każde inne konto logowania) przetrwa reset.
--- Panel "Konta logowania" dodatkowo chroni to konto przed usunięciem
--- i odebraniem roli Admin (patrz PROTECTED_ADMIN_EMAIL w
--- supabase/functions/admin-users/index.ts) — reset danych testowych
--- nigdy nie zablokuje dostępu administracyjnego.
+-- WAŻNE — poprawka po realnym incydencie: pierwsza wersja tego skryptu
+-- NIE wymieniała `profiles` (tabela z rolami Admin/Brygadzista/Pracownik,
+-- patrz supabase/sql/003_auth_rls.sql) w liście TRUNCATE, zakładając że
+-- zostanie nietknięta. To błędne założenie — `profiles."employeeId"`
+-- ma FK do `employees(id)`, a `TRUNCATE employees CASCADE` w Postgresie
+-- IGNORUJE zdefiniowaną akcję `ON DELETE SET NULL` na takim kluczu i
+-- zawsze kasuje CAŁY wiersz w tabeli referencującej — więc czyszczenie
+-- `employees` kasowało przy okazji wszystkie wiersze w `profiles`,
+-- łącznie z rolą Admina głównego konta (objaw: "Konto zalogowane, ale
+-- bez przypisanej roli" zaraz po reset+deploy).
+--
+-- Naprawa: `profiles` jest teraz JAWNIE w liście TRUNCATE (i tak
+-- zostałaby wyczyszczona przez CASCADE, więc lepiej to nazwać wprost),
+-- a zaraz po TRUNCATE skrypt sam odtwarza wiersz Admina dla konta
+-- głównego (PROTECTED_ADMIN_EMAIL, patrz
+-- supabase/functions/admin-users/index.ts — domyślnie admin@flowtex.pl).
+--
+-- Wszystkie POZOSTAŁE konta logowania (Brygadzista/Pracownik, dodatkowi
+-- Admini) TRACĄ swój wiersz w `profiles`, czyli TRACĄ przypisaną rolę —
+-- to nieuniknione przy czyszczeniu `employees`/`teams`. Po tym skrypcie
+-- trzeba im rolę nadać ponownie: Zespół → Konta logowania → Edytuj.
+-- `auth.users` (loginy/hasła) same w sobie nie są ruszane — konta nie
+-- znikają, tylko chwilowo wracają do stanu "zalogowany, bez roli".
 --
 -- Kasuje WSZYSTKO inne, w tym `technologies` / `technology_stages` /
 -- `technology_materials`, zgodnie z prośbą. RESTART IDENTITY zeruje
@@ -26,6 +42,9 @@
 BEGIN;
 
 TRUNCATE TABLE
+  -- role kont logowania (patrz uwaga wyżej — i tak ginie przez CASCADE
+  -- z employees, więc jest tu wymieniona jawnie)
+  profiles,
   -- kadry / brygady
   employees,
   teams,
@@ -57,5 +76,15 @@ TRUNCATE TABLE
   orders,
   order_items
 RESTART IDENTITY CASCADE;
+
+-- Odtwórz od razu rolę Admin dla konta głównego, żeby po tym skrypcie
+-- dało się normalnie zalogować i zarządzać resztą (m.in. przez Zespół →
+-- Konta logowania nadać role pozostałym kontom). Jeśli zmieniłeś email
+-- głównego admina, podmień go też tutaj.
+insert into profiles (id, role, "employeeId")
+select id, 'Admin', null
+from auth.users
+where email = 'admin@flowtex.pl'
+on conflict (id) do update set role = 'Admin';
 
 COMMIT;

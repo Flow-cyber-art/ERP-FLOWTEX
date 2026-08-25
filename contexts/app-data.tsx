@@ -791,6 +791,14 @@ function useAppDataState(
       invalidate("warehouseBatches");
       queryClient.invalidateQueries({ queryKey: ["technologies"] });
     }
+    // "reports" zasila plakietkę "ile do sprawdzenia" w PASKU NAWIGACJI —
+    // widoczną niezależnie od tego, na jakiej zakładce ktoś akurat jest —
+    // więc odświeżamy ją przy KAŻDEJ zmianie zakładki, nie tylko przy
+    // wejściu na Raporty. Bez tego Admin mógł nie zobaczyć nowego raportu
+    // od brygadzisty od razu: Realtime na tej samej karcie przeglądarki
+    // potrafi się po cichu urwać (tak samo jak w Zamówieniach/Magazynie
+    // wyżej), a refetchInterval na reportsQuery czeka do 60s.
+    invalidate("reports");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
   const createMaterialMutation = useMutation({ mutationFn: createMaterial });

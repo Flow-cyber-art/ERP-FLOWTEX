@@ -21,10 +21,11 @@ export type MaterialOrderRow = {
   receivedQuantity: string | null;
   receivedUnitPrice: string | null;
   receivedAt: string | null;
+  batchId: string | null;
 };
 
 const ORDER_COLUMNS =
-  "id, materialId, materialName, quantity, unit, status, createdAt, orderedAt, receivedQuantity, receivedUnitPrice, receivedAt";
+  "id, materialId, materialName, quantity, unit, status, createdAt, orderedAt, receivedQuantity, receivedUnitPrice, receivedAt, batchId";
 
 export async function listOrders(): Promise<MaterialOrderRow[]> {
   const { data, error } = await supabase
@@ -40,6 +41,10 @@ export type CreateOrderInput = {
   materialName: string;
   quantity: number;
   unit: string;
+  // Wspólny identyfikator dla pozycji tworzonych naraz z koszyka — patrz
+  // submitOrderCart w contexts/app-data.tsx. Pojedyncze zamówienia
+  // (createOrderFromShortage) go nie przekazują.
+  batchId?: string;
 };
 
 export async function createOrder(input: CreateOrderInput): Promise<void> {
@@ -48,6 +53,7 @@ export async function createOrder(input: CreateOrderInput): Promise<void> {
     materialName: input.materialName,
     quantity: input.quantity,
     unit: input.unit,
+    batchId: input.batchId ?? null,
     status: "do realizacji" satisfies OrderStatus,
   });
   if (error) throw new Error(error.message);

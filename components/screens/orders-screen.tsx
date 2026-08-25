@@ -135,9 +135,33 @@ export function OrdersScreen() {
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("aktywne");
 
+  // Zamówienia z koszyka (kilka materiałów zatwierdzonych naraz, patrz
+  // submitOrderCart w contexts/app-data.tsx) dostają wspólny batchId —
+  // dopóki są jeszcze "do realizacji" (nieprzesłane do dostawcy), pokazujemy
+  // je jako JEDNO zgrupowane zamówienie z jedną parą przycisków akcji,
+  // zamiast osobnym wierszem per materiał. Po oznaczeniu "Złożono u
+  // dostawcy" wracają do zwykłych, osobnych wierszy — bo przyjęcie dostawy
+  // (inna ilość/cena/dzień per materiał) i tak jest z natury per pozycja.
+  const batchGroups = useMemo(() => {
+    const groups = new Map<string, typeof orders>();
+    for (const o of orders) {
+      if (o.status !== "do realizacji" || !o.batchId) continue;
+      const list = groups.get(o.batchId) ?? [];
+      list.push(o);
+      groups.set(o.batchId, list);
+    }
+    return [...groups.entries()].map(([batchId, items]) => ({ batchId, items }));
+  }, [orders]);
+  const batchedOrderIds = useMemo(
+    () => new Set(batchGroups.flatMap((g) => g.items.map((i) => i.id))),
+    [batchGroups],
+  );
+
   // Jedna, spójna lista pozycji — każdy materiał ma dokładnie JEDEN status
   // w danym momencie (Brak -> Do realizacji -> Zamówione -> Dostarczone),
   // zamiast pojawiać się równocześnie w sekcji "Braki" i w sekcji zamówień.
+  // Zamówienia będące częścią batchGroups (patrz wyżej) są tu pominięte —
+  // renderują się osobno, zgrupowane.
   const rows: Row[] = useMemo(() => {
     const shortageRows: Row[] = shortages
       .filter(
@@ -157,37 +181,38 @@ export function OrdersScreen() {
         unit: row.material.unit,
       }));
 
-    const orderRows: Row[] = orders.map((o) => ({
-      key: `order-${o.id}`,
-      name: o.materialName,
-      qtyLabel:
-        o.status === "dostarczone"
-          ? `przyjęto ${o.receivedQuantity} ${o.unit}`
-          : `${o.quantity} ${o.unit}`,
-      metaLabel:
-        o.status === "dostarczone"
-          ? `${o.receivedAt}`
-          : o.status === "zamówione"
-            ? `zamówiono ${o.orderedAt || o.createdAt}`
-            : `zgłoszono ${o.createdAt}`,
-      status: o.status,
-      materialId: o.materialId,
-      orderId: o.id,
-      orderQuantity: o.quantity,
-      unit: o.unit,
-    }));
+    const orderRows: Row[] = orders
+      .filter((o) => !batchedOrderIds.has(o.id))
+      .map((o) => ({
+        key: `order-${o.id}`,
+        name: o.materialName,
+        qtyLabel:
+          o.status === "dostarczone"
+            ? `przyjęto ${o.receivedQuantity} ${o.unit}`
+            : `${o.quantity} ${o.unit}`,
+        metaLabel:
+          o.status === "dostarczone"
+            ? `${o.receivedAt}`
+            : o.status === "zamówione"
+              ? `zamówiono ${o.orderedAt || o.createdAt}`
+              : `zgłoszono ${o.createdAt}`,
+        status: o.status,
+        materialId: o.materialId,
+        orderId: o.id,
+        orderQuantity: o.quantity,
+        unit: o.unit,
+      }));
 
     const order = { brak: 0, "do realizacji": 1, zamówione: 2, dostarczone: 3 };
     return [...shortageRows, ...orderRows].sort(
       (a, b) => order[a.status] - order[b.status],
     );
-  }, [shortages, orders]);
+  }, [shortages, orders, batchedOrderIds]);
 
   const brakiCount = rows.filter((r) => r.status === "brak").length;
-  const wDrodzeCount = rows.filter(
-    (r) => r.status === "do realizacji" || r.status === "zamówione",
-  ).length;
-  const dostarczoneCount = rows.filter((r) => r.status === "dostarczone").length;
+  const wDrodzeCount =
+    orders.filter((o) => o.status === "do realizacji" || o.status === "zamówione").length;
+  const dostarczoneCount = orders.filter((o) => o.status === "dostarczone").length;
 
   const visibleRows = rows.filter((r) => {
     if (filter === "braki") return r.status === "brak";
@@ -694,7 +719,86 @@ export function OrdersScreen() {
         </Pressable>
       )}
 
-      {visibleRows.length === 0 && (
+      {/* Zamówienia złożone naraz z koszyka (kilka materiałów, wspólny
+          batchId) — jedna karta, jedna para przycisków akcji zamiast
+          osobnego wiersza per materiał. Patrz batchGroups wyżej. */}
+      {(filter === "aktywne" || filter === "wdrodze") &&
+        batchGroups.map((group) => (
+          <View
+            key={group.batchId}
+            className="bg-surface border border-border rounded-xl px-4 py-3 mb-2"
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text className="text-sm font-bold text-foreground">
+                  Zamówienie · {group.items.length} pozycje
+                </Text>
+              </View>
+              <StatusBadge status="warning" label="Do realizacji" />
+            </View>
+            {group.items.map((item) => (
+              <Text
+                key={item.id}
+                className="text-xs text-foreground mt-1"
+                numberOfLines={1}
+              >
+                {item.materialName} · {item.quantity} {item.unit}
+              </Text>
+            ))}
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              <Pressable
+                onPress={async () => {
+                  for (const item of group.items) await markOrderOrdered(item.id);
+                }}
+                style={({ pressed }) => ({
+                  borderWidth: 1,
+                  borderColor: COLORS.primary,
+                  borderRadius: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
+                  Złożono u dostawcy
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  confirmAction(
+                    "Usunąć zamówienie?",
+                    `${group.items.length} pozycji. Tej operacji nie da się cofnąć.`,
+                    "Usuń",
+                    async () => {
+                      for (const item of group.items) await deleteOrder(item.id);
+                    },
+                  )
+                }
+                style={({ pressed }) => ({
+                  borderWidth: 1,
+                  borderColor: COLORS.danger,
+                  borderRadius: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
+                  Usuń
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+
+      {visibleRows.length === 0 && batchGroups.length === 0 && (
         <View className="bg-surface border border-border rounded-2xl p-5 items-center">
           <IconBadge name="local-shipping" />
           <Text className="text-sm text-muted mt-3 text-center">
@@ -709,133 +813,150 @@ export function OrdersScreen() {
           <View key={row.key}>
             <View
               className="bg-surface border border-border rounded-xl px-4 py-3 mb-2"
-              style={{ flexDirection: "row", alignItems: "center", opacity: row.status === "dostarczone" ? 0.7 : 1 }}
+              style={{ opacity: row.status === "dostarczone" ? 0.7 : 1 }}
             >
+              {/* Status + akcje NAD nazwą materiału — z długimi etykietami
+                  przycisków ("Złożono u dostawcy") w jednym wierszu obok
+                  nazwy, na wąskim mobile obu brakowało miejsca i nazwa
+                  łamała się pojedynczymi literami. Osobny wiersz niżej ma
+                  zawsze pełną szerokość karty dla samej nazwy. */}
               <View
                 style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  marginRight: 12,
-                  backgroundColor:
-                    row.status === "brak"
-                      ? COLORS.danger
-                      : row.status === "dostarczone"
-                        ? COLORS.success
-                        : COLORS.warning,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  justifyContent: "space-between",
                 }}
-              />
-              <View style={{ flex: 1 }}>
-                <Text className="text-sm font-bold text-foreground">
-                  {row.name}
-                </Text>
-                <Text className="text-xs text-muted mt-0.5">
-                  {row.qtyLabel} · {row.metaLabel}
-                </Text>
-              </View>
-              <StatusBadge
-                status={
-                  row.status === "brak"
-                    ? "danger"
-                    : row.status === "dostarczone"
-                      ? "ok"
-                      : "warning"
-                }
-                label={STATUS_LABEL[row.status]}
-              />
-              {row.status === "brak" && (
-                <Pressable
-                  onPress={() =>
-                    row.materialId &&
-                    row.missing &&
-                    createOrderFromShortage(row.materialId, row.missing)
+              >
+                <StatusBadge
+                  status={
+                    row.status === "brak"
+                      ? "danger"
+                      : row.status === "dostarczone"
+                        ? "ok"
+                        : "warning"
                   }
-                  style={({ pressed }) => ({
-                    marginLeft: 10,
-                    backgroundColor: COLORS.primary,
-                    borderRadius: 8,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    opacity: pressed ? 0.75 : 1,
-                  })}
-                >
-                  <Text style={{ color: COLORS.background, fontWeight: "800", fontSize: 12 }}>
-                    Zamów
-                  </Text>
-                </Pressable>
-              )}
-              {row.status === "do realizacji" && row.orderId && (
-                <>
-                  <Pressable
-                    onPress={() => markOrderOrdered(row.orderId!)}
-                    style={({ pressed }) => ({
-                      marginLeft: 10,
-                      borderWidth: 1,
-                      borderColor: COLORS.primary,
-                      borderRadius: 8,
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
-                      Złożono u dostawcy
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() =>
-                      confirmAction(
-                        "Usunąć zamówienie?",
-                        `${row.name} · ${row.qtyLabel}. Tej operacji nie da się cofnąć.`,
-                        "Usuń",
-                        () => deleteOrder(row.orderId!),
-                      )
-                    }
-                    style={({ pressed }) => ({
-                      marginLeft: 8,
-                      borderWidth: 1,
-                      borderColor: COLORS.danger,
-                      borderRadius: 8,
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
-                      Usuń
-                    </Text>
-                  </Pressable>
-                </>
-              )}
-              {row.status === "zamówione" && row.orderId && !isReceiving && (
-                <Pressable
-                  onPress={() => {
-                    const currentPrice =
-                      materials.find((m) => m.id === row.materialId)?.unitPrice ?? 0;
-                    setReceiveDrafts({
-                      ...receiveDrafts,
-                      [row.orderId!]: String(row.orderQuantity ?? 0),
-                    });
-                    setReceivePriceDrafts({
-                      ...receivePriceDrafts,
-                      [row.orderId!]: String(currentPrice || ""),
-                    });
-                    setReceivingId(row.orderId!);
+                  label={STATUS_LABEL[row.status]}
+                />
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {row.status === "brak" && (
+                    <Pressable
+                      onPress={() =>
+                        row.materialId &&
+                        row.missing &&
+                        createOrderFromShortage(row.materialId, row.missing)
+                      }
+                      style={({ pressed }) => ({
+                        backgroundColor: COLORS.primary,
+                        borderRadius: 8,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        opacity: pressed ? 0.75 : 1,
+                      })}
+                    >
+                      <Text style={{ color: COLORS.background, fontWeight: "800", fontSize: 12 }}>
+                        Zamów
+                      </Text>
+                    </Pressable>
+                  )}
+                  {row.status === "do realizacji" && row.orderId && (
+                    <>
+                      <Pressable
+                        onPress={() => markOrderOrdered(row.orderId!)}
+                        style={({ pressed }) => ({
+                          borderWidth: 1,
+                          borderColor: COLORS.primary,
+                          borderRadius: 8,
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
+                          Złożono u dostawcy
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() =>
+                          confirmAction(
+                            "Usunąć zamówienie?",
+                            `${row.name} · ${row.qtyLabel}. Tej operacji nie da się cofnąć.`,
+                            "Usuń",
+                            () => deleteOrder(row.orderId!),
+                          )
+                        }
+                        style={({ pressed }) => ({
+                          borderWidth: 1,
+                          borderColor: COLORS.danger,
+                          borderRadius: 8,
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
+                          Usuń
+                        </Text>
+                      </Pressable>
+                    </>
+                  )}
+                  {row.status === "zamówione" && row.orderId && !isReceiving && (
+                    <Pressable
+                      onPress={() => {
+                        const currentPrice =
+                          materials.find((m) => m.id === row.materialId)?.unitPrice ?? 0;
+                        setReceiveDrafts({
+                          ...receiveDrafts,
+                          [row.orderId!]: String(row.orderQuantity ?? 0),
+                        });
+                        setReceivePriceDrafts({
+                          ...receivePriceDrafts,
+                          [row.orderId!]: String(currentPrice || ""),
+                        });
+                        setReceivingId(row.orderId!);
+                      }}
+                      style={({ pressed }) => ({
+                        backgroundColor: COLORS.successBg,
+                        borderRadius: 8,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <Text style={{ color: COLORS.success, fontWeight: "700", fontSize: 12 }}>
+                        Dostawa dotarła
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
+                <View
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    marginRight: 12,
+                    flexShrink: 0,
+                    backgroundColor:
+                      row.status === "brak"
+                        ? COLORS.danger
+                        : row.status === "dostarczone"
+                          ? COLORS.success
+                          : COLORS.warning,
                   }}
-                  style={({ pressed }) => ({
-                    marginLeft: 10,
-                    backgroundColor: COLORS.successBg,
-                    borderRadius: 8,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    opacity: pressed ? 0.7 : 1,
-                  })}
-                >
-                  <Text style={{ color: COLORS.success, fontWeight: "700", fontSize: 12 }}>
-                    Dostawa dotarła
+                />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+                    {row.name}
                   </Text>
-                </Pressable>
-              )}
+                  <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>
+                    {row.qtyLabel} · {row.metaLabel}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             {isReceiving && row.orderId && (

@@ -684,6 +684,7 @@ function useAppDataState(
           ? Number(o.receivedUnitPrice)
           : undefined,
         receivedAt: o.receivedAt ? o.receivedAt.slice(0, 10) : undefined,
+        batchId: o.batchId ?? undefined,
       })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1817,9 +1818,16 @@ function useAppDataState(
   };
   // Finalne zatwierdzenie koszyka: tworzy jedno zamówienie w Supabase per
   // pozycja koszyka (material_orders nie ma nagłówka+pozycji), dopiero
-  // teraz — nie przy każdym dodaniu do koszyka.
+  // teraz — nie przy każdym dodaniu do koszyka. Wszystkie pozycje
+  // dostają ten sam batchId, żeby OrdersScreen mógł je pokazać i
+  // obsłużyć (Złożono u dostawcy / Usuń) jako jedno zgrupowane
+  // zamówienie, mimo że w bazie to nadal osobne wiersze.
   const submitOrderCart = async () => {
     if (orderCart.length === 0) return;
+    const batchId =
+      orderCart.length > 1
+        ? `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+        : undefined;
     try {
       for (const item of orderCart) {
         await createOrderMutation.mutateAsync({
@@ -1827,6 +1835,7 @@ function useAppDataState(
           materialName: item.materialName,
           quantity: item.quantity,
           unit: item.unit,
+          batchId,
         });
       }
       await invalidate("orders");

@@ -354,6 +354,10 @@ export const materialOrders = pgTable("material_orders", {
   receivedQuantity: decimal("receivedQuantity", { precision: 12, scale: 3 }),
   receivedAt: timestamp("receivedAt"),
   receivedUnitPrice: decimal("receivedUnitPrice", { precision: 12, scale: 2 }),
+  // Wspólny identyfikator dla pozycji zatwierdzonych naraz z koszyka
+  // (patrz supabase/sql/031_material_orders_batch.sql) — grupuje kilka
+  // materiałów w jedno zamówienie w UI, mimo że tabela zostaje płaska.
+  batchId: varchar("batchId", { length: 64 }),
 });
 
 export const buildSettlements = pgTable("build_settlements", {

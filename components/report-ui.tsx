@@ -177,6 +177,9 @@ type MaterialOrder = {
   // Cena jednostkowa tej konkretnej dostawy — może różnić się od ceny
   // poprzednich partii tego samego materiału w magazynie.
   receivedUnitPrice?: number;
+  // Grupuje pozycje utworzone naraz z koszyka w jedno zamówienie w UI —
+  // patrz orderCart/submitOrderCart w contexts/app-data.tsx.
+  batchId?: string;
 };
 
 // Pojedyncza partia zakupowa materiału — magazyn danej pozycji to suma

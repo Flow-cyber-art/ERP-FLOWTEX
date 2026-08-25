@@ -112,12 +112,19 @@ Deno.serve(async (req) => {
     });
     if (listError) return json({ error: listError.message }, 400);
     const emailById = new Map(page.users.map((u) => [u.id, u.email ?? null]));
-    const users = (profiles ?? []).map((p) => ({
-      id: p.id,
-      role: p.role,
-      employeeId: p.employeeId,
-      email: emailById.get(p.id) ?? null,
-    }));
+    const users = (profiles ?? [])
+      // Konto głównego Admina jest "super administratorem" — celowo
+      // niewidoczne w tej liście, nawet dla innych Adminów (i dla samego
+      // siebie, gdy zalogowany jako inne konto). Nie da się go stąd ani
+      // zarządzać (patrz ochrony przy setRole/delete/setPassword wyżej),
+      // ani nawet zobaczyć, że istnieje.
+      .filter((p) => emailById.get(p.id)?.trim().toLowerCase() !== PROTECTED_ADMIN_EMAIL)
+      .map((p) => ({
+        id: p.id,
+        role: p.role,
+        employeeId: p.employeeId,
+        email: emailById.get(p.id) ?? null,
+      }));
     return json({ users });
   }
 

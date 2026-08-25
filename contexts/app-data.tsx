@@ -35,6 +35,7 @@ import {
   markOrderOrdered as markOrderOrderedRemote,
   receiveOrder as receiveOrderRemote,
 } from "@/lib/data/orders";
+import { listTimeEntries } from "@/lib/data/time-entries";
 import {
   assignMaterialBatchesToBuild,
   unassignMaterialFromBuild,
@@ -658,6 +659,37 @@ function useAppDataState(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeesQuery.data]);
 
+  // `time_entries` — godziny pracy per pracownik/budowa. Wstawiane przez
+  // serwerową funkcję `submit_daily_report` w momencie wysłania raportu
+  // (niezależnie od zatwierdzenia), ale do tej pory appka nigdy nie
+  // odczytywała tej tabeli z powrotem: `timeEntries` żyło wyłącznie
+  // lokalnie (AsyncStorage / optymistyczna aktualizacja w
+  // saveDailyReportUnsafe niżej) — koszt robocizny w Rozliczeniu
+  // (settlement-screen.tsx) był więc zawsze pusty na innym urządzeniu
+  // albo po odświeżeniu strony, mimo że dane realnie były w bazie.
+  const timeEntriesQuery = useQuery({
+    queryKey: ["timeEntries", "list"],
+    queryFn: listTimeEntries,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  useEffect(() => {
+    if (timeEntriesQuery.data === undefined) return;
+    setTimeEntries(
+      timeEntriesQuery.data.map((t) => ({
+        id: String(t.id),
+        date: t.date,
+        buildId: String(t.buildId),
+        employeeId: String(t.employeeId),
+        hours: Number(t.hours),
+        start: t.start ?? undefined,
+        end: t.end ?? undefined,
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeEntriesQuery.data]);
+
   const ordersQuery = useQuery({
     queryKey: ["orders", "list"],
     queryFn: listOrders,
@@ -799,6 +831,10 @@ function useAppDataState(
     // potrafi się po cichu urwać (tak samo jak w Zamówieniach/Magazynie
     // wyżej), a refetchInterval na reportsQuery czeka do 60s.
     invalidate("reports");
+    // Godziny pracy zasilają Rozliczenie (koszt robocizny) i ekrany HR
+    // ("Rozliczenie godzin", "Mój czas", "Czas zespołu") — ta sama
+    // ochrona przed po cichu urwanym Realtime co przy "reports" wyżej.
+    invalidate("timeEntries");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
   const createMaterialMutation = useMutation({ mutationFn: createMaterial });
@@ -1750,8 +1786,12 @@ function useAppDataState(
           // Supabase, zamiast czekać na najbliższy refetchInterval
           // (reportsQuery, patrz wyżej) — na tym samym urządzeniu/roli
           // (np. w podglądzie deweloperskim) wynik jest widoczny
-          // natychmiast, bez czekania do 15s.
+          // natychmiast, bez czekania do 15s. timeEntries tak samo —
+          // submit_daily_report wstawia godziny do time_entries przy
+          // wysyłce, a to jedyne miejsce, które odczytuje tę tabelę
+          // z powrotem (patrz timeEntriesQuery wyżej).
           invalidate("reports");
+          invalidate("timeEntries");
         }
       });
     }

@@ -37,6 +37,11 @@ const REALTIME_TABLES: { table: string; queryKey: string }[] = [
   // przeładowania strony. Wymaga też włączenia Realtime na tabeli
   // `technologies` w Supabase — patrz supabase/sql/030_realtime_technologies.sql.
   { table: "technologies", queryKey: "technologies" },
+  // Godziny pracy — patrz timeEntriesQuery w contexts/app-data.tsx.
+  // Wstawiane przez submit_daily_report (RPC) przy wysyłce raportu, więc
+  // to jedyny sposób, w jaki inne urządzenie/sesja dowie się o nowych
+  // godzinach bez pełnego przeładowania strony.
+  { table: "time_entries", queryKey: "timeEntries" },
 ];
 
 export function useRealtimeSync(queryClient: QueryClient) {

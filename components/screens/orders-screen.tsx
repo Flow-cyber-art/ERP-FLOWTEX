@@ -1044,7 +1044,12 @@ export function OrdersScreen() {
                         onPress={() =>
                           row.materialId != null &&
                           row.missing != null &&
-                          dismissShortage(row.materialId, row.missing)
+                          confirmAction(
+                            "Nie zamawiać teraz?",
+                            `${row.name} — alert o braku zniknie z Zamówień, dopóki niedobór nie wzrośnie ponad ${row.missing} ${row.unit}.`,
+                            "Nie zamawiaj",
+                            () => dismissShortage(row.materialId!, row.missing!),
+                          )
                         }
                         style={({ pressed }) => ({
                           borderWidth: 1,

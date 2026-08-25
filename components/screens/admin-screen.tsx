@@ -831,18 +831,20 @@ function AdminAccountsSection() {
                     Edytuj
                   </Text>
                 </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setPasswordEditId(passwordEditId === u.id ? null : u.id);
-                    setPasswordInput("");
-                    setEditId(null);
-                  }}
-                  style={{ marginRight: 14 }}
-                >
-                  <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
-                    Zmień hasło
-                  </Text>
-                </Pressable>
+                {!isProtectedAdminEmail(u.email) && (
+                  <Pressable
+                    onPress={() => {
+                      setPasswordEditId(passwordEditId === u.id ? null : u.id);
+                      setPasswordInput("");
+                      setEditId(null);
+                    }}
+                    style={{ marginRight: 14 }}
+                  >
+                    <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
+                      Zmień hasło
+                    </Text>
+                  </Pressable>
+                )}
                 {isProtectedAdminEmail(u.email) ? (
                   <Text style={{ color: COLORS.muted, fontSize: 11, fontStyle: "italic" }}>
                     Konto główne

@@ -151,6 +151,22 @@ Deno.serve(async (req) => {
     if (!userId || password.length < 6) {
       return json({ error: "Wymagany userId i hasło (min. 6 znaków)." }, 400);
     }
+    // Hasła głównego konta administratora NIE da się ustawić stąd — nawet
+    // sobie samemu. To celowe: panel "Konta logowania" pokazuje listę
+    // WSZYSTKICH kont innym Adminom, więc jakiekolwiek pole do zmiany
+    // hasła tego konta w tym miejscu to punkt, przez który dowolny inny
+    // Admin mógłby je przejąć. Właściciel zmienia własne hasło przez
+    // samoobsługę w Ustawieniach (updateMyPassword w lib/data/auth.ts),
+    // która działa tylko na koncie, na którym jest aktualnie zalogowany.
+    if (await isProtectedAdmin(admin, userId)) {
+      return json(
+        {
+          error:
+            "Hasła głównego konta administratora nie można zmienić stąd — użyj samoobsługi w Ustawieniach, zalogowany na tym koncie.",
+        },
+        400,
+      );
+    }
     const { error } = await admin.auth.admin.updateUserById(userId, { password });
     if (error) return json({ error: error.message }, 400);
     return json({ ok: true });

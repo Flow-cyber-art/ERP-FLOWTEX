@@ -16,10 +16,23 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Appka wywołuje tę funkcję z przeglądarki (supabase.functions.invoke w
+// lib/data/admin-users.ts), a przeglądarka przed właściwym POST-em (który
+// niesie nagłówek Authorization) wysyła preflight OPTIONS. Bez poniższych
+// nagłówków CORS na OBU odpowiedziach (OPTIONS i właściwej) przeglądarka
+// blokuje żądanie, zanim dotrze do reszty kodu — po stronie klienta
+// wygląda to jak "Failed to send a request to the Edge Function", bez
+// żadnego konkretnego błędu z logiki funkcji.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 }
 
@@ -48,6 +61,10 @@ async function isProtectedAdmin(
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return json({ error: "Brak nagłówka autoryzacji." }, 401);
 

@@ -1264,8 +1264,8 @@ const ReportCard = ({
             />
           </View>
         </View>
-        <Text style={{ color: COLORS.primary, fontSize: 16, marginLeft: 8 }}>
-          {expanded ? "▲" : "▼"}
+        <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700", marginLeft: 8 }}>
+          {expanded ? "⌄" : "›"}
         </Text>
       </Pressable>
 

@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Linking, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
 import { Button, COLORS, notify } from "@/components/report-ui";
 import { listBuildPhotos, uploadBuildPhoto } from "@/lib/data/drive-photos";
 
@@ -21,6 +21,8 @@ export function BuildPhotosSection({
   buildId,
   driveFolderUrl,
   showFolderLink = true,
+  variant = "default",
+  onCountChange,
 }: {
   buildId: number;
   driveFolderUrl: string | null;
@@ -28,6 +30,16 @@ export function BuildPhotosSection({
   // do zewnętrznego folderu (Drive) — link "Otwórz folder ↗" jest tylko
   // dla Admina, patrz report-screen.tsx.
   showFolderLink?: boolean;
+  // "admin": hierarchia z panelu administratora — folder Drive jest
+  // najczęstszą potrzebą (sprawdzenie już wysłanych zdjęć), więc jest
+  // dużą, wyróżnioną kartą na górze; dodanie z galerii i zrobienie zdjęcia
+  // to rzadsze, drugorzędne akcje pod spodem. "default" (brygadzista) ma
+  // odwrotny scenariusz — najpierw dodaje zdjęcia, nie ma potrzeby
+  // wychodzić do Drive — i zostaje bez zmian.
+  variant?: "default" | "admin";
+  // Łączna liczba zdjęć w folderze — do wyświetlenia w nagłówku sekcji
+  // "ZDJĘCIA (n)" w builds-screen.tsx (Admin), poza tym komponentem.
+  onCountChange?: (count: number) => void;
 }) {
   const [newCount, setNewCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -39,6 +51,7 @@ export function BuildPhotosSection({
       .then(([photos, lastSeen]) => {
         const lastSeenAt = lastSeen ? new Date(lastSeen).getTime() : 0;
         setNewCount(photos.filter((p) => new Date(p.createdAt).getTime() > lastSeenAt).length);
+        onCountChange?.(photos.length);
       })
       .catch(() => {
         // Cichy fallback — licznik "nowych" to tylko wygoda, nie krytyczna
@@ -124,6 +137,61 @@ export function BuildPhotosSection({
     );
   }
 
+  const uploadingIndicator = uploading ? (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
+      <ActivityIndicator color={COLORS.primary} />
+      <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+        Wysyłanie zdjęć{progress ? ` (${progress.done}/${progress.total})` : "…"}
+      </Text>
+    </View>
+  ) : null;
+
+  if (variant === "admin") {
+    // Hierarchia Admina: 1) otwórz to, co już jest na Drive (najczęstsza
+    // potrzeba) — duża, wyróżniona karta; 2) dodaj istniejące zdjęcia z
+    // galerii; 3) zrób nowe zdjęcie — najrzadsze, więc mała, drugorzędna
+    // akcja tekstowa, nie osobny duży przycisk jak pozostałe dwie.
+    return (
+      <View>
+        {showFolderLink && (
+          <Pressable
+            onPress={openFolder}
+            className="bg-background border border-border rounded-2xl items-center"
+            style={{ paddingVertical: 22 }}
+          >
+            <Text style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
+              📁 Otwórz folder zdjęć ↗
+            </Text>
+            {newCount > 0 && (
+              <Text style={{ color: COLORS.primary, fontSize: 12, marginTop: 4 }}>
+                {newCount} {newCount === 1 ? "nowe zdjęcie" : "nowych zdjęć"}
+              </Text>
+            )}
+          </Pressable>
+        )}
+        {uploadingIndicator}
+        {!uploading && (
+          <>
+            <View style={{ marginTop: 12 }}>
+              <Button label="+ Dodaj zdjęcia z galerii" secondary onPress={pickFromLibrary} />
+            </View>
+            <Pressable
+              onPress={takePhoto}
+              style={{ alignSelf: "flex-end", marginTop: 12, padding: 4 }}
+            >
+              <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "700" }}>
+                📷 Zrób zdjęcie
+              </Text>
+            </Pressable>
+          </>
+        )}
+        {error && (
+          <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>{error}</Text>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View>
       {showFolderLink && (
@@ -133,14 +201,7 @@ export function BuildPhotosSection({
           onPress={openFolder}
         />
       )}
-      {uploading ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
-          <ActivityIndicator color={COLORS.primary} />
-          <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-            Wysyłanie zdjęć{progress ? ` (${progress.done}/${progress.total})` : "…"}
-          </Text>
-        </View>
-      ) : (
+      {uploadingIndicator || (
         <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
           <View style={{ flex: 1 }}>
             <Button label="📷 Zrób zdjęcie" secondary onPress={takePhoto} />

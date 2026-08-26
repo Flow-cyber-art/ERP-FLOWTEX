@@ -98,6 +98,9 @@ export function BuildsScreen() {
   // folder) na czas wywołania edge function drive-photos.
   const [creatingDriveFolderId, setCreatingDriveFolderId] = useState<string | null>(null);
   const [driveFolderError, setDriveFolderError] = useState<string | null>(null);
+  // Łączna liczba zdjęć w folderze, do nagłówka "ZDJĘCIA (n)" — zgłaszana
+  // przez BuildPhotosSection (onCountChange), które i tak już ją pobiera.
+  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   // Przypisanie/zmiana technologii (Faza 2) — jeden picker na raz, ten
   // sam wzorzec co edycja linku do zdjęć powyżej.
   const [techEditBuildId, setTechEditBuildId] = useState<string | null>(null);
@@ -112,14 +115,21 @@ export function BuildsScreen() {
   // Lista zamówień z planu (Faza 3) w karcie budowy potrafi urosnąć —
   // zwinięta domyślnie, rozwijana pojedynczo per budowa, ten sam wzorzec
   // co reszta akordeonów na tym ekranie.
-  const [expandedOrdersBuildId, setExpandedOrdersBuildId] = useState<string | null>(
-    null,
-  );
+  // Zamówienia jako lista klikalnych wierszy (jedno rozwinięte naraz,
+  // niezależnie od budowy — id zamówienia jest unikalne globalnie) zamiast
+  // rozwijania/zwijania całej sekcji jednym przełącznikiem nad listą.
+  const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   // Przypisywanie materiału dodatkowego (dawniej: globalny przycisk nad listą
   // budów, wymagający ręcznego wyboru budowy). Teraz otwierany z konkretnej
   // karty budowy — trzyma id tej budowy, więc formularz nie musi już pytać
   // o budowę (setSelectedBuildId dzieje się przy otwarciu).
   const [assignBuildId, setAssignBuildId] = useState<string | null>(null);
+  // Wiersz materiału dodatkowego jest klikalny i rozwija swoje szczegóły
+  // (cena, wartość) — jeden naraz, ten sam wzorzec co reszta akordeonów
+  // na tym ekranie. Klucz: `${buildId}-${materialId}`.
+  const [expandedAssignmentKey, setExpandedAssignmentKey] = useState<
+    string | null
+  >(null);
   const [orderReceivingId, setOrderReceivingId] = useState<number | null>(null);
   const [orderReceiveDrafts, setOrderReceiveDrafts] = useState<
     Record<number, { qty: string; price: string }>
@@ -414,53 +424,54 @@ export function BuildsScreen() {
                   borderTopColor: COLORS.border,
                 }}
               >
-                <View
+                <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}>
+                  TECHNOLOGIA
+                </Text>
+                {/* Cały wiersz jest klikalny i prowadzi do zmiany/przypisania
+                    technologii — bez osobnego przycisku "Zmień" obok, żeby nie
+                    dublować tej samej akcji dwoma sposobami na raz. */}
+                <Pressable
+                  onPress={() => {
+                    if (pickerOpen) {
+                      setTechEditBuildId(null);
+                      return;
+                    }
+                    setTechEditBuildId(b.id);
+                    setTechPickerId(null);
+                    setTechAreaInput(b.areaM2 ?? "");
+                  }}
                   style={{
                     flexDirection: "row",
                     justifyContent: "space-between",
-                    alignItems: "flex-start",
+                    alignItems: "center",
                   }}
                 >
                   <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                      TECHNOLOGIA
-                    </Text>
                     {snapshot ? (
-                      <Text
-                        style={{
-                          color: COLORS.foreground,
-                          fontWeight: "700",
-                          fontSize: 13,
-                          marginTop: 2,
-                        }}
-                      >
-                        {snapshot.technologyName} · v{snapshot.technologyVersion} ·{" "}
-                        {b.areaM2 ?? "?"} m²
-                      </Text>
+                      <>
+                        <Text
+                          style={{
+                            color: COLORS.foreground,
+                            fontWeight: "700",
+                            fontSize: 13,
+                          }}
+                        >
+                          {snapshot.technologyName}
+                        </Text>
+                        <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                          v{snapshot.technologyVersion} · {b.areaM2 ?? "?"} m²
+                        </Text>
+                      </>
                     ) : (
-                      <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
-                        Brak przypisanej technologii.
+                      <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                        Brak przypisanej technologii — dotknij, żeby przypisać.
                       </Text>
                     )}
                   </View>
-                  <Pressable
-                    onPress={() => {
-                      if (pickerOpen) {
-                        setTechEditBuildId(null);
-                        return;
-                      }
-                      setTechEditBuildId(b.id);
-                      setTechPickerId(null);
-                      setTechAreaInput(b.areaM2 ?? "");
-                    }}
-                  >
-                    <Text
-                      style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}
-                    >
-                      {pickerOpen ? "Zwiń" : snapshot ? "Zmień" : "Przypisz"}
-                    </Text>
-                  </Pressable>
-                </View>
+                  <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
+                    {pickerOpen ? "⌄" : "›"}
+                  </Text>
+                </Pressable>
 
                 {pickerOpen && (
                   <View style={{ marginTop: 10 }}>
@@ -603,24 +614,9 @@ export function BuildsScreen() {
                     alignItems: "center",
                   }}
                 >
-                  <Pressable
-                    disabled={buildOrdersForBuild.length === 0}
-                    onPress={() =>
-                      setExpandedOrdersBuildId(
-                        expandedOrdersBuildId === b.id ? null : b.id,
-                      )
-                    }
-                    style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                  >
-                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                      ZAMÓWIENIA{buildOrdersForBuild.length > 0 ? ` (${buildOrdersForBuild.length})` : ""}
-                    </Text>
-                    {buildOrdersForBuild.length > 0 && (
-                      <Text style={{ color: COLORS.primary, fontSize: 11 }}>
-                        {expandedOrdersBuildId === b.id ? "▲" : "▼"}
-                      </Text>
-                    )}
-                  </Pressable>
+                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                    ZAMÓWIENIA{buildOrdersForBuild.length > 0 ? ` (${buildOrdersForBuild.length})` : ""}
+                  </Text>
                   {hasPlan && (
                     <Pressable
                       disabled={orderGenerating === b.id}
@@ -630,7 +626,6 @@ export function BuildsScreen() {
                         try {
                           await generateOrderFromPlan(b.id);
                           setOrderGeneratedFor(b.id);
-                          setExpandedOrdersBuildId(b.id);
                         } finally {
                           setOrderGenerating(null);
                         }
@@ -656,8 +651,9 @@ export function BuildsScreen() {
                   </Text>
                 )}
 
-                {expandedOrdersBuildId === b.id && buildOrdersForBuild.map((order) => {
+                {buildOrdersForBuild.map((order) => {
                   const isReceiving = orderReceivingId === order.id;
+                  const isOrderOpen = expandedOrderId === order.id;
                   return (
                     <View
                       key={order.id}
@@ -668,7 +664,13 @@ export function BuildsScreen() {
                         padding: 10,
                       }}
                     >
-                      <View
+                      {/* Wiersz zamówienia jest klikalny i prowadzi do jego
+                          szczegółów (rozwinięcie pozycji/akcji poniżej) —
+                          "+ Z planu" wyżej zostaje osobną, niezależną akcją. */}
+                      <Pressable
+                        onPress={() =>
+                          setExpandedOrderId(isOrderOpen ? null : order.id)
+                        }
                         style={{
                           flexDirection: "row",
                           justifyContent: "space-between",
@@ -678,18 +680,25 @@ export function BuildsScreen() {
                         <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
                           {order.orderNumber}
                         </Text>
-                        <StatusBadge
-                          status={
-                            order.status === "przyjęte"
-                              ? "ok"
-                              : order.status === "anulowane"
-                                ? "danger"
-                                : "warning"
-                          }
-                          label={STATUS_LABEL[order.status]}
-                        />
-                      </View>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <StatusBadge
+                            status={
+                              order.status === "przyjęte"
+                                ? "ok"
+                                : order.status === "anulowane"
+                                  ? "danger"
+                                  : "warning"
+                            }
+                            label={STATUS_LABEL[order.status]}
+                          />
+                          <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                            {isOrderOpen ? "⌄" : "›"}
+                          </Text>
+                        </View>
+                      </Pressable>
 
+                      {isOrderOpen && (
+                      <>
                       {order.order_items.map((item) => (
                         <View
                           key={item.id}
@@ -912,6 +921,8 @@ export function BuildsScreen() {
                             }
                           />
                         </View>
+                      )}
+                      </>
                       )}
                     </View>
                   );
@@ -1173,31 +1184,91 @@ export function BuildsScreen() {
 
                   {buildAssignments.map((a) => {
                     const material = materials.find((m) => m.id === a.materialId);
+                    const key = `${b.id}-${a.materialId}`;
+                    const isOpen = expandedAssignmentKey === key;
                     return (
                       <View
-                        key={`${b.id}-${a.materialId}`}
+                        key={key}
                         style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
                           marginTop: 10,
                           paddingTop: 10,
                           borderTopWidth: 1,
                           borderTopColor: COLORS.border,
                         }}
                       >
-                        <Text
-                          className="text-xs text-foreground"
-                          numberOfLines={1}
-                          style={{ flex: 1, marginRight: 8 }}
+                        {/* Klikalny wiersz → szczegóły materiału (cena,
+                            zużycie); "+ Przypisz materiał" wyżej to osobna,
+                            niezależna akcja — nie duplikujemy jej tutaj. */}
+                        <Pressable
+                          onPress={() => setExpandedAssignmentKey(isOpen ? null : key)}
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
                         >
-                          {material?.name || "Materiał usunięty z magazynu"}
-                        </Text>
-                        <Text
-                          className="text-xs text-primary font-bold"
-                          style={{ flexShrink: 0 }}
-                        >
-                          {a.planned} {material?.unit}
-                        </Text>
+                          <Text
+                            className="text-xs text-foreground"
+                            numberOfLines={1}
+                            style={{ flex: 1, marginRight: 8 }}
+                          >
+                            {material?.name || "Materiał usunięty z magazynu"}
+                          </Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                            <Text className="text-xs text-primary font-bold">
+                              {a.planned} {material?.unit}
+                            </Text>
+                            <Text style={{ color: COLORS.primary, fontSize: 15, fontWeight: "700" }}>
+                              {isOpen ? "⌄" : "›"}
+                            </Text>
+                          </View>
+                        </Pressable>
+                        {isOpen && (
+                          <View style={{ marginTop: 8 }}>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                justifyContent: "space-between",
+                                paddingVertical: 2,
+                              }}
+                            >
+                              <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                                Cena jednostkowa
+                              </Text>
+                              <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                                {formatPLN(a.unitPrice)}
+                              </Text>
+                            </View>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                justifyContent: "space-between",
+                                paddingVertical: 2,
+                              }}
+                            >
+                              <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                                Zużyto / przypisano
+                              </Text>
+                              <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                                {a.used} / {a.planned} {material?.unit}
+                              </Text>
+                            </View>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                justifyContent: "space-between",
+                                paddingVertical: 2,
+                              }}
+                            >
+                              <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                                Wartość
+                              </Text>
+                              <Text style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "700" }}>
+                                {formatPLN(a.planned * a.unitPrice)}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
                       </View>
                     );
                   })}
@@ -1223,8 +1294,29 @@ export function BuildsScreen() {
                 alignItems: "center",
               }}
             >
-              <Text style={{ color: COLORS.muted, fontSize: 11 }}>ZDJĘCIA</Text>
-              {!b.photosUrl && (
+              <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                ZDJĘCIA{photoCounts[b.id] ? ` (${photoCounts[b.id]})` : ""}
+              </Text>
+              {/* Możliwość poprawienia linku zostaje, ale jako drobna,
+                  drugorzędna akcja — nie "Zmień link" jako główny przycisk:
+                  użytkownik nie chce "zmieniać linku", tylko otworzyć
+                  zdjęcia (patrz duża karta z BuildPhotosSection niżej). */}
+              {b.photosUrl && (
+                <Pressable
+                  onPress={() => {
+                    const isEditing = editingPhotosBuildId === b.id;
+                    setEditingPhotosBuildId(isEditing ? null : b.id);
+                    setPhotosUrlInput(isEditing ? "" : b.photosUrl || "");
+                  }}
+                >
+                  <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                    {editingPhotosBuildId === b.id ? "Zwiń" : "Edytuj link"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+            {!b.photosUrl && (
+              <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 14 }}>
                 <Pressable
                   disabled={creatingDriveFolderId === b.id}
                   onPress={async () => {
@@ -1243,35 +1335,26 @@ export function BuildsScreen() {
                       setCreatingDriveFolderId(null);
                     }
                   }}
-                  style={{ marginRight: 12 }}
                 >
-                  <Text
-                    style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}
-                  >
+                  <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
                     {creatingDriveFolderId === b.id
                       ? "Tworzenie katalogu…"
                       : "Stwórz katalog na zdjęcia"}
                   </Text>
                 </Pressable>
-              )}
-              <Pressable
-                onPress={() => {
-                  const isEditing = editingPhotosBuildId === b.id;
-                  setEditingPhotosBuildId(isEditing ? null : b.id);
-                  setPhotosUrlInput(isEditing ? "" : b.photosUrl || "");
-                }}
-              >
-                <Text
-                  style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}
+                <Pressable
+                  onPress={() => {
+                    const isEditing = editingPhotosBuildId === b.id;
+                    setEditingPhotosBuildId(isEditing ? null : b.id);
+                    setPhotosUrlInput(isEditing ? "" : b.photosUrl || "");
+                  }}
                 >
-                  {editingPhotosBuildId === b.id
-                    ? "Zwiń"
-                    : b.photosUrl
-                      ? "Zmień link"
-                      : "…lub wklej link ręcznie"}
-                </Text>
-              </Pressable>
-            </View>
+                  <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                    {editingPhotosBuildId === b.id ? "Zwiń" : "…lub wklej link ręcznie"}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
             {driveFolderError && (
               <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
                 {driveFolderError}
@@ -1297,7 +1380,16 @@ export function BuildsScreen() {
               </View>
             )}
             <View style={{ marginTop: 10 }}>
-              <BuildPhotosSection buildId={Number(b.id)} driveFolderUrl={b.photosUrl ?? null} />
+              <BuildPhotosSection
+                buildId={Number(b.id)}
+                driveFolderUrl={b.photosUrl ?? null}
+                variant="admin"
+                onCountChange={(count) =>
+                  setPhotoCounts((prev) =>
+                    prev[b.id] === count ? prev : { ...prev, [b.id]: count },
+                  )
+                }
+              />
             </View>
           </View>
 

@@ -378,11 +378,21 @@ export function WarehouseScreen() {
               {/* Archiwizacja zamiast usuwania — materiał zostaje w bazie
                   (historia go referencjuje), tylko znika z domyślnej listy;
                   wciąż podpowiadany przy dopasowaniu nazwy przy zamawianiu/
-                  dodawaniu, żeby nie powstał duplikat indeksu/nazwy. */}
+                  dodawaniu, żeby nie powstał duplikat indeksu/nazwy.
+                  Tylko przy stanie zero — inaczej dałoby się ukryć z
+                  widoku materiał, który wciąż fizycznie jest na magazynie
+                  (zablokowane też w bazie, set_material_active). */}
+              {m.active && m.stock !== 0 && (
+                <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}>
+                  Archiwizacja możliwa tylko przy stanie magazynowym równym
+                  zero (skoryguj stan wyżej).
+                </Text>
+              )}
               <View style={{ marginTop: 10 }}>
                 <Button
                   label={m.active ? "Archiwizuj materiał" : "Przywróć materiał"}
                   secondary
+                  disabled={m.active && m.stock !== 0}
                   onPress={() => {
                     setMaterialActive(m.id, !m.active);
                     setEditingId(null);

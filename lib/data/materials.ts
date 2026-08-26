@@ -70,14 +70,15 @@ export async function adjustMaterialStock(materialId: number, newStock: number):
   if (error) throw new Error(error.message);
 }
 
-// Archiwizacja zamiast usuwania — patrz supabase/sql/038_archiwizacja_materialow.sql.
-// Zapis bezpośredni (RLS "materials_write_admin", ten sam wzorzec co
-// updateMaterialPrice), bez RPC — to tylko jedna kolumna, nie operacja
-// wieloetapowa.
+// Archiwizacja zamiast usuwania — patrz supabase/sql/038_archiwizacja_materialow.sql
+// i 039_archiwizacja_tylko_zero_stanu.sql. RPC (nie zapis bezpośredni jak
+// updateMaterialPrice), bo archiwizacja waliduje stan magazynowy (tylko
+// zero) po stronie bazy — nie coś, co dałoby się bezpiecznie sprawdzić
+// samą polityką RLS.
 export async function setMaterialActive(materialId: number, active: boolean): Promise<void> {
-  const { error } = await supabase
-    .from("materials")
-    .update({ active, updatedAt: new Date().toISOString() })
-    .eq("id", materialId);
+  const { error } = await supabase.rpc("set_material_active", {
+    p_material_id: materialId,
+    p_active: active,
+  });
   if (error) throw new Error(error.message);
 }

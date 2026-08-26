@@ -22,8 +22,10 @@ export function WarehouseScreen() {
     query,
     showMaterial,
     newMaterial,
+    showArchivedMaterials,
     setQuery,
     setShowMaterial,
+    setShowArchivedMaterials,
     setNewMaterial,
     filtered,
     materials,
@@ -31,6 +33,7 @@ export function WarehouseScreen() {
     saveMaterial,
     updateMaterialPrice,
     updateMaterialStock,
+    setMaterialActive,
   } = useAppData();
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -209,6 +212,30 @@ export function WarehouseScreen() {
       value={query}
       onChangeText={setQuery}
     />
+    <Pressable
+      onPress={() => setShowArchivedMaterials(!showArchivedMaterials)}
+      style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}
+    >
+      <View
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 4,
+          borderWidth: 1,
+          borderColor: showArchivedMaterials ? COLORS.primary : COLORS.border,
+          backgroundColor: showArchivedMaterials ? COLORS.primary : "transparent",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {showArchivedMaterials && (
+          <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>✓</Text>
+        )}
+      </View>
+      <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
+        Pokaż zarchiwizowane materiały
+      </Text>
+    </Pressable>
     <View className="mt-4 rounded-2xl border border-border overflow-hidden">
       {filtered.map((m, i) => {
         const batchCount = warehouseBatches.filter(
@@ -230,10 +257,12 @@ export function WarehouseScreen() {
               }
             }}
             className="flex-row items-center justify-between px-4 py-3"
+            style={{ opacity: m.active ? 1 : 0.55 }}
           >
             <View className="flex-1 pr-3">
               <Text className="text-sm font-semibold text-foreground">
                 {m.name}
+                {!m.active ? " · zarchiwizowany" : ""}
               </Text>
               <Text className="text-xs text-muted mt-0.5">
                 {m.index} · {m.unit} · min {m.min} · śr.{" "}
@@ -342,6 +371,20 @@ export function WarehouseScreen() {
                   onPress={() => {
                     updateMaterialStock(m.id, Number(stockInput) || 0);
                     updateMaterialPrice(m.id, Number(priceInput) || 0);
+                    setEditingId(null);
+                  }}
+                />
+              </View>
+              {/* Archiwizacja zamiast usuwania — materiał zostaje w bazie
+                  (historia go referencjuje), tylko znika z domyślnej listy;
+                  wciąż podpowiadany przy dopasowaniu nazwy przy zamawianiu/
+                  dodawaniu, żeby nie powstał duplikat indeksu/nazwy. */}
+              <View style={{ marginTop: 10 }}>
+                <Button
+                  label={m.active ? "Archiwizuj materiał" : "Przywróć materiał"}
+                  secondary
+                  onPress={() => {
+                    setMaterialActive(m.id, !m.active);
                     setEditingId(null);
                   }}
                 />

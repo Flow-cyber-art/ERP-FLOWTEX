@@ -22,6 +22,7 @@ import {
   adjustMaterialStock as adjustMaterialStockRemote,
   createMaterial,
   listMaterials,
+  setMaterialActive as setMaterialActiveRemote,
   updateMaterialPrice as updateMaterialPriceRemote,
 } from "@/lib/data/materials";
 import {
@@ -372,6 +373,11 @@ function useAppDataState(
   >({});
   const [assignments, setAssignments] = useState(initialAssignments);
   const [query, setQuery] = useState("");
+  // Domyślnie ukrywa zarchiwizowane materiały na liście Magazynu (ten sam
+  // wzorzec co showArchivedBuilds w settlement-screen.tsx) — wciąż
+  // podpowiadane przy dopasowaniu nazwy (materials pozostaje pełną listą),
+  // tylko nie zaśmiecają widoku do codziennej pracy.
+  const [showArchivedMaterials, setShowArchivedMaterials] = useState(false);
   const [showMaterial, setShowMaterial] = useState(false);
   const [showBuild, setShowBuild] = useState(false);
   const [showAssignment, setShowAssignment] = useState(false);
@@ -641,6 +647,7 @@ function useAppDataState(
       stock: Number(m.stock),
       min: Number(m.min),
       unitPrice: Number(m.unitPrice),
+      active: m.active ?? true,
     })) satisfies Material[];
     setMaterials(rows);
     // Partie nie są jeszcze pobierane z material_batches (osobny krok) —
@@ -864,6 +871,10 @@ function useAppDataState(
     mutationFn: (vars: { materialId: number; newStock: number }) =>
       adjustMaterialStockRemote(vars.materialId, vars.newStock),
   });
+  const setMaterialActiveMutation = useMutation({
+    mutationFn: (vars: { materialId: number; active: boolean }) =>
+      setMaterialActiveRemote(vars.materialId, vars.active),
+  });
   const createBuildMutation = useMutation({ mutationFn: createBuild });
   const closeBuildMutation = useMutation({
     mutationFn: (vars: { buildId: number; returns: CloseBuildReturnItem[] }) =>
@@ -1044,6 +1055,9 @@ function useAppDataState(
           (d.materials || initialMaterials).map((m: Material) => ({
             ...m,
             unitPrice: m.unitPrice || 0,
+            // Stary zapis w AsyncStorage sprzed dodania kolumny `active` —
+            // domyślnie widoczny/aktywny, żeby nic nie zniknęło po cichu.
+            active: m.active ?? true,
           })),
         );
         setBuilds(
@@ -1100,10 +1114,12 @@ function useAppDataState(
   ]);
   const filtered = useMemo(
     () =>
-      materials.filter((m) =>
-        `${m.name} ${m.index}`.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [materials, query],
+      materials
+        .filter((m) => showArchivedMaterials || m.active)
+        .filter((m) =>
+          `${m.name} ${m.index}`.toLowerCase().includes(query.toLowerCase()),
+        ),
+    [materials, query, showArchivedMaterials],
   );
   const workerEntries = useMemo(() => {
     const today = new Date();
@@ -1933,6 +1949,24 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się skorygować stanu magazynowego.");
     }
   };
+  // Archiwizacja zamiast usuwania (patrz
+  // supabase/sql/038_archiwizacja_materialow.sql) — materiał zostaje w
+  // bazie (historia go referencjuje po ID), tylko znika z domyślnej listy
+  // Magazynu; dalej podpowiadany przy dopasowaniu nazwy, żeby nie powstał
+  // duplikat. Przywrócenie to ta sama funkcja z active=true.
+  const setMaterialActive = async (materialId: string, active: boolean) => {
+    const numericId = Number(materialId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await setMaterialActiveMutation.mutateAsync({ materialId: numericId, active });
+      await invalidate("materials");
+    } catch (error) {
+      reportMutationError(
+        error,
+        active ? "Nie udało się przywrócić materiału." : "Nie udało się zarchiwizować materiału.",
+      );
+    }
+  };
   // Dokłada bieżąco wpisany materiał+ilość do koszyka (patrz orderCart
   // wyżej) — NIE tworzy jeszcze zamówienia w bazie. Formularz czyści się
   // od razu, żeby dało się dopisać kolejną pozycję.
@@ -2320,6 +2354,7 @@ function useAppDataState(
     orderSaved,
     orderCart,
     orderConfirmedNewMaterial,
+    showArchivedMaterials,
     setTab,
     setDevRole,
     setWorkerPeriod,
@@ -2332,6 +2367,7 @@ function useAppDataState(
     setAssignments,
     setQuery,
     setShowMaterial,
+    setShowArchivedMaterials,
     setShowBuild,
     setShowAssignment,
     setBuildsView,
@@ -2402,6 +2438,7 @@ function useAppDataState(
     updateCloseBuildPin: updateCloseBuildPinValue,
     updateMaterialPrice,
     updateMaterialStock,
+    setMaterialActive,
     addToOrderCart,
     confirmOrderNewMaterial,
     removeFromOrderCart,

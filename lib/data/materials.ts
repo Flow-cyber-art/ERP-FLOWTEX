@@ -16,11 +16,13 @@ export type MaterialRow = {
   stock: string;
   min: string;
   unitPrice: string;
+  active: boolean;
   createdAt: string;
   updatedAt: string;
 };
 
-const MATERIAL_COLUMNS = "id, name, index, unit, stock, min, unitPrice, createdAt, updatedAt";
+const MATERIAL_COLUMNS =
+  "id, name, index, unit, stock, min, unitPrice, active, createdAt, updatedAt";
 
 export async function listMaterials(): Promise<MaterialRow[]> {
   const { data, error } = await supabase
@@ -65,5 +67,17 @@ export async function adjustMaterialStock(materialId: number, newStock: number):
     p_material_id: materialId,
     p_new_stock: newStock,
   });
+  if (error) throw new Error(error.message);
+}
+
+// Archiwizacja zamiast usuwania — patrz supabase/sql/038_archiwizacja_materialow.sql.
+// Zapis bezpośredni (RLS "materials_write_admin", ten sam wzorzec co
+// updateMaterialPrice), bez RPC — to tylko jedna kolumna, nie operacja
+// wieloetapowa.
+export async function setMaterialActive(materialId: number, active: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("materials")
+    .update({ active, updatedAt: new Date().toISOString() })
+    .eq("id", materialId);
   if (error) throw new Error(error.message);
 }

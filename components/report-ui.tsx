@@ -51,6 +51,11 @@ type Material = {
   stock: number;
   min: number;
   unitPrice: number;
+  // Archiwizacja zamiast usuwania (materiał ze stanem zero, którego
+  // historia — partie/zamówienia/raporty — wciąż go referencjuje po ID) —
+  // domyślnie ukryty w Magazynie, ale wciąż podpowiadany przy dopasowaniu
+  // nazwy, żeby nie powstał duplikat indeksu/nazwy.
+  active: boolean;
 };
 
 type BuildStatus = "aktywna" | "zamknięta";
@@ -204,6 +209,7 @@ const initialMaterials: Material[] = [
     stock: 84,
     min: 20,
     unitPrice: 58,
+    active: true,
   },
   {
     id: "m2",
@@ -213,6 +219,7 @@ const initialMaterials: Material[] = [
     stock: 42,
     min: 30,
     unitPrice: 34,
+    active: true,
   },
   {
     id: "m3",
@@ -222,6 +229,7 @@ const initialMaterials: Material[] = [
     stock: 118,
     min: 50,
     unitPrice: 6.5,
+    active: true,
   },
   {
     id: "m4",
@@ -231,6 +239,7 @@ const initialMaterials: Material[] = [
     stock: 8,
     min: 15,
     unitPrice: 12,
+    active: true,
   },
 ];
 

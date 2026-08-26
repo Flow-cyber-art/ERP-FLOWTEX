@@ -46,7 +46,26 @@ const webStorage = {
   },
   setItem(key: string, value: string) {
     try {
-      if (readRememberMe()) {
+      // Sesja zostaje w tym magazynie, w którym już żyje — NIE przeliczamy
+      // "do którego magazynu pisać" na nowo przy każdym zapisie (a
+      // supabase-js zapisuje tu też przy zwykłym odświeżeniu tokenu w tle,
+      // nie tylko przy logowaniu). REMEMBER_ME_KEY jest per-przeglądarka
+      // (localStorage), więc zmiana checkboxa w JEDNEJ karcie/logowaniu
+      // wpływała retroaktywnie na WSZYSTKIE inne otwarte karty: kolejne
+      // auto-odświeżenie tokenu w takiej karcie przełączało jej już
+      // aktywną sesję do innego magazynu niż ten, z którego ją pierwotnie
+      // odczytano, a w wariancie "przenieś do sessionStorage" jawnie
+      // kasowało kopię w localStorage — więc po zamknięciu i ponownym
+      // otwarciu przeglądarki (świeży sessionStorage) użytkownik nagle
+      // wypadał z sesji mimo zaznaczonego "nie wylogowuj mnie". Dokładnie
+      // to objawiało się jako "logowanie działa na telefonie, a w
+      // przeglądarce nie" — natywny AsyncStorage nie ma tego rozdwojenia.
+      // Dopiero brak wartości w OBU magazynach (świeże logowanie) korzysta
+      // z aktualnej flagi.
+      const inLocal = window.localStorage.getItem(key) !== null;
+      const inSession = window.sessionStorage.getItem(key) !== null;
+      const useLocal = inLocal ? true : inSession ? false : readRememberMe();
+      if (useLocal) {
         window.localStorage.setItem(key, value);
         window.sessionStorage.removeItem(key);
       } else {

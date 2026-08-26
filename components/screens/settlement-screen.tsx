@@ -26,6 +26,7 @@ export function SettlementScreen() {
     savedReports,
     employees,
     timeEntries,
+    buildMaterialReturns,
   } = useAppData();
 
   const sortedBuilds = useMemo(
@@ -160,10 +161,22 @@ export function SettlementScreen() {
     const employee = employees.find((e) => e.id === t.employeeId);
     return sum + t.hours * (employee?.hourlyRate || 0);
   }, 0);
+  // Straty materiałowe (§6, docs/PROCES_RAPORTOWANIE_BRYGADZISTA.md) —
+  // pozycje pozostałości oznaczone przy zamknięciu budowy jako "Do
+  // wyrzucenia" (nie zwrócone na magazyn). Liczone na żywo z trwałego
+  // logu build_material_returns, po realnej cenie tej partii — zero
+  // przed zamknięciem budowy (decyzja zapada dopiero wtedy), a po
+  // zamknięciu zostaje na stałe (kolejne zamknięcie po wznowieniu
+  // dopisze nowe wiersze, nie nadpisze starych).
+  const wasteCost = build
+    ? buildMaterialReturns
+        .filter((r) => r.buildId === Number(build.id) && r.decision === "wyrzucenie")
+        .reduce((sum, r) => sum + Number(r.quantity) * Number(r.unitPrice), 0)
+    : 0;
 
   const totalCost = frozen
     ? frozen.totalCost
-    : materialsCostTech + materialsCostAux + kmCost + laborCost + extraCostsTotal;
+    : materialsCostTech + materialsCostAux + kmCost + laborCost + extraCostsTotal + wasteCost;
   const contractValue = Number(build?.contractValue) || 0;
   const profit = contractValue - totalCost;
   const margin = contractValue > 0 ? (profit / contractValue) * 100 : null;
@@ -181,8 +194,9 @@ export function SettlementScreen() {
         { key: "labor", label: "Robocizna", value: laborCost, color: "#9C7BD9" },
         { key: "km", label: "Kilometrówka", value: kmCost, color: COLORS.success },
         { key: "extra", label: "Koszty dodatkowe", value: extraCostsTotal, color: COLORS.warning },
+        { key: "waste", label: "Straty materiałowe", value: wasteCost, color: COLORS.danger },
       ].filter((seg) => seg.value > 0),
-    [materialsCostTech, materialsCostAux, laborCost, kmCost, extraCostsTotal],
+    [materialsCostTech, materialsCostAux, laborCost, kmCost, extraCostsTotal, wasteCost],
   );
 
   return (
@@ -407,6 +421,9 @@ export function SettlementScreen() {
             <SummaryRow label="Kilometrówka" value={formatPLN(kmCost)} />
             <SummaryRow label="Robocizna" value={formatPLN(laborCost)} />
             <SummaryRow label="Koszty dodatkowe" value={formatPLN(extraCostsTotal)} />
+            {wasteCost > 0 && (
+              <SummaryRow label="Straty materiałowe" value={formatPLN(wasteCost)} />
+            )}
             <View
               style={{
                 flexDirection: "row",

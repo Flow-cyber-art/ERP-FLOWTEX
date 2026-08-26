@@ -40,6 +40,7 @@ export function ReportScreen() {
     draftPeople,
     draftExtraCosts,
     draftKm,
+    draftNote,
     kmRate,
     setSelectedBuildId,
     setPicker,
@@ -54,6 +55,7 @@ export function ReportScreen() {
     setTimePicker,
     setDraftExtraCosts,
     setDraftKm,
+    setDraftNote,
     activeBuild,
     buildAssignments,
     buildMaterialPlans,
@@ -394,6 +396,7 @@ export function ReportScreen() {
                         setPicker(null);
                         setReportValues({});
                         setDraftExtraCosts([]);
+                        setDraftNote("");
                         setReportSaved(false);
                       }}
                       style={{
@@ -1238,6 +1241,22 @@ export function ReportScreen() {
                 );
               })
             )}
+
+            {/* Notatka do raportu (Decyzja B) — jedna, dowolna notatka na
+                cały dzień, czysto informacyjna dla Admina (np. "deszcz do
+                11, brygada 2h krócej"). Świadomie na końcu podsumowania,
+                nie osobny krok — to nie jest formalna ścieżka odrzucenia
+                raportu, tylko miejsce na kontekst do rozmowy telefonicznej. */}
+            <Text className="text-xs text-muted uppercase mt-5 mb-1">
+              Notatka do raportu
+            </Text>
+            <Field
+              editable={!reportApproved}
+              placeholder="Coś, co warto zapamiętać do tego dnia (opcjonalnie)"
+              value={draftNote}
+              onChangeText={setDraftNote}
+              style={{ marginTop: 0 }}
+            />
           </View>
         )}
       </View>

@@ -100,3 +100,33 @@ export async function listBuildMaterialLots(): Promise<BuildMaterialLotRow[]> {
   if (error) throw new Error(error.message);
   return (data ?? []) as BuildMaterialLotRow[];
 }
+
+export type BuildMaterialReturnRow = {
+  id: number;
+  buildId: number;
+  materialId: number;
+  batchId: number | null;
+  quantity: string;
+  decision: "zwrot" | "wyrzucenie";
+  reason: string | null;
+  unitPrice: string;
+  createdAt: string;
+};
+
+/**
+ * Decyzje o pozostałości materiałowej przy zamknięciu budowy (Faza 9) —
+ * trwały log, jeden wiersz na partię rozliczoną przy `close_build`. Do
+ * policzenia "Straty materiałowe" w Rozliczeniu (§6,
+ * docs/PROCES_RAPORTOWANIE_BRYGADZISTA.md): suma `quantity * unitPrice`
+ * wierszy z `decision = 'wyrzucenie'` dla danej budowy — liczone na żywo
+ * z tej tabeli (ma Realtime, patrz lib/data/use-realtime-sync.ts), nie z
+ * `build_settlements` (ten snapshot dziś nigdzie nie jest odczytywany
+ * z powrotem do frontu — osobny, wcześniejszy dług).
+ */
+export async function listBuildMaterialReturns(): Promise<BuildMaterialReturnRow[]> {
+  const { data, error } = await supabase
+    .from("build_material_returns")
+    .select("id, buildId, materialId, batchId, quantity, decision, reason, unitPrice, createdAt");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BuildMaterialReturnRow[];
+}

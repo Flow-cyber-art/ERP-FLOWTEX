@@ -1,11 +1,10 @@
 # Proces: Raportowanie brygadzisty
 
-Status: dokument roboczy — porządkuje ustalenia z rozmowy o tym, jak
-powinno działać złożenie raportu dziennego i co się wtedy dzieje z
-magazynem/kosztami budowy. **Część poniższych zasad już działa w kodzie
-(oznaczone „✅ działa”), część to ustalone decyzje jeszcze do wdrożenia
-(oznaczone „🔧 do zrobienia”)** — nic z tego drugiego nie zostało jeszcze
-zaimplementowane, to zapis decyzji, nie changelog.
+Status: **decyzje A, B i C wdrożone** (SQL: `supabase/sql/033_straty_materialowe.sql`,
+`034_raport_notatka_i_konsolidacja.sql`, `035_dokladny_zwrot_partii.sql`
+— uruchomić w tej kolejności na bazie Supabase; front już z nich korzysta).
+Reszta dokumentu opisuje też to, co działało już wcześniej (oznaczone
+„✅ działa”), dla pełnego obrazu procesu.
 
 ---
 
@@ -46,7 +45,7 @@ zaimplementowane, to zapis decyzji, nie changelog.
 ## 3. Co dzieje się przy zapisie (✅ działa)
 
 Wszystko w jednej transakcji SQL (`submit_daily_report`,
-`supabase/sql/025_moje_raporty_autor.sql`):
+`supabase/sql/035_dokladny_zwrot_partii.sql` — najnowsza wersja):
 
 1. Budowa musi być aktywna (nie zamknięta) — inaczej twardy błąd.
 2. Jeśli raport na ten dzień/budowę już istnieje i ma status
@@ -58,18 +57,21 @@ Wszystko w jednej transakcji SQL (`submit_daily_report`,
      (`build_material_lots`, FIFO wg daty wydania), licząc koszt po
      realnej cenie tamtej partii. Koszt dolicza się do
      `build_materials.actualCost` (czyli do kosztu budowy „na bieżąco”).
-   - **delta < 0** (korekta w dół) → dziś: **tylko** nadpisuje `used` na
-     niższą wartość. Nic nie wraca do puli budowy, koszt się nie zmniejsza.
-     👉 to jest dokładnie punkt do zmiany, patrz §5.
+     Zapisuje przy okazji, z którego konkretnie lota ile wzięto
+     (`report_material_lots`) — do ewentualnego dokładnego zwrotu niżej.
+   - **delta < 0** (korekta w dół) → ✅ **wdrożone (Decyzja A, §4):**
+     dokładny zwrot do tych samych lotów/cen, z których zeszło (LIFO),
+     zmniejszenie `build_materials.actualCost` o dokładnie tyle samo.
 4. Godziny pracy → `time_entries` (nadpisywane w całości dla tego dnia/
    budowy — nie sumowane z poprzednią wersją raportu).
 5. Koszty dodatkowe → `report_extra_costs`, doliczane do kosztu budowy.
-6. Wszystko widoczne **od razu** w panelu Admina (Rozliczenia, Budowy) —
+6. Notatka (Decyzja B, §5) → `reports.note`, nadpisywana przy każdej edycji.
+7. Wszystko widoczne **od razu** w panelu Admina (Rozliczenia, Budowy) —
    patrz §7.
 
 ---
 
-## 4. Edycja/korekta raportu — DECYZJA A ✅ potwierdzona, 🔧 do zrobienia
+## 4. Edycja/korekta raportu — DECYZJA A ✅ wdrożona
 
 **Ustalenie:** edycja raportu (przed zatwierdzeniem) ma również
 korygować stan magazynowy — nie tylko liczbę `used` na papierze.
@@ -117,7 +119,7 @@ dokładnie to, skąd to wzięło — z tą samą, realną ceną.
 
 ---
 
-## 5. Notatka do raportu — DECYZJA B ✅ potwierdzona, 🔧 do zrobienia
+## 5. Notatka do raportu — DECYZJA B ✅ wdrożona
 
 **Ustalenie:** nie wprowadzamy formalnej ścieżki „odrzuć raport” —
 rozbieżności między brygadzistą a adminem rozwiązuje się telefonicznie.
@@ -137,51 +139,38 @@ konkretnego odchylenia od planu, nie ogólna notatka dnia).
 
 ---
 
-## 6. Zamknięcie budowy i pozostałość materiałowa — DECYZJA C ✅ potwierdzona, 🔧 do zrobienia
+## 6. Zamknięcie budowy i pozostałość materiałowa — DECYZJA C ✅ wdrożona
 
 **Ustalenie:** przy zamykaniu budowy Admin decyduje per pozycja
 pozostałości: zwrot na magazyn albo do wyrzucenia (np. materiał traci
 ważność). Zwrot → **odejmujemy** od kosztów budowy. Wyrzucenie →
 **dodajemy** do kosztów budowy.
 
-**Stan dziś (✅ część, ⚠️ luka):**
-- Mechanizm wyboru zwrot/wyrzucenie **już istnieje** i działa
-  (`close_build`, `builds-screen.tsx` — ekran zamykania budowy z
-  decyzją per partia).
-- ✅ **Zwrot** faktycznie zwiększa `material_batches.quantity` (wraca na
-  magazyn) — zgodne z ustaleniem.
-- ⚠️ **Ale:** dziś koszt pozostałości (i zwracanej, i wyrzucanej) **nigdy
-  nie trafił** do `build_materials.actualCost` — bo licznik kosztu
-  budowy rośnie tylko przy faktycznym *zużyciu* w raporcie (§3), a
-  pozostałość z definicji nie została zużyta. Więc:
-  - „Odejmujemy od kosztów budowy” przy zwrocie — dziś **nie ma czego
-    odejmować**, bo nic tam nie weszło. Efektywnie już zgodne z
-    ustaleniem (0 - 0 = 0), ale przez przypadek, nie przez działanie.
-  - „Dodajemy do kosztów budowy” przy wyrzuceniu — 🔧 **to jest luka do
-    zrobienia**. Dziś wyrzucenie tylko usuwa pozycję z
-    `build_material_lots` i zapisuje ją w `build_material_returns`
-    (ślad audytowy „co się stało”), ale **nie dolicza jej wartości do
-    kosztu budowy nigdzie** — więc zmarnowany materiał dziś znika bez
-    śladu z rozliczenia finansowego budowy.
+**Wdrożone:**
+- Mechanizm wyboru zwrot/wyrzucenie (`close_build`, `builds-screen.tsx`)
+  bez zmian — jak dawniej.
+- **Zwrot** zwiększa `material_batches.quantity` (wraca na magazyn) —
+  koszt tej pozycji nigdy nie wszedł do `build_materials.actualCost`
+  (rośnie tylko przy faktycznym *zużyciu* w raporcie, §3), więc nie ma
+  czego odejmować — zgodne z ustaleniem bez dodatkowej zmiany.
+- **Wyrzucenie** dolicza `quantity × unitPrice` tej partii (realna cena,
+  ta sama zasada co w §4 — bez uśredniania) do nowej, osobnej kolumny
+  `build_settlements."wasteCost"` — NIE do `materialsCost`, żeby nie
+  mieszać "zużyto zgodnie z planem pracy" ze "zmarnowało się przy
+  zamknięciu". `wasteCost` wlicza się też do `totalCost` budowy.
+- Front liczy „Straty materiałowe” **na żywo** z trwałego logu
+  `build_material_returns` (dostał kolumnę `unitPrice` i Realtime) —
+  ten sam wzorzec co reszta `settlement-screen.tsx`, nie z zamrożonego
+  `build_settlements` (ten snapshot i tak nigdzie nie jest jeszcze
+  odczytywany z powrotem do frontu — osobny, wcześniejszy dług, poza
+  zakresem tej zmiany). Widoczne jako osobny wiersz „Straty materiałowe”
+  w podsumowaniu i na wykresie struktury kosztów.
 
-**Potwierdzone: osobna linia „Straty materiałowe”**, nie wrzucamy do
-zwykłego kosztu materiałowego. Do zrobienia:
-
-- W `close_build`, gdy `decision = 'wyrzucenie'`, doliczyć
-  `quantity × unitPrice` tej pozycji do **nowej, osobnej kolumny**
-  `build_settlements."wasteCost"` (nazwa robocza) — nie do
-  `materialsCost`, żeby nie mieszać "zużyto zgodnie z planem pracy" z
-  "zmarnowało się przy zamknięciu".
-- Doliczyć `wasteCost` do `totalCost` budowy (żeby marża/zysk się zgadzały).
-- Pokazać jako osobny wiersz w `settlement-screen.tsx` („Straty
-  materiałowe”) — obok „Materiały technologiczne”, „Robocizna” itd.,
-  zamiast chować w istniejącej sumie.
-- **Na przyszłość (nie teraz):** skoro ma to być „dobra zakładka do
-  analizy” — docelowo osobny widok zbierający straty materiałowe
-  **przekrojowo po wszystkich budowach** (który materiał marnuje się
-  najczęściej, na której budowie, ile to kosztuje w skali roku), po
-  wzorze istniejącego ekranu Rozliczeń/Raportów. To osobne zadanie, nie
-  blokuje wdrożenia samej linii kosztowej per budowa.
+**Na przyszłość (nie teraz):** skoro ma to być „dobra zakładka do
+analizy” — docelowo osobny widok zbierający straty materiałowe
+**przekrojowo po wszystkich budowach** (który materiał marnuje się
+najczęściej, na której budowie, ile to kosztuje w skali roku), po
+wzorze istniejącego ekranu Rozliczeń/Raportów. To osobne zadanie.
 
 ---
 
@@ -198,31 +187,32 @@ z `close_build`).
 
 ---
 
-## 8. Decyzje — status
+## 8. Status wdrożenia
 
-Wszystkie trzy decyzje **potwierdzone**:
+Wszystkie trzy decyzje **wdrożone**. Migracje SQL (uruchomić w tej
+kolejności na bazie Supabase, każda bezpieczna do wielokrotnego
+wklejenia):
 
-1. **§4 (korekta w dół):** zwrot do `build_material_lots` **dokładnie do
-   tej samej partii/ceny, z której zeszło** (nie uśredniona) — wymaga
-   rozbicia „z jakiego lota ile” per raport (nowa tabela
-   `report_material_lots`).
-2. **§5 (notatka):** jedna notatka tekstowa na cały raport, współistnieje
-   z istniejącym polem „Dlaczego wystąpiła różnica?” per materiał.
-3. **§6 (straty materiałowe):** osobna linia kosztowa „Straty
-   materiałowe” w rozliczeniu budowy, nie wrzucona do zwykłego zużycia.
+1. `supabase/sql/033_straty_materialowe.sql` — §6: `build_material_returns.unitPrice`,
+   `build_settlements.wasteCost`, `close_build` liczy i zapisuje koszt
+   wyrzucenia.
+2. `supabase/sql/034_raport_notatka_i_konsolidacja.sql` — §5:
+   `reports.note` + **konsolidacja `submit_daily_report`** (przy okazji
+   naprawia realny, wcześniej istniejący bug: od migracji 025 w bazie
+   równolegle żyły DWIE wersje tej funkcji — 5-argumentowa z 025 i
+   6-argumentowa z 012 — i ta druga, faktycznie wołana przez klienta,
+   nigdy nie ustawiała `submittedByProfileId`, więc "Moje raporty"
+   pokazywało brygadziście WSZYSTKIE raporty budowy, nie tylko jego
+   własne).
+3. `supabase/sql/035_dokladny_zwrot_partii.sql` — §4: tabela
+   `report_material_lots` (rozbicie „z jakiego lota ile”),
+   `fn_consume_build_lot_fifo` zapisuje ten rozkład, `submit_daily_report`
+   cofa go dokładnie (LIFO) przy korekcie w dół.
 
-**Zostaje do ustalenia tylko kolejność wdrożenia:**
-
-- §4 i §6 **nie muszą** iść razem — §6 (dopisanie kosztu wyrzucenia przy
-  zamknięciu budowy) jest prostsze i niezależne (jedna zmiana w
-  `close_build` + jeden wiersz w UI rozliczenia). §4 (dokładny zwrot do
-  lota przy korekcie raportu) wymaga nowej tabeli rozbicia i zmiany w
-  `submit_daily_report`/`fn_consume_build_lot_fifo` — trochę większa
-  zmiana.
-- §5 (notatka) jest niezależna od obu powyższych — najmniejsza zmiana z
-  całej trójki (jedna kolumna + jedno pole tekstowe).
-
-**Rekomendowana kolejność, jeśli wdrażamy pojedynczo:** §6 → §5 → §4
-(od najprostszej do najbardziej złożonej), ale nic nie stoi na
-przeszkodzie, żeby zrobić to w jednym zadaniu, jeśli wolisz mieć to z
-głowy naraz.
+Front (kontekst `contexts/app-data.tsx`, `report-screen.tsx`,
+`report-ui.tsx`, `settlement-screen.tsx`) już korzysta z nowych kolumn/
+tabel — notatka w kroku 3 raportu i w `ReportCard`, „Straty materiałowe”
+w Rozliczeniu. Decyzja A (§4) jest w całości po stronie bazy — front nie
+wymagał żadnej zmiany, bo dla użytkownika wygląda to tak samo jak dziś
+(wpisz mniejszą ilość, zapisz), tylko księgowość w tle jest teraz
+poprawna.

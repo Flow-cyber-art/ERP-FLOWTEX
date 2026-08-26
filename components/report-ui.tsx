@@ -1007,6 +1007,9 @@ export type ReportCardData = {
   people: { employeeId: string; start: string; end: string }[];
   extraCosts: ExtraCost[];
   status: "submitted" | "approved";
+  // Notatka brygadzisty do tego raportu (Decyzja B) — jedna, dowolna,
+  // czysto informacyjna.
+  note?: string;
 };
 
 // Jedna karta raportu dziennego, używana zarówno w globalnej skrzynce
@@ -1485,6 +1488,27 @@ const ReportCard = ({
               })
             )}
           </DetailSection>
+
+          {report.note && (
+            <View
+              style={{
+                marginTop: 24,
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+              }}
+            >
+              <Text
+                style={{ color: COLORS.muted, fontSize: 11, fontWeight: "800" }}
+                className="uppercase"
+              >
+                Notatka brygadzisty
+              </Text>
+              <Text style={{ color: COLORS.foreground, fontSize: 13, marginTop: 6 }}>
+                {report.note}
+              </Text>
+            </View>
+          )}
 
           <View style={{ marginTop: 24 }}>
             {approved ? (

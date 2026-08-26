@@ -28,6 +28,10 @@ const REALTIME_TABLES: { table: string; queryKey: string }[] = [
   { table: "order_items", queryKey: "buildOrders" },
   { table: "material_batches", queryKey: "warehouseBatches" },
   { table: "build_material_lots", queryKey: "buildMaterialLots" },
+  // Decyzje zwrot/wyrzucenie przy zamknięciu budowy (Faza 9) — do
+  // wyliczenia "Straty materiałowe" w Rozliczeniu na żywo, patrz
+  // settlement-screen.tsx.
+  { table: "build_material_returns", queryKey: "buildMaterialReturns" },
   { table: "build_stage_status", queryKey: "buildStageStatuses" },
   // Brakowało tego wpisu od zawsze (moduł Technologia nie miał osobnej
   // migracji realtime) — technologiesQuery w app-data.tsx ma

@@ -44,6 +44,8 @@ export type PendingReportSubmission = {
   extraCosts: { label: string; amount: number; note?: string; category?: string }[];
   // Kilometrówka (Faza 7) — patrz submitDailyReport w lib/data/reports.ts.
   km?: number;
+  // Notatka do raportu (Decyzja B) — patrz submitDailyReport w lib/data/reports.ts.
+  note?: string;
   /** Kiedy dodane do kolejki lokalnie — do sortowania i debugowania. */
   queuedAt: string;
   /** Liczba nieudanych prób — do prostego backoffu / ostrzeżenia w UI. */
@@ -131,6 +133,7 @@ export async function flushOutbox(): Promise<{
           materials: item.materials,
           extraCosts: item.extraCosts,
           km: item.km,
+          note: item.note,
         });
         succeededKeys.push(reportKey(item));
       } catch (error) {

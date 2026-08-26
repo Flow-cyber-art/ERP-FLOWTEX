@@ -49,6 +49,8 @@ export type SubmitDailyReportInput = {
   // zapisuje żadnego kosztu (baza zamraża kmCost tylko gdy km nie jest
   // null, patrz submit_daily_report w supabase/sql/012_faza7_km_koszty.sql).
   km?: number;
+  // Notatka do raportu (Decyzja B) — jedna, dowolna, czysto informacyjna.
+  note?: string;
 };
 
 export type SubmitDailyReportResult = {
@@ -77,6 +79,7 @@ export async function submitDailyReport(
     p_materials: input.materials,
     p_extra_costs: input.extraCosts,
     p_km: input.km || null,
+    p_note: input.note?.trim() || null,
   });
   if (error) throw new Error(error.message);
   const result = data as {
@@ -119,6 +122,7 @@ export type ReportRow = {
   kmRateApplied: string | null;
   kmCost: string | null;
   submittedByProfileId: string | null;
+  note: string | null;
   builds: { number: string; name: string } | null;
   report_materials: { materialId: number; usedQuantity: string; cost: string; reason: string | null }[];
   report_people: { employeeId: number; start: string; end: string }[];
@@ -133,7 +137,7 @@ export type ReportRow = {
 
 const REPORT_SELECT = `
   id, buildId, date, status, adminComment, updatedAt, km, kmRateApplied, kmCost,
-  submittedByProfileId,
+  submittedByProfileId, note,
   builds ( number, name ),
   report_materials ( materialId, usedQuantity, cost, reason ),
   report_people ( employeeId, start, end ),

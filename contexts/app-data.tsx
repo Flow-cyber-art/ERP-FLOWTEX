@@ -40,9 +40,11 @@ import {
   assignMaterialBatchesToBuild,
   unassignMaterialFromBuild,
   listBuildMaterialLots as listBuildMaterialLotsRemote,
+  listBuildMaterialReturns as listBuildMaterialReturnsRemote,
   listBuildMaterials,
   type AssignMaterialBatchItem,
   type BuildMaterialLotRow,
+  type BuildMaterialReturnRow,
 } from "@/lib/data/build-materials";
 import {
   listReports,
@@ -116,6 +118,9 @@ export type SavedReport = {
   // lokalnych, jeszcze niezsynchronizowanych wpisów. Używane wyłącznie do
   // filtrowania "Moje raporty" u Brygadzisty (saved-reports-screen.tsx).
   submittedByProfileId?: string | null;
+  // Notatka brygadzisty do tego raportu (Decyzja B) — jedna, dowolna,
+  // czysto informacyjna, patrz draftNote niżej.
+  note?: string;
 };
 
 import {
@@ -179,6 +184,7 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
     kmRateApplied: row.kmRateApplied != null ? Number(row.kmRateApplied) : undefined,
     kmCost: row.kmCost != null ? Number(row.kmCost) : undefined,
     submittedByProfileId: row.submittedByProfileId,
+    note: row.note ?? undefined,
   };
 }
 
@@ -540,6 +546,17 @@ function useAppDataState(
   const buildMaterialLotsQuery = useQuery({
     queryKey: ["buildMaterialLots", "list"],
     queryFn: listBuildMaterialLotsRemote,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["builds", "settlement"]),
+  });
+  // Decyzje zwrot/wyrzucenie przy zamknięciu budowy (Faza 9) — do
+  // wyliczenia "Straty materiałowe" w Rozliczeniu na żywo (§6,
+  // docs/PROCES_RAPORTOWANIE_BRYGADZISTA.md), ten sam wzorzec co lots wyżej.
+  const buildMaterialReturnsQuery = useQuery({
+    queryKey: ["buildMaterialReturns", "list"],
+    queryFn: listBuildMaterialReturnsRemote,
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: Infinity,
@@ -989,6 +1006,11 @@ function useAppDataState(
   // pole mogło być puste zamiast "0". Puste/niepoprawne = brak km w
   // raporcie (patrz saveDailyReportUnsafe niżej).
   const [draftKm, setDraftKm] = useState("");
+  // Notatka do raportu (Decyzja B, docs/PROCES_RAPORTOWANIE_BRYGADZISTA.md
+  // §5) — jedna, dowolna notatka tekstowa na cały raport (nie per
+  // materiał — to zostaje osobnym polem "reasons", patrz wyżej), czysto
+  // informacyjna, nie wpływa na żadne wyliczenia.
+  const [draftNote, setDraftNote] = useState("");
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   const [orderMaterialName, setOrderMaterialName] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
@@ -1662,6 +1684,7 @@ function useAppDataState(
       km: Number(draftKm.replace(",", ".")) || undefined,
       kmRateApplied: existingReport?.kmRateApplied,
       kmCost: existingReport?.kmCost,
+      note: draftNote.trim() || undefined,
     };
     setSavedReports((previous) =>
       existingReport
@@ -1718,6 +1741,7 @@ function useAppDataState(
     }
     setDraftExtraCosts([]);
     setDraftKm("");
+    setDraftNote("");
     setHrSaved(true);
     setReportSaved(true);
     setReportStatus("wysłany");
@@ -1775,6 +1799,7 @@ function useAppDataState(
         materials: materialsPayload,
         extraCosts: extraCostsPayload,
         km: reportSnapshot.km,
+        note: reportSnapshot.note,
       }).then(({ sent }) => {
         if (!sent) {
           notify(
@@ -2074,6 +2099,7 @@ function useAppDataState(
     setDraftPeople([...report.people]);
     setDraftExtraCosts([...(report.extraCosts || [])]);
     setDraftKm(report.km != null ? String(report.km) : "");
+    setDraftNote(report.note ?? "");
     setReportSaved(false);
     setReportStep(1);
     setTab("report");
@@ -2098,6 +2124,7 @@ function useAppDataState(
     setDraftPeople([]);
     setDraftExtraCosts([]);
     setDraftKm("");
+    setDraftNote("");
     setReportStep(1);
     setReportSaved(false);
     setHrSaved(false);
@@ -2211,6 +2238,7 @@ function useAppDataState(
     receiveBuildOrder,
     warehouseBatches,
     buildMaterialLots: (buildMaterialLotsQuery.data ?? []) as BuildMaterialLotRow[],
+    buildMaterialReturns: (buildMaterialReturnsQuery.data ?? []) as BuildMaterialReturnRow[],
     buildStageStatuses: (buildStageStatusesQuery.data ?? []) as BuildStageStatusRow[],
     completeBuildStage,
     reopenBuildStage,
@@ -2253,6 +2281,7 @@ function useAppDataState(
     draftPeople,
     draftExtraCosts,
     draftKm,
+    draftNote,
     kmRate,
     closeBuildPin,
     orders,
@@ -2311,6 +2340,7 @@ function useAppDataState(
     setDraftPeople,
     setDraftExtraCosts,
     setDraftKm,
+    setDraftNote,
     setOrders,
     setOrderMaterialName,
     setOrderQuantity,

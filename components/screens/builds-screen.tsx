@@ -41,8 +41,6 @@ export function BuildsScreen() {
     deleteBuildOrder,
     receiveBuildOrder,
     showBuild,
-    showAssignment,
-    selectedBuildId,
     selectedBatchId,
     warehouseBatches,
     plannedAmount,
@@ -53,7 +51,6 @@ export function BuildsScreen() {
     newBuild,
     workdayHours,
     setShowBuild,
-    setShowAssignment,
     setSelectedBuildId,
     setSelectedBatchId,
     setPlannedAmount,
@@ -118,6 +115,11 @@ export function BuildsScreen() {
   const [expandedOrdersBuildId, setExpandedOrdersBuildId] = useState<string | null>(
     null,
   );
+  // Przypisywanie materiału dodatkowego (dawniej: globalny przycisk nad listą
+  // budów, wymagający ręcznego wyboru budowy). Teraz otwierany z konkretnej
+  // karty budowy — trzyma id tej budowy, więc formularz nie musi już pytać
+  // o budowę (setSelectedBuildId dzieje się przy otwarciu).
+  const [assignBuildId, setAssignBuildId] = useState<string | null>(null);
   const [orderReceivingId, setOrderReceivingId] = useState<number | null>(null);
   const [orderReceiveDrafts, setOrderReceiveDrafts] = useState<
     Record<number, { qty: string; price: string }>
@@ -275,286 +277,6 @@ export function BuildsScreen() {
         <View style={{ marginTop: 12 }}>
           <Button label="Zapisz budowę" onPress={saveBuild} />
         </View>
-      </View>
-    )}
-    {!isArchiveView && (
-    <View style={{ marginBottom: 16 }}>
-      <Button
-        label={
-          showAssignment
-            ? "Anuluj przypisywanie"
-            : "+ Przypisz materiał"
-        }
-        onPress={() => setShowAssignment(!showAssignment)}
-        secondary={showAssignment}
-      />
-    </View>
-    )}
-    {!isArchiveView && showAssignment && (
-      <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
-        <Text className="text-xs text-muted uppercase">Budowa</Text>
-        <Pressable
-          onPress={() => {
-            setPicker(picker === "build" ? null : "build");
-            setPickerQuery("");
-          }}
-          style={{
-            backgroundColor: COLORS.background,
-            borderRadius: 10,
-            padding: 13,
-            marginTop: 8,
-            flexDirection: "row",
-            justifyContent: "space-between",
-          }}
-        >
-          <Text
-            style={{ color: COLORS.foreground, fontWeight: "700" }}
-          >
-            {builds.find((b) => b.id === selectedBuildId)?.number ||
-              "Wybierz budowę"}
-          </Text>
-          <Text style={{ color: COLORS.primary }}>
-            {picker === "build" ? "▲" : "▼"}
-          </Text>
-        </Pressable>
-        {picker === "build" && (
-          <View
-            style={{
-              backgroundColor: COLORS.background,
-              borderRadius: 10,
-              padding: 10,
-              marginTop: 6,
-            }}
-          >
-            <Field
-              placeholder="Szukaj po numerze lub nazwie"
-              value={pickerQuery}
-              onChangeText={setPickerQuery}
-            />
-            <ScrollView style={{ maxHeight: 180 }}>
-              {builds
-                .filter((b) => b.status !== "zamknięta")
-                .filter((b) =>
-                  `${b.number} ${b.name}`
-                    .toLowerCase()
-                    .includes(pickerQuery.toLowerCase()),
-                )
-                .map((b) => (
-                  <Pressable
-                    key={b.id}
-                    onPress={() => {
-                      setSelectedBuildId(b.id);
-                      setPicker(null);
-                      setPickerQuery("");
-                    }}
-                    style={{
-                      paddingVertical: 12,
-                      borderBottomWidth: 1,
-                      borderBottomColor: COLORS.border,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: COLORS.foreground,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {b.number}
-                    </Text>
-                    <Text
-                      style={{
-                        color: COLORS.muted,
-                        fontSize: 12,
-                        marginTop: 3,
-                      }}
-                    >
-                      {b.name}
-                    </Text>
-                  </Pressable>
-                ))}
-            </ScrollView>
-          </View>
-        )}
-        {/* Ręczny wybór partii (Faza 5) — wyszukiwarka po nazwie pokazuje
-            KAŻDĄ partię osobno (różne daty/ceny tej samej pozycji), nie
-            zblendowany materiał; admin wybiera konkretną i ile z niej. */}
-        <Text className="text-xs text-muted uppercase mt-4">
-          Materiał / partia
-        </Text>
-        {(() => {
-          const selectedBatch = warehouseBatches.find(
-            (b) => String(b.id) === selectedBatchId,
-          );
-          const selectedMaterial = selectedBatch
-            ? materials.find((m) => m.id === String(selectedBatch.materialId))
-            : undefined;
-          return (
-            <>
-              <Pressable
-                onPress={() => {
-                  setPicker(picker === "material" ? null : "material");
-                  setPickerQuery("");
-                }}
-                style={{
-                  backgroundColor: COLORS.background,
-                  borderRadius: 10,
-                  padding: 13,
-                  marginTop: 8,
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                }}
-              >
-                <View>
-                  <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
-                    {selectedMaterial?.name || "Wybierz partię"}
-                  </Text>
-                  {selectedBatch && (
-                    <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
-                      {selectedBatch.receivedAt} · {formatPLN(Number(selectedBatch.unitPrice))} ·
-                      dostępne {selectedBatch.quantity} {selectedMaterial?.unit}
-                    </Text>
-                  )}
-                </View>
-                <Text style={{ color: COLORS.primary }}>
-                  {picker === "material" ? "▲" : "▼"}
-                </Text>
-              </Pressable>
-              {picker === "material" && (
-                <View
-                  style={{
-                    backgroundColor: COLORS.background,
-                    borderRadius: 10,
-                    padding: 10,
-                    marginTop: 6,
-                  }}
-                >
-                  <Field
-                    placeholder="Szukaj po nazwie lub indeksie"
-                    value={pickerQuery}
-                    onChangeText={setPickerQuery}
-                  />
-                  <ScrollView style={{ maxHeight: 260 }}>
-                    {warehouseBatches
-                      .map((b) => ({
-                        batch: b,
-                        material: materials.find((m) => m.id === String(b.materialId)),
-                      }))
-                      .filter(({ material }) => material)
-                      .filter(({ material }) =>
-                        `${material!.name} ${material!.index}`
-                          .toLowerCase()
-                          .includes(pickerQuery.toLowerCase()),
-                      )
-                      .sort((a, b) => a.material!.name.localeCompare(b.material!.name))
-                      .map(({ batch, material }) => (
-                        <Pressable
-                          key={batch.id}
-                          onPress={() => {
-                            setSelectedBatchId(String(batch.id));
-                            setPicker(null);
-                            setPickerQuery("");
-                          }}
-                          style={{
-                            paddingVertical: 12,
-                            borderBottomWidth: 1,
-                            borderBottomColor: COLORS.border,
-                          }}
-                        >
-                          <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
-                            {material!.name}
-                          </Text>
-                          <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
-                            {material!.index} · {batch.receivedAt} ·{" "}
-                            {formatPLN(Number(batch.unitPrice))} · dostępne {batch.quantity}{" "}
-                            {material!.unit}
-                            {batch.documentNumber ? ` · ${batch.documentNumber}` : ""}
-                            {batch.supplier ? ` · ${batch.supplier}` : ""}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    {warehouseBatches.length === 0 && (
-                      <Text style={{ color: COLORS.muted, fontSize: 12, padding: 10 }}>
-                        Brak partii w magazynie.
-                      </Text>
-                    )}
-                  </ScrollView>
-                </View>
-              )}
-            </>
-          );
-        })()}
-        <Text className="text-xs text-muted uppercase mt-4">
-          Ilość z tej partii
-        </Text>
-        <QuantityStepper
-          style={{ marginTop: 8 }}
-          value={plannedAmount}
-          onChangeText={setPlannedAmount}
-        />
-        <View style={{ marginTop: 12 }}>
-          <Button label="+ Dodaj do listy" onPress={addToDraft} />
-        </View>
-        {draftAssignments.length > 0 && (
-          <View
-            style={{
-              backgroundColor: COLORS.background,
-              borderRadius: 12,
-              padding: 12,
-              marginTop: 12,
-            }}
-          >
-            <Text className="text-xs text-muted uppercase">
-              Materiały oczekujące na zatwierdzenie
-            </Text>
-            {draftAssignments.map((draft) => {
-              const material = materials.find(
-                (m) => m.id === draft.materialId,
-              );
-              const batch = warehouseBatches.find(
-                (b) => String(b.id) === draft.batchId,
-              );
-              return (
-                <View
-                  key={draft.batchId}
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    paddingVertical: 8,
-                    borderBottomWidth: 1,
-                    borderBottomColor: COLORS.border,
-                  }}
-                >
-                  <View>
-                    <Text className="text-xs text-foreground">{material?.name}</Text>
-                    {batch && (
-                      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                        {batch.receivedAt} · {formatPLN(Number(batch.unitPrice))}
-                      </Text>
-                    )}
-                  </View>
-                  <Text className="text-xs text-primary font-bold">
-                    {draft.quantity} {material?.unit}
-                  </Text>
-                </View>
-              );
-            })}
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="Anuluj przypisanie"
-                  secondary
-                  onPress={() => setDraftAssignments([])}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label={`Zatwierdź ${draftAssignments.length} materiałów`}
-                  onPress={commitAssignments}
-                />
-              </View>
-            </View>
-          </View>
-        )}
       </View>
     )}
     {isArchiveView && visibleBuilds.length > 0 && (
@@ -1198,6 +920,291 @@ export function BuildsScreen() {
             );
           })()}
 
+          {/* Materiały dodatkowe (pomocnicze, spoza planu technologii) —
+              dawniej globalny przycisk "+ Przypisz materiał" nad listą
+              budów (z ręcznym wyborem budowy) i lista przypisanych
+              materiałów wymieszana z "Kosztami na bieżąco" niżej. Teraz:
+              własna sekcja od razu pod Zamówieniami, budowa ustawiana
+              automatycznie na tę, w której jesteśmy (setSelectedBuildId
+              przy otwarciu), zanim dojdzie do Zdjęć i Kosztów. */}
+          {!isClosed &&
+            (() => {
+              const buildAssignments = assignments.filter(
+                (a) => a.buildId === b.id,
+              );
+              const isAssigning = assignBuildId === b.id;
+              const selectedBatch = warehouseBatches.find(
+                (wb) => String(wb.id) === selectedBatchId,
+              );
+              const selectedMaterial = selectedBatch
+                ? materials.find(
+                    (m) => m.id === String(selectedBatch.materialId),
+                  )
+                : undefined;
+              return (
+                <View
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: COLORS.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                      MATERIAŁY DODATKOWE
+                      {buildAssignments.length > 0 ? ` (${buildAssignments.length})` : ""}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        if (isAssigning) {
+                          setAssignBuildId(null);
+                          return;
+                        }
+                        setSelectedBuildId(b.id);
+                        setPicker(null);
+                        setPickerQuery("");
+                        setSelectedBatchId("");
+                        setPlannedAmount("");
+                        setDraftAssignments([]);
+                        setAssignBuildId(b.id);
+                      }}
+                    >
+                      <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+                        {isAssigning ? "Anuluj przypisywanie" : "+ Przypisz materiał"}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {isAssigning && (
+                    <View
+                      style={{
+                        backgroundColor: COLORS.background,
+                        borderRadius: 12,
+                        padding: 12,
+                        marginTop: 10,
+                      }}
+                    >
+                      {/* Ręczny wybór partii (Faza 5) — wyszukiwarka po
+                          nazwie pokazuje KAŻDĄ partię osobno (różne
+                          daty/ceny tej samej pozycji), nie zblendowany
+                          materiał; admin wybiera konkretną i ile z niej. */}
+                      <Text className="text-xs text-muted uppercase">
+                        Materiał / partia
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          setPicker(picker === "material" ? null : "material");
+                          setPickerQuery("");
+                        }}
+                        style={{
+                          backgroundColor: COLORS.surface,
+                          borderRadius: 10,
+                          padding: 13,
+                          marginTop: 8,
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <View>
+                          <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+                            {selectedMaterial?.name || "Wybierz partię"}
+                          </Text>
+                          {selectedBatch && (
+                            <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
+                              {selectedBatch.receivedAt} ·{" "}
+                              {formatPLN(Number(selectedBatch.unitPrice))} · dostępne{" "}
+                              {selectedBatch.quantity} {selectedMaterial?.unit}
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={{ color: COLORS.primary }}>
+                          {picker === "material" ? "▲" : "▼"}
+                        </Text>
+                      </Pressable>
+                      {picker === "material" && (
+                        <View
+                          style={{
+                            backgroundColor: COLORS.surface,
+                            borderRadius: 10,
+                            padding: 10,
+                            marginTop: 6,
+                          }}
+                        >
+                          <Field
+                            placeholder="Szukaj po nazwie lub indeksie"
+                            value={pickerQuery}
+                            onChangeText={setPickerQuery}
+                          />
+                          <ScrollView style={{ maxHeight: 260 }}>
+                            {warehouseBatches
+                              .map((wb) => ({
+                                batch: wb,
+                                material: materials.find(
+                                  (m) => m.id === String(wb.materialId),
+                                ),
+                              }))
+                              .filter(({ material }) => material)
+                              .filter(({ material }) =>
+                                `${material!.name} ${material!.index}`
+                                  .toLowerCase()
+                                  .includes(pickerQuery.toLowerCase()),
+                              )
+                              .sort((x, y) => x.material!.name.localeCompare(y.material!.name))
+                              .map(({ batch, material }) => (
+                                <Pressable
+                                  key={batch.id}
+                                  onPress={() => {
+                                    setSelectedBatchId(String(batch.id));
+                                    setPicker(null);
+                                    setPickerQuery("");
+                                  }}
+                                  style={{
+                                    paddingVertical: 12,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: COLORS.border,
+                                  }}
+                                >
+                                  <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+                                    {material!.name}
+                                  </Text>
+                                  <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
+                                    {material!.index} · {batch.receivedAt} ·{" "}
+                                    {formatPLN(Number(batch.unitPrice))} · dostępne{" "}
+                                    {batch.quantity} {material!.unit}
+                                    {batch.documentNumber ? ` · ${batch.documentNumber}` : ""}
+                                    {batch.supplier ? ` · ${batch.supplier}` : ""}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            {warehouseBatches.length === 0 && (
+                              <Text style={{ color: COLORS.muted, fontSize: 12, padding: 10 }}>
+                                Brak partii w magazynie.
+                              </Text>
+                            )}
+                          </ScrollView>
+                        </View>
+                      )}
+                      <Text className="text-xs text-muted uppercase mt-4">
+                        Ilość z tej partii
+                      </Text>
+                      <QuantityStepper
+                        style={{ marginTop: 8 }}
+                        value={plannedAmount}
+                        onChangeText={setPlannedAmount}
+                      />
+                      <View style={{ marginTop: 12 }}>
+                        <Button label="+ Dodaj do listy" onPress={addToDraft} />
+                      </View>
+                      {draftAssignments.length > 0 && (
+                        <View
+                          style={{
+                            backgroundColor: COLORS.surface,
+                            borderRadius: 12,
+                            padding: 12,
+                            marginTop: 12,
+                          }}
+                        >
+                          <Text className="text-xs text-muted uppercase">
+                            Materiały oczekujące na zatwierdzenie
+                          </Text>
+                          {draftAssignments.map((draft) => {
+                            const material = materials.find(
+                              (m) => m.id === draft.materialId,
+                            );
+                            const batch = warehouseBatches.find(
+                              (wb) => String(wb.id) === draft.batchId,
+                            );
+                            return (
+                              <View
+                                key={draft.batchId}
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  paddingVertical: 8,
+                                  borderBottomWidth: 1,
+                                  borderBottomColor: COLORS.border,
+                                }}
+                              >
+                                <View>
+                                  <Text className="text-xs text-foreground">
+                                    {material?.name}
+                                  </Text>
+                                  {batch && (
+                                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                                      {batch.receivedAt} · {formatPLN(Number(batch.unitPrice))}
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text className="text-xs text-primary font-bold">
+                                  {draft.quantity} {material?.unit}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                          <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                            <View style={{ flex: 1 }}>
+                              <Button
+                                label="Anuluj przypisanie"
+                                secondary
+                                onPress={() => setDraftAssignments([])}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Button
+                                label={`Zatwierdź ${draftAssignments.length} materiałów`}
+                                onPress={async () => {
+                                  await commitAssignments();
+                                  setAssignBuildId(null);
+                                }}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {buildAssignments.map((a) => {
+                    const material = materials.find((m) => m.id === a.materialId);
+                    return (
+                      <View
+                        key={`${b.id}-${a.materialId}`}
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          marginTop: 10,
+                          paddingTop: 10,
+                          borderTopWidth: 1,
+                          borderTopColor: COLORS.border,
+                        }}
+                      >
+                        <Text
+                          className="text-xs text-foreground"
+                          numberOfLines={1}
+                          style={{ flex: 1, marginRight: 8 }}
+                        >
+                          {material?.name || "Materiał usunięty z magazynu"}
+                        </Text>
+                        <Text
+                          className="text-xs text-primary font-bold"
+                          style={{ flexShrink: 0 }}
+                        >
+                          {a.planned} {material?.unit}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+
           {/* Zdjęcia budowy — katalog na Google Drive (utworzony przyciskiem
               niżej albo, dla starszych budów, wklejony ręcznie jako zwykły
               link) + dołączanie zdjęć wprost z apki (build-photos-section.tsx). */}
@@ -1538,42 +1545,6 @@ export function BuildsScreen() {
               );
             })()
           )}
-
-          {!isClosed &&
-            assignments
-              .filter((a) => a.buildId === b.id)
-              .map((a) => {
-                const material = materials.find(
-                  (m) => m.id === a.materialId,
-                );
-                return (
-                  <View
-                    key={`${b.id}-${a.materialId}`}
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginTop: 12,
-                      paddingTop: 12,
-                      borderTopWidth: 1,
-                      borderTopColor: COLORS.border,
-                    }}
-                  >
-                    <Text
-                      className="text-xs text-foreground"
-                      numberOfLines={1}
-                      style={{ flex: 1, marginRight: 8 }}
-                    >
-                      {material?.name || "Materiał usunięty z magazynu"}
-                    </Text>
-                    <Text
-                      className="text-xs text-primary font-bold"
-                      style={{ flexShrink: 0 }}
-                    >
-                      {a.planned} {material?.unit}
-                    </Text>
-                  </View>
-                );
-              })}
 
           {/* Raporty tej konkretnej budowy — pojedyncze źródło prawdy,
               zamiast rozjeżdżania się z ekranem "Raporty". */}

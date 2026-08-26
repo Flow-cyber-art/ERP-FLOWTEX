@@ -69,59 +69,75 @@ Wszystko w jednej transakcji SQL (`submit_daily_report`,
 
 ---
 
-## 4. Edycja/korekta raportu — DECYZJA A 🔧 do zrobienia
+## 4. Edycja/korekta raportu — DECYZJA A ✅ potwierdzona, 🔧 do zrobienia
 
 **Ustalenie:** edycja raportu (przed zatwierdzeniem) ma również
 korygować stan magazynowy — nie tylko liczbę `used` na papierze.
 
-**Rekomendowany, sprawdzony sposób** (zamiast wymyślać nowy mechanizm —
-użycie tego, co już istnieje w systemie do dokładnie tego samego
-problemu, patrz §6 "Pozostałość materiałowa"):
+**Doprecyzowanie po pytaniu „czy nie może wrócić tak na magazyn (do tej
+samej partii/ceny)?” — TAK, i to jest lepszy sposób niż uśrednianie.**
+`build_material_lots` już dziś normalnie trzyma dla jednego materiału na
+jednej budowie kilka odrębnych wpisów z różnymi cenami (bo Faza 5
+przypisuje partie ręcznie, jedna po drugiej) — więc nie ma potrzeby nic
+uśredniać. Wystarczy zapamiętać, **z której konkretnie partii/lota
+zeszła dana ilość w danym raporcie**, i przy korekcie w dół cofnąć
+dokładnie to, skąd to wzięło — z tą samą, realną ceną.
 
-- Przy **delta < 0** (korekta w dół), zamiast tylko nadpisywać `used`:
-  1. Policz proporcjonalny zwrot kosztu z tego, co już zaksięgowano dla
-     tej pozycji w tym raporcie (`report_materials.cost` — to już dziś
-     jest zapisywane per pozycja, więc mamy dokładną cenę, po jakiej
-     zeszło).
-  2. **Zwróć** różnicę ilości do puli `build_material_lots` **tej samej
-     budowy** — jako nowy wpis (bo oryginalna partia mogła się w
-     międzyczasie już wyczerpać/zniknąć), po uśrednionej cenie z kroku 1.
-  3. **Odejmij** ten sam koszt z `build_materials.actualCost`.
-  4. Zaktualizuj `report_materials.cost` tej pozycji (żeby ślad audytowy
-     w samym raporcie też się zgadzał, nie tylko suma na budowie).
-- Efekt: materiał „wraca” do puli przypisanej do budowy (nie od razu do
-  ogólnego magazynu — bo fizycznie nadal stoi na placu). Jeśli finalnie
-  nigdy nie zostanie zużyty, dostanie tę samą decyzję co każda inna
-  pozycja "pozostałości" przy zamykaniu budowy (zwrot/wyrzucenie, §6) —
-  **żadnego nowego mechanizmu, tylko reużycie istniejącego**.
-- Ograniczenie: to działa tylko **przed zatwierdzeniem** raportu — po
-  zatwierdzeniu edycja i tak jest zablokowana (bez zmian, zgodnie z
-  obecnym zachowaniem).
+**Sprawdzony sposób (bez uśredniania):**
 
-**Do potwierdzenia:** czy zwrot ma trafiać jako nowa partia w
-`build_material_lots` z uśrednioną ceną (rekomendacja), czy wolisz inny
-sposób ustalania ceny zwrotu.
+1. Nowa tabela, np. `report_material_lots (reportId, materialId,
+   lotId lub sourceBatchId, quantity, unitPrice)` — rozbicie „z jakiego
+   lota ile zeszło” dla KAŻDEGO wywołania `submit_daily_report`, nie
+   tylko suma kosztu jak dziś w `report_materials.cost`.
+   `fn_consume_build_lot_fifo` już i tak idzie partia po partii — zamiast
+   zwracać tylko sumę kosztu, ma dodatkowo zapisać ten rozkład.
+2. Przy **delta < 0** (korekta w dół): cofamy zapisany rozkład tego
+   RAPORTU dla tego materiału, **od najnowszego wpisu wstecz** (LIFO —
+   cofamy to, co ten raport sam dołożył jako ostatnie), aż zejdziemy z
+   potrzebną ilością:
+   - Jeśli oryginalny lot (`lotId`) **nadal istnieje** w
+     `build_material_lots` → po prostu zwiększ jego `quantity` z
+     powrotem — dokładnie ta sama partia, dokładnie ta sama cena.
+   - Jeśli lot **już nie istnieje** (bo w międzyczasie w pełni zszedł w
+     innym raporcie) → odtwórz go jako nowy wiersz w
+     `build_material_lots` z tym samym `sourceBatchId` i `unitPrice`, co
+     zapisany rozkład — cena i tak jest realna, tylko wiersz "nowy".
+3. **Odejmij** dokładnie tyle samo kosztu z `build_materials.actualCost`
+   (suma z cofniętych kawałków rozkładu — żadnego przybliżenia).
+4. Zaktualizuj `report_materials.cost` tej pozycji o tę samą kwotę (ślad
+   audytowy w raporcie ma się zgadzać z tym, co realnie zaksięgowano).
+- Efekt: materiał wraca do puli **tej budowy** (nie od razu do ogólnego
+  magazynu — fizycznie nadal stoi na placu), po dokładnie tej cenie, po
+  jakiej z niej zszedł. Jeśli finalnie nigdy nie zostanie zużyty,
+  dostanie tę samą decyzję co każda inna pozycja "pozostałości" przy
+  zamykaniu budowy (zwrot/wyrzucenie, §6) — **żadnego nowego mechanizmu
+  wyceny, tylko dokładne odtworzenie tego, co już wiadomo**.
+- Ograniczenie: działa tylko **przed zatwierdzeniem** raportu — po
+  zatwierdzeniu edycja i tak jest zablokowana (bez zmian).
 
 ---
 
-## 5. Notatka do raportu — DECYZJA B 🔧 do zrobienia
+## 5. Notatka do raportu — DECYZJA B ✅ potwierdzona, 🔧 do zrobienia
 
 **Ustalenie:** nie wprowadzamy formalnej ścieżki „odrzuć raport” —
 rozbieżności między brygadzistą a adminem rozwiązuje się telefonicznie.
-Zamiast tego: **jedno pole tekstowe na końcu raportu** (krok 3,
+Zamiast tego: **jedno pole tekstowe na cały raport** (krok 3,
 podsumowanie) — dowolna notatka brygadzisty do tego konkretnego dnia
 (np. „deszcz do 11, brygada 2h krócej”, „czekaliśmy na dostawę”).
+Potwierdzone: **jedna notatka na cały raport**, nie osobna per materiał
+— współistnieje z istniejącym polem „Dlaczego wystąpiła różnica?” przy
+konkretnym materiale (to zostaje bez zmian, to inna rzecz: powód
+konkretnego odchylenia od planu, nie ogólna notatka dnia).
 
 - Widoczne dla Admina przy przeglądaniu/zatwierdzaniu raportu.
 - Czysto informacyjne — nie wpływa na żadne wyliczenia (magazyn, koszt).
-- Wymaga: nowej kolumny (np. `reports.note` albo `report_people`-owy
-  odpowiednik na poziomie raportu) + pola `Field`/`TextInput` w kroku 3
-  UI brygadzisty + wyświetlenia w `ReportCard` (`report-ui.tsx`) po
-  stronie Admina.
+- Wymaga: nowej kolumny (np. `reports.note`) + pola `Field`/`TextInput`
+  w kroku 3 UI brygadzisty + wyświetlenia w `ReportCard`
+  (`report-ui.tsx`) po stronie Admina.
 
 ---
 
-## 6. Zamknięcie budowy i pozostałość materiałowa — DECYZJA C
+## 6. Zamknięcie budowy i pozostałość materiałowa — DECYZJA C ✅ potwierdzona, 🔧 do zrobienia
 
 **Ustalenie:** przy zamykaniu budowy Admin decyduje per pozycja
 pozostałości: zwrot na magazyn albo do wyrzucenia (np. materiał traci
@@ -148,16 +164,24 @@ ważność). Zwrot → **odejmujemy** od kosztów budowy. Wyrzucenie →
     kosztu budowy nigdzie** — więc zmarnowany materiał dziś znika bez
     śladu z rozliczenia finansowego budowy.
 
-**Do zrobienia:** w `close_build`, gdy `decision = 'wyrzucenie'`, doliczyć
-`quantity × unitPrice` tej pozycji do `v_materials_cost` (albo osobnej
-kolumny „koszt strat materiałowych” w `build_settlements`, żeby było to
-widoczne osobno od zwykłego zużycia — czytelniejsze dla właściciela niż
-schowanie tego w tej samej liczbie co normalne zużycie).
+**Potwierdzone: osobna linia „Straty materiałowe”**, nie wrzucamy do
+zwykłego kosztu materiałowego. Do zrobienia:
 
-**Do potwierdzenia:** osobna linia „Straty materiałowe” w rozliczeniu
-(rekomendacja — łatwiej zobaczyć skalę marnowania materiału na
-przestrzeni budów) czy wrzucamy do tej samej sumy co zwykłe zużycie
-materiałowe?
+- W `close_build`, gdy `decision = 'wyrzucenie'`, doliczyć
+  `quantity × unitPrice` tej pozycji do **nowej, osobnej kolumny**
+  `build_settlements."wasteCost"` (nazwa robocza) — nie do
+  `materialsCost`, żeby nie mieszać "zużyto zgodnie z planem pracy" z
+  "zmarnowało się przy zamknięciu".
+- Doliczyć `wasteCost` do `totalCost` budowy (żeby marża/zysk się zgadzały).
+- Pokazać jako osobny wiersz w `settlement-screen.tsx` („Straty
+  materiałowe”) — obok „Materiały technologiczne”, „Robocizna” itd.,
+  zamiast chować w istniejącej sumie.
+- **Na przyszłość (nie teraz):** skoro ma to być „dobra zakładka do
+  analizy” — docelowo osobny widok zbierający straty materiałowe
+  **przekrojowo po wszystkich budowach** (który materiał marnuje się
+  najczęściej, na której budowie, ile to kosztuje w skali roku), po
+  wzorze istniejącego ekranu Rozliczeń/Raportów. To osobne zadanie, nie
+  blokuje wdrożenia samej linii kosztowej per budowa.
 
 ---
 
@@ -174,15 +198,31 @@ z `close_build`).
 
 ---
 
-## 8. Otwarte decyzje (do potwierdzenia przed wdrożeniem)
+## 8. Decyzje — status
 
-1. **§4 (korekta w dół):** zwrot do `build_material_lots` po uśrednionej
-   cenie z tego raportu — OK, czy inny sposób wyceny?
-2. **§5 (notatka):** czy notatka ma być jedna na cały raport (dzień), czy
-   też chcesz możliwość notatki per materiał/pozycja (dziś jest już pole
-   „Dlaczego wystąpiła różnica?” przy przekroczeniu planu — czy notatka
-   ogólna ma to zastąpić, czy współistnieć)?
-3. **§6 (straty materiałowe):** osobna linia kosztowa czy wrzucone do
-   zwykłego kosztu materiałowego budowy?
-4. Czy §4 i §6 wdrażamy razem (bo współdzielą tę samą logikę „zwrot do
-   puli budowy / koszt strat”), czy jako dwa osobne, niezależne zadania?
+Wszystkie trzy decyzje **potwierdzone**:
+
+1. **§4 (korekta w dół):** zwrot do `build_material_lots` **dokładnie do
+   tej samej partii/ceny, z której zeszło** (nie uśredniona) — wymaga
+   rozbicia „z jakiego lota ile” per raport (nowa tabela
+   `report_material_lots`).
+2. **§5 (notatka):** jedna notatka tekstowa na cały raport, współistnieje
+   z istniejącym polem „Dlaczego wystąpiła różnica?” per materiał.
+3. **§6 (straty materiałowe):** osobna linia kosztowa „Straty
+   materiałowe” w rozliczeniu budowy, nie wrzucona do zwykłego zużycia.
+
+**Zostaje do ustalenia tylko kolejność wdrożenia:**
+
+- §4 i §6 **nie muszą** iść razem — §6 (dopisanie kosztu wyrzucenia przy
+  zamknięciu budowy) jest prostsze i niezależne (jedna zmiana w
+  `close_build` + jeden wiersz w UI rozliczenia). §4 (dokładny zwrot do
+  lota przy korekcie raportu) wymaga nowej tabeli rozbicia i zmiany w
+  `submit_daily_report`/`fn_consume_build_lot_fifo` — trochę większa
+  zmiana.
+- §5 (notatka) jest niezależna od obu powyższych — najmniejsza zmiana z
+  całej trójki (jedna kolumna + jedno pole tekstowe).
+
+**Rekomendowana kolejność, jeśli wdrażamy pojedynczo:** §6 → §5 → §4
+(od najprostszej do najbardziej złożonej), ale nic nie stoi na
+przeszkodzie, żeby zrobić to w jednym zadaniu, jeśli wolisz mieć to z
+głowy naraz.

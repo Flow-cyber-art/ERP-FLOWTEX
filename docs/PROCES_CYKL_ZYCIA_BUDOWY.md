@@ -190,9 +190,9 @@ zużycie i zdejmować materiał z **cudzej** budowy, przez pomyłkę albo nie.
 To realna decyzja projektowa do podjęcia zanim dojdzie druga brygada, nie
 coś, co samo się "doda" przy skalowaniu.
 
-### Ryzyko 5 — Zamówienia z planu bez blokady duplikatu
+### Ryzyko 5 — Zamówienia z planu bez blokady duplikatu ✅ Wdrożone (Wariant 3)
 
-`generate_order_from_plan` nie sprawdza, czy dla tej budowy istnieje już
+`generate_order_from_plan` nie sprawdzało, czy dla tej budowy istnieje już
 zamówienie z tego planu (w statusie `robocze`/`zamówione`) — każde
 kliknięcie "+ Z planu" tworzy **nowe** zamówienie na **pełną** planowaną
 ilość każdego materiału (`sum(planned_quantity)` z `build_material_plan`,
@@ -301,14 +301,17 @@ tego nie złapał aż do rozliczenia.
    ryzyka. Zostaje zanotowane w dokumencie na wypadek, gdyby to się
    zmieniło (wtedy wrócić do tego punktu przed, nie po, dodaniu drugiej
    brygady).
-5. **Blokada duplikatu zamówienia z planu (Ryzyko 5).** 🔧 **Do
-   zabezpieczenia** — rozwinięte wyżej w Ryzyku 5 na trzy warianty
-   (twarda blokada / ostrzeżenie przed wygenerowaniem / liczenie
-   "ile jeszcze trzeba zamówić" zamiast pełnego planu za każdym razem).
-   Rekomendacja: wariant 3 (poprawne liczenie ilości) jako właściwa
-   naprawa, opcjonalnie + wariant 2 (ostrzeżenie) dla czytelności. Czeka
-   na Twoje potwierdzenie, który wariant wdrażamy — nic jeszcze nie
-   zmienione w kodzie.
+5. **Blokada duplikatu zamówienia z planu (Ryzyko 5).** ✅ **Wdrożone —
+   Wariant 3** (`supabase/sql/036_zamowienie_z_planu_reszta.sql`).
+   `generate_order_from_plan` liczy teraz per materiał "ile jeszcze
+   trzeba zamówić" (planowana ilość minus suma zamówionej we wszystkich
+   nie-anulowanych zamówieniach tej budowy) zamiast zawsze pełnej ilości
+   z planu. Kliknięcie "+ Z planu", gdy wszystko już zamówiono, kończy
+   się teraz czytelnym komunikatem ("Cały plan materiałowy tej budowy
+   jest już zamówiony…") zamiast utworzenia duplikatu; legalna dosyłka
+   (dostawca przywiózł za mało) poprawnie liczy tylko brakującą resztę.
+   Front nie wymagał zmian — komunikat z bazy przechodzi przez istniejący
+   `reportMutationError`/`notify`.
 6. **Martwy kod `do_poprawy`/`adminComment` (§2.7).** Otwarte — usunąć
    jako niespójny z Decyzją B, czy zostawić jako zalążek pod ewentualną
    przyszłą zmianę zdania?

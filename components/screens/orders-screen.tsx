@@ -53,6 +53,7 @@ export function OrdersScreen() {
     orderQuantity,
     orderSaved,
     orderCart,
+    orderConfirmedNewMaterial,
     setOrderMaterialName,
     setOrderQuantity,
     setOrderSaved,
@@ -67,6 +68,7 @@ export function OrdersScreen() {
     deleteBuildOrder,
     receiveBuildOrder,
     addToOrderCart,
+    confirmOrderNewMaterial,
     removeFromOrderCart,
     submitOrderCart,
     createOrderFromShortage,
@@ -357,6 +359,32 @@ export function OrdersScreen() {
               zamówienie zostanie do niego dopięte.
             </Text>
           )}
+          {/* Nazwa bez jednoznacznego dopasowania w magazynie (literówka
+              albo faktycznie nowy materiał) — wymagamy jawnego
+              potwierdzenia zamiast po cichu tworzyć pozycję niepowiązaną
+              z żadnym wierszem magazynowym (patrz
+              docs/PROCES_ZARZADZANIE_MATERIALEM.md, Ryzyko 6). */}
+          {!exactMaterialMatch && orderMaterialName.trim().length > 0 && (
+            orderConfirmedNewMaterial ? (
+              <Text style={{ color: COLORS.success, fontSize: 11, marginTop: 4 }}>
+                Potwierdzone — „{orderMaterialName.trim()}" trafi do magazynu
+                jako nowy materiał przy przyjęciu dostawy.
+              </Text>
+            ) : (
+              <>
+                <Text style={{ color: COLORS.warning, fontSize: 11, marginTop: 4 }}>
+                  Nie ma takiego materiału w magazynie. Sprawdź podpowiedzi
+                  wyżej — jeśli to literówka, wybierz istniejący materiał,
+                  albo potwierdź, że to naprawdę nowy.
+                </Text>
+                <Pressable onPress={confirmOrderNewMaterial} style={{ marginTop: 6 }}>
+                  <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                    To nowy materiał — dodaj do zamówienia
+                  </Text>
+                </Pressable>
+              </>
+            )
+          )}
           <Text
             style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}
             className="uppercase"
@@ -369,7 +397,15 @@ export function OrdersScreen() {
             onChangeText={setOrderQuantity}
           />
           <View style={{ marginTop: 12 }}>
-            <Button label="+ Dodaj do koszyka" onPress={addToOrderCart} />
+            <Button
+              label="+ Dodaj do koszyka"
+              onPress={addToOrderCart}
+              disabled={
+                !exactMaterialMatch &&
+                !orderConfirmedNewMaterial &&
+                orderMaterialName.trim().length > 0
+              }
+            />
           </View>
 
           {orderCart.length > 0 && (

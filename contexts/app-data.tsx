@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { enqueueReport } from "@/lib/offline-outbox";
+import { normalizeMaterialName } from "@/lib/material-name-match";
 import {
   closeBuild as closeBuildRemote,
   createBuild,
@@ -1012,9 +1013,19 @@ function useAppDataState(
   // informacyjna, nie wpływa na żadne wyliczenia.
   const [draftNote, setDraftNote] = useState("");
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
-  const [orderMaterialName, setOrderMaterialName] = useState("");
+  const [orderMaterialNameRaw, setOrderMaterialNameRaw] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
   const [orderSaved, setOrderSaved] = useState(false);
+  // Czy wpisana nazwa (bez jednoznacznego dopasowania w magazynie) została
+  // JAWNIE potwierdzona jako nowy materiał — patrz addToOrderCart niżej.
+  // Reset przy każdej zmianie nazwy (setOrderMaterialName), żeby literówka
+  // poprawiona na coś innego wymagała ponownego potwierdzenia.
+  const [orderConfirmedNewMaterial, setOrderConfirmedNewMaterial] = useState(false);
+  const orderMaterialName = orderMaterialNameRaw;
+  const setOrderMaterialName = (name: string) => {
+    setOrderMaterialNameRaw(name);
+    setOrderConfirmedNewMaterial(false);
+  };
   // Koszyk zamówienia ręcznego ("Zamów materiał spoza listy") — pozycje
   // zbierane lokalnie, zanim cokolwiek trafi do bazy. Wcześniej każde
   // "Utwórz zamówienie" od razu tworzyło osobne zamówienie w Supabase;
@@ -1817,6 +1828,17 @@ function useAppDataState(
           // z powrotem (patrz timeEntriesQuery wyżej).
           invalidate("reports");
           invalidate("timeEntries");
+          // submit_daily_report zmienia też zużycie/koszt materiału
+          // (build_materials.used/actualCost) i pulę partii przypisanych
+          // do budowy (build_material_lots) — bez tego Rozliczenie budowy
+          // (settlement-screen.tsx, liczone z `assignments`/
+          // `buildMaterialLots`) pokazywało nieaktualne "Zużyto" aż do
+          // przypadkowego odświeżenia innej zakładki. Realtime (patrz
+          // lib/data/use-realtime-sync.ts) powinien to i tak złapać, ale
+          // jawne unieważnienie od razu po wysyłce jest pewne niezależnie
+          // od Realtime.
+          invalidate("buildMaterials");
+          invalidate("buildMaterialLots");
         }
       });
     }
@@ -1918,10 +1940,14 @@ function useAppDataState(
     const quantity = Number(orderQuantity);
     if (!orderMaterialName.trim() || !quantity || quantity <= 0) return;
     const matched = materials.find(
-      (m) =>
-        m.name.trim().toLowerCase() ===
-        orderMaterialName.trim().toLowerCase(),
+      (m) => normalizeMaterialName(m.name) === normalizeMaterialName(orderMaterialName),
     );
+    // Nazwa nie pasuje jednoznacznie do żadnego materiału w magazynie —
+    // wymagamy jawnego potwierdzenia "to nowy materiał" (przycisk w
+    // orders-screen.tsx), żeby literówka nie utworzyła po cichu pozycji
+    // niepowiązanej z żadnym wierszem magazynowym (patrz
+    // docs/PROCES_ZARZADZANIE_MATERIALEM.md, Ryzyko 6).
+    if (!matched && !orderConfirmedNewMaterial) return;
     setOrderCart((prev) => [
       ...prev,
       {
@@ -1935,6 +1961,10 @@ function useAppDataState(
     setOrderMaterialName("");
     setOrderQuantity("");
   };
+  // Jawne potwierdzenie "materiału nie ma na liście, dodaj go jako nowy" —
+  // pokazywane w UI tylko gdy wpisana nazwa nie ma jednoznacznego
+  // dopasowania w magazynie.
+  const confirmOrderNewMaterial = () => setOrderConfirmedNewMaterial(true);
   const removeFromOrderCart = (id: string) => {
     setOrderCart((prev) => prev.filter((item) => item.id !== id));
   };
@@ -2289,6 +2319,7 @@ function useAppDataState(
     orderQuantity,
     orderSaved,
     orderCart,
+    orderConfirmedNewMaterial,
     setTab,
     setDevRole,
     setWorkerPeriod,
@@ -2372,6 +2403,7 @@ function useAppDataState(
     updateMaterialPrice,
     updateMaterialStock,
     addToOrderCart,
+    confirmOrderNewMaterial,
     removeFromOrderCart,
     submitOrderCart,
     createOrderFromShortage,

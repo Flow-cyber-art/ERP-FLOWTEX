@@ -1011,8 +1011,14 @@ export function BuildsScreen() {
                       </Text>
                       <Pressable
                         onPress={() => {
+                          // Nie czyścimy pickerQuery przy otwarciu — po
+                          // dodaniu jednej partii do listy (addToDraft
+                          // zamyka picker, ale zostawia wyszukiwaną frazę)
+                          // ponowne otwarcie ma pokazać ten sam
+                          // przefiltrowany wynik, nie całą listę partii od
+                          // nowa/od góry (zgłoszony problem: wybór "zaczynał
+                          // się od początku" przy każdym kolejnym materiale).
                           setPicker(picker === "material" ? null : "material");
-                          setPickerQuery("");
                         }}
                         style={{
                           backgroundColor: COLORS.surface,
@@ -1074,7 +1080,6 @@ export function BuildsScreen() {
                                   onPress={() => {
                                     setSelectedBatchId(String(batch.id));
                                     setPicker(null);
-                                    setPickerQuery("");
                                   }}
                                   style={{
                                     paddingVertical: 12,

@@ -191,12 +191,58 @@ To realna decyzja projektowa do podjęcia zanim dojdzie druga brygada, nie
 coś, co samo się "doda" przy skalowaniu.
 
 ### Ryzyko 5 — Zamówienia z planu bez blokady duplikatu
+
 `generate_order_from_plan` nie sprawdza, czy dla tej budowy istnieje już
 zamówienie z tego planu (w statusie `robocze`/`zamówione`) — każde
 kliknięcie "+ Z planu" tworzy **nowe** zamówienie na **pełną** planowaną
-ilość każdego materiału, niezależnie od tego, ile już zamówiono/przyjęto
-wcześniej. Dwukrotne kliknięcie (np. z pomyłki albo dlatego że
-pierwsze "wisiało") realnie podwaja zamówienie.
+ilość każdego materiału (`sum(planned_quantity)` z `build_material_plan`,
+od zera, za każdym razem), niezależnie od tego, ile już
+zamówiono/przyjęto wcześniej. Dwukrotne kliknięcie (np. z pomyłki albo
+dlatego że pierwsze "wisiało") realnie podwaja zamówienie. Jedyna dziś
+istniejąca ochrona to `disabled={orderGenerating === b.id}` w
+`builds-screen.tsx` — blokuje tylko klik **w trakcie** trwania
+poprzedniego wywołania (ułamek sekundy), nie chroni przed dwoma
+osobnymi, świadomymi kliknięciami parę minut później.
+
+**Warianty zabezpieczenia — od najprostszego do najdokładniejszego:**
+
+1. **Twarda blokada.** `generate_order_from_plan` odrzuca wywołanie,
+   jeśli dla tej budowy istnieje już jakiekolwiek zamówienie w statusie
+   `robocze` lub `zamówione`. Najprostsze do zrobienia, ale zbyt
+   sztywne: nie odróżnia "przez pomyłkę drugi raz to samo" od
+   "świadomie dokupuję drugą turę, bo pierwsza dostawa nie pokryła
+   całości" (np. dostawca przywiózł mniej, niż zamówiono) — ten drugi
+   przypadek jest całkiem realny i twarda blokada by go uniemożliwiła.
+
+2. **Ostrzeżenie przed wygenerowaniem (miękka blokada).** Przed
+   wywołaniem RPC front sprawdza, czy dla budowy istnieje już
+   zamówienie `robocze`/`zamówione`, i jeśli tak — pokazuje
+   `confirmAction`: "Zamówienie z tego planu już istnieje (ZAM/…,
+   status: …). Wygenerować kolejne?". Nie blokuje niczego, tylko
+   wymusza świadomą decyzję zamiast przypadkowego kliknięcia. Najmniejsza
+   zmiana (czysto frontendowa, bez zmiany RPC), ale nie chroni przed kimś,
+   kto i tak kliknie "Tak" bez czytania.
+
+3. **Licz "ile jeszcze trzeba zamówić", nie "ile jest w planie".**
+   Najdokładniejsze podejście: `generate_order_from_plan` liczy dla
+   każdego materiału `planned_quantity − suma ordered_quantity ze
+   WSZYSTKICH nie-anulowanych zamówień tej budowy dla tego materiału`,
+   i wstawia do nowego zamówienia tylko **różnicę** (a jeśli różnica
+   ≤ 0 dla wszystkich pozycji — w ogóle nie tworzy pustego zamówienia,
+   tylko czytelny komunikat "cały plan już zamówiony"). To jedyny
+   wariant, który poprawnie obsługuje zarówno pomyłkę (drugie kliknięcie
+   od razu pokaże 0 do zamówienia), jak i legalną dopłatę (dostawca
+   przywiózł za mało — kolejne zamówienie poprawnie policzy tylko
+   brakującą resztę), bez pytania Admina o nic. Wymaga trochę więcej
+   pracy w RPC (suma po `order_items` z joinem do `orders` po statusie),
+   ale rozwiązuje problem u źródła zamiast tylko go sygnalizować.
+
+**Rekomendacja:** 2 i 3 nie wykluczają się nawzajem — 3 jako właściwa
+naprawa liczenia ilości, 2 jako dodatkowa, tania warstwa czytelności
+("wiem, że to nie pierwsze zamówienie z tego planu"). Samo 1 odradzam —
+blokuje legalny przypadek dosyłki. Zostawiam to do Twojej decyzji niżej
+(#4) — żadna z tych opcji nie została wdrożona, to tylko rozwinięcie
+ryzyka na Twoją prośbę.
 
 ### Ryzyko 6 — Dopasowanie materiału po nazwie przy przyjęciu dostawy
 `receive_order`, gdy pozycja zamówienia nie ma `linked_material_id`,
@@ -236,34 +282,37 @@ tego nie złapał aż do rozliczenia.
 
 ---
 
-## 4. Decyzje do podjęcia
+## 4. Decyzje
 
-1. **Migracje fundamentu (Ryzyko 1).** Czy odtworzyć brakujące pliki
-   `004`/`005`/`006` retroaktywnie (introspekcja żywej bazy → zapis jako
-   migracje, żeby repo było kompletnym źródłem prawdy), czy zaakceptować
-   ryzyko i tylko to udokumentować jako świadomy stan?
-2. **PIN zamknięcia budowy (Ryzyko 2).** Czy PIN ma być tylko wygodą
-   ("nie kliknij przez pomyłkę na wspólnym tablecie") — wtedy obecny
-   stan jest OK, tylko nazwa/opis w UI nie powinny sugerować, że to
-   zabezpieczenie. Czy ma być realną kontrolą dostępu — wtedy wymaga
-   przeniesienia sprawdzenia do samego `close_build` (hash PIN-u, nie
-   plaintext, sprawdzany po stronie bazy).
-3. **Ownership budowa↔brygada (Ryzyko 4).** Czy i kiedy planujecie drugą
-   brygadę? Jeśli tak w rozsądnej perspektywie — warto zaprojektować
-   przypisanie "ta budowa → ta brygada" **zanim** druga brygada zacznie
-   pracować, nie po fakcie (naprawianie tego z danymi produkcyjnymi w
-   środku jest trudniejsze).
-4. **Blokada duplikatu zamówienia z planu (Ryzyko 5).** Czy
-   `generate_order_from_plan` powinien ostrzegać/blokować przy istniejącym
-   już zamówieniu roboczym/zamówionym z tego samego planu, czy zostawić
-   to jako świadomą odpowiedzialność Admina (widzi listę zamówień, sam
-   decyduje)?
-5. **Martwy kod `do_poprawy`/`adminComment` (§2.7).** Usunąć jako
-   niespójny z Decyzją B, czy zostawić jako zalążek pod ewentualną
+1. **Migracje fundamentu (Ryzyko 1).** ✅ **Zostawiamy jak jest** —
+   ryzyko zaakceptowane świadomie, bez działania. Zostaje udokumentowane
+   tu, na wypadek gdyby kiedyś trzeba było odtwarzać bazę od zera.
+2. **PIN zamknięcia budowy (Ryzyko 2).** ✅ **Zostawiamy jak jest** —
+   PIN ma być tylko zabezpieczeniem przed przypadkowym zamknięciem
+   budowy (np. na wspólnym urządzeniu), nie kontrolą dostępu. To,
+   że można go odczytać/obejść przez bezpośrednie API, jest w takim razie
+   akceptowalne — nie jest to typowa kwestia bezpieczeństwa dla tego
+   przypadku użycia.
+3. **RLS na poziomie kolumny (Ryzyko 3).** ✅ **Bez zmian** — bez znaczenia
+   praktycznego przy dzisiejszym modelu (jedna brygada, mała zaufana
+   firma).
+4. **Ownership budowa↔brygada (Ryzyko 4).** ✅ **Bez zmian na razie** —
+   w praktyce niemal zawsze jest jedna brygada, więc nie ma dziś realnego
+   ryzyka. Zostaje zanotowane w dokumencie na wypadek, gdyby to się
+   zmieniło (wtedy wrócić do tego punktu przed, nie po, dodaniu drugiej
+   brygady).
+5. **Blokada duplikatu zamówienia z planu (Ryzyko 5).** 🔧 **Do
+   zabezpieczenia** — rozwinięte wyżej w Ryzyku 5 na trzy warianty
+   (twarda blokada / ostrzeżenie przed wygenerowaniem / liczenie
+   "ile jeszcze trzeba zamówić" zamiast pełnego planu za każdym razem).
+   Rekomendacja: wariant 3 (poprawne liczenie ilości) jako właściwa
+   naprawa, opcjonalnie + wariant 2 (ostrzeżenie) dla czytelności. Czeka
+   na Twoje potwierdzenie, który wariant wdrażamy — nic jeszcze nie
+   zmienione w kodzie.
+6. **Martwy kod `do_poprawy`/`adminComment` (§2.7).** Otwarte — usunąć
+   jako niespójny z Decyzją B, czy zostawić jako zalążek pod ewentualną
    przyszłą zmianę zdania?
-6. **Zamrożony snapshot rozliczenia (Ryzyko 7).** Czy dokończyć odczyt
-   `build_settlements`/`build_settlement_materials` z powrotem do
-   frontu (żeby zamknięta budowa faktycznie pokazywała zapisany
-   snapshot, a nie tylko przypadkiem identyczne liczenie na żywo), czy
-   uznać "licz zawsze na żywo" za docelowy, prostszy model i **usunąć**
+7. **Zamrożony snapshot rozliczenia (Ryzyko 7).** Otwarte — dokończyć
+   odczyt `build_settlements`/`build_settlement_materials` z powrotem do
+   frontu, czy uznać "licz zawsze na żywo" za docelowy model i usunąć
    nieużywany zapis snapshotu zamiast go kończyć?

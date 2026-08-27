@@ -60,6 +60,7 @@ export function ReportScreen() {
     buildAssignments,
     buildMaterialPlans,
     saveDailyReport,
+    getReportDefaults,
     addPersonToDraft,
     addExtraCostToDraft,
     removeExtraCostFromDraft,
@@ -394,7 +395,12 @@ export function ReportScreen() {
                       onPress={() => {
                         setSelectedBuildId(b.id);
                         setPicker(null);
-                        setReportValues({});
+                        // Pole "zużyto" trzyma stan skumulowany, nie
+                        // przyrost dnia — startowanie od zera zamiast od
+                        // bieżącego zużycia budowy cofało koszt przy
+                        // kolejnych dniach raportowania (patrz
+                        // getReportDefaults w app-data.tsx).
+                        setReportValues(getReportDefaults(b.id));
                         setDraftExtraCosts([]);
                         setDraftNote("");
                         setReportSaved(false);

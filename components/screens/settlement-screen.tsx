@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { COLORS, formatPLN, ScreenHeader, SearchablePicker } from "@/components/report-ui";
 import { ComparisonBarChart, DonutChart, KpiTile } from "@/components/charts";
 import { useAppData } from "@/contexts/app-data";
+import { normalizeMaterialName } from "@/lib/material-name-match";
 
 /**
  * Faza 8 modułu Technologia — Rozliczenie budowy. Spina Fazy 0–7 w
@@ -91,10 +92,12 @@ export function SettlementScreen() {
   ): string | null => {
     if (r.linkedMaterialId != null) return String(r.linkedMaterialId);
     if (!build) return null;
-    const name = r.materialName.trim().toLowerCase();
+    const name = normalizeMaterialName(r.materialName);
     if (!name) return null;
     const a = assignments.find(
-      (x) => x.buildId === build.id && materials.find((m) => m.id === x.materialId)?.name?.trim().toLowerCase() === name,
+      (x) =>
+        x.buildId === build.id &&
+        normalizeMaterialName(materials.find((m) => m.id === x.materialId)?.name ?? "") === name,
     );
     return a ? a.materialId : null;
   };

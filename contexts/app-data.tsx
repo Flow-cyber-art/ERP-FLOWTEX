@@ -1840,10 +1840,12 @@ function useAppDataState(
       (p) => p.buildId === numericBuildId,
     );
     const stageNameForMaterial = (materialId: string) => {
-      const name = materials.find((m) => m.id === materialId)?.name?.trim().toLowerCase();
+      const name = materials.find((m) => m.id === materialId)?.name;
       if (!name) return undefined;
-      return planForBuild.find((p) => p.materialName.trim().toLowerCase() === name)
-        ?.stageName;
+      const normalized = normalizeMaterialName(name);
+      return planForBuild.find(
+        (p) => normalizeMaterialName(p.materialName) === normalized,
+      )?.stageName;
     };
     const materialsPayload = Object.entries(reportSnapshot.materialValues)
       .map(([materialId, usedQuantityRaw]) => ({

@@ -11,7 +11,7 @@ import {
   ScreenHeader,
   StatusBadge,
 } from "@/components/report-ui";
-import { useAppData } from "@/contexts/app-data";
+import { useAppData, type OrderCartItem } from "@/contexts/app-data";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 
 const BUILD_ORDER_STATUS_LABEL: Record<string, string> = {
@@ -49,14 +49,6 @@ const STATUS_LABEL: Record<Row["status"], string> = {
 export function OrdersScreen() {
   const {
     orders,
-    orderMaterialName,
-    orderQuantity,
-    orderSaved,
-    orderCart,
-    orderConfirmedNewMaterial,
-    setOrderMaterialName,
-    setOrderQuantity,
-    setOrderSaved,
     shortages,
     dismissShortage,
     materials,
@@ -67,15 +59,65 @@ export function OrdersScreen() {
     cancelBuildOrder,
     deleteBuildOrder,
     receiveBuildOrder,
-    addToOrderCart,
-    confirmOrderNewMaterial,
-    removeFromOrderCart,
     submitOrderCart,
     createOrderFromShortage,
     markOrderOrdered,
     deleteOrder,
     receiveOrder,
   } = useAppData();
+
+  const [orderMaterialNameRaw, setOrderMaterialNameRaw] = useState("");
+  const [orderQuantity, setOrderQuantity] = useState("");
+  const [orderSaved, setOrderSaved] = useState(false);
+  // Czy wpisana nazwa (bez jednoznacznego dopasowania w magazynie) została
+  // JAWNIE potwierdzona jako nowy materiał — patrz addToOrderCart niżej.
+  // Reset przy każdej zmianie nazwy (setOrderMaterialName), żeby literówka
+  // poprawiona na coś innego wymagała ponownego potwierdzenia.
+  const [orderConfirmedNewMaterial, setOrderConfirmedNewMaterial] = useState(false);
+  const orderMaterialName = orderMaterialNameRaw;
+  const setOrderMaterialName = (name: string) => {
+    setOrderMaterialNameRaw(name);
+    setOrderConfirmedNewMaterial(false);
+  };
+  // Koszyk zamówienia ręcznego ("Zamów materiał spoza listy") — pozycje
+  // zbierane lokalnie, zanim cokolwiek trafi do bazy. Dopiero finalne
+  // zatwierdzenie (submitOrderCart, w contexts/app-data.tsx) tworzy
+  // zamówienia w Supabase — po jednym na każdą pozycję koszyka.
+  const [orderCart, setOrderCart] = useState<OrderCartItem[]>([]);
+  // Dokłada bieżąco wpisany materiał+ilość do koszyka — NIE tworzy jeszcze
+  // zamówienia w bazie. Formularz czyści się od razu, żeby dało się
+  // dopisać kolejną pozycję.
+  const addToOrderCart = () => {
+    const quantity = Number(orderQuantity);
+    if (!orderMaterialName.trim() || !quantity || quantity <= 0) return;
+    const matched = materials.find(
+      (m) => normalizeMaterialName(m.name) === normalizeMaterialName(orderMaterialName),
+    );
+    // Nazwa nie pasuje jednoznacznie do żadnego materiału w magazynie —
+    // wymagamy jawnego potwierdzenia "to nowy materiał", żeby literówka nie
+    // utworzyła po cichu pozycji niepowiązanej z żadnym wierszem
+    // magazynowym (patrz docs/PROCES_ZARZADZANIE_MATERIALEM.md, Ryzyko 6).
+    if (!matched && !orderConfirmedNewMaterial) return;
+    setOrderCart((prev) => [
+      ...prev,
+      {
+        id: `cart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        materialName: orderMaterialName.trim(),
+        quantity,
+        unit: matched?.unit || "szt.",
+        materialId: matched?.id,
+      },
+    ]);
+    setOrderMaterialName("");
+    setOrderQuantity("");
+  };
+  // Jawne potwierdzenie "materiału nie ma na liście, dodaj go jako nowy" —
+  // pokazywane w UI tylko gdy wpisana nazwa nie ma jednoznacznego
+  // dopasowania w magazynie.
+  const confirmOrderNewMaterial = () => setOrderConfirmedNewMaterial(true);
+  const removeFromOrderCart = (id: string) => {
+    setOrderCart((prev) => prev.filter((item) => item.id !== id));
+  };
 
   // Zamówienia z planu materiałowego budowy (Faza 3) — te same akcje co
   // w karcie budowy, tylko zebrane w jednym miejscu razem ze statusami,
@@ -447,7 +489,16 @@ export function OrdersScreen() {
                 </View>
               ))}
               <View style={{ marginTop: 6 }}>
-                <Button label="Utwórz zamówienie" onPress={submitOrderCart} />
+                <Button
+                  label="Utwórz zamówienie"
+                  onPress={async () => {
+                    const ok = await submitOrderCart(orderCart);
+                    if (ok) {
+                      setOrderCart([]);
+                      setOrderSaved(true);
+                    }
+                  }}
+                />
               </View>
             </View>
           )}

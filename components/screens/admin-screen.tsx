@@ -9,7 +9,7 @@ import {
   IconBadge,
   QuantityStepper,
 } from "@/components/report-ui";
-import { useAppData } from "@/contexts/app-data";
+import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
 import { AccountSettingsSection } from "@/components/account-settings-section";
 import type { AppRole } from "@/lib/data/auth";
@@ -128,6 +128,12 @@ function AdminSettingsSection() {
   );
 }
 
+const EMPTY_NEW_EMPLOYEE: NewEmployeeInput = {
+  name: "",
+  role: "Pracownik",
+  hourlyRate: "",
+};
+
 function AdminTeamSection() {
   const {
     workdayHours,
@@ -135,9 +141,7 @@ function AdminTeamSection() {
     kmRate,
     closeBuildPin,
     employees,
-    newEmployee,
     setWorkdayHoursInput,
-    setNewEmployee,
     saveWorkdayHours,
     updateKmRate,
     updateCloseBuildPin,
@@ -145,6 +149,7 @@ function AdminTeamSection() {
     updateEmployeeRate,
   } = useAppData();
 
+  const [newEmployee, setNewEmployee] = useState<NewEmployeeInput>(EMPTY_NEW_EMPLOYEE);
   const [workdayOpen, setWorkdayOpen] = useState(false);
   const [kmRateOpen, setKmRateOpen] = useState(false);
   const [kmRateInput, setKmRateInput] = useState(kmRate ? String(kmRate) : "");
@@ -441,7 +446,7 @@ function AdminTeamSection() {
             <Button
               label="Dodaj pracownika"
               onPress={() => {
-                saveEmployee();
+                saveEmployee(newEmployee, () => setNewEmployee(EMPTY_NEW_EMPLOYEE));
                 setAddEmployeeOpen(false);
               }}
             />
@@ -566,18 +571,19 @@ function AdminTeamSection() {
 // bez UI i bez polityki zapisu — członkostwo (team_members) jest tu
 // zupełnie nowe. Wzorzec identyczny jak lista pracowników wyżej: nagłówek
 // z licznikiem + "+ Dodaj", lista jako jeden kontener z wierszami.
+const EMPTY_NEW_TEAM: NewTeamInput = { name: "", leadEmployeeId: "" };
+
 function AdminTeamsSubsection() {
   const {
     teams,
     teamMembers,
     employees,
-    newTeam,
-    setNewTeam,
     saveTeam,
     addTeamMember,
     removeTeamMember,
   } = useAppData();
 
+  const [newTeam, setNewTeam] = useState<NewTeamInput>(EMPTY_NEW_TEAM);
   const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
   const [memberPickerOpen, setMemberPickerOpen] = useState(false);
@@ -642,7 +648,7 @@ function AdminTeamsSubsection() {
             <Button
               label="Dodaj brygadę"
               onPress={() => {
-                saveTeam();
+                saveTeam(newTeam, () => setNewTeam(EMPTY_NEW_TEAM));
                 setAddTeamOpen(false);
               }}
             />

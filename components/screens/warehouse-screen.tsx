@@ -14,20 +14,20 @@ import {
   ScreenHeader,
   UNIT_OPTIONS,
 } from "@/components/report-ui";
-import { useAppData } from "@/contexts/app-data";
+import { useAppData, type NewMaterialInput } from "@/contexts/app-data";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
+
+const EMPTY_NEW_MATERIAL: NewMaterialInput = {
+  name: "",
+  index: "",
+  unit: "szt.",
+  stock: "0",
+  min: "5",
+  unitPrice: "0",
+};
 
 export function WarehouseScreen() {
   const {
-    query,
-    showMaterial,
-    newMaterial,
-    showArchivedMaterials,
-    setQuery,
-    setShowMaterial,
-    setShowArchivedMaterials,
-    setNewMaterial,
-    filtered,
     materials,
     warehouseBatches,
     saveMaterial,
@@ -36,6 +36,23 @@ export function WarehouseScreen() {
     setMaterialActive,
   } = useAppData();
 
+  const [query, setQuery] = useState("");
+  // Domyślnie ukrywa zarchiwizowane materiały na liście Magazynu (ten sam
+  // wzorzec co showArchivedBuilds w settlement-screen.tsx) — wciąż
+  // podpowiadane przy dopasowaniu nazwy (materials pozostaje pełną listą),
+  // tylko nie zaśmiecają widoku do codziennej pracy.
+  const [showArchivedMaterials, setShowArchivedMaterials] = useState(false);
+  const [showMaterial, setShowMaterial] = useState(false);
+  const [newMaterial, setNewMaterial] = useState<NewMaterialInput>(EMPTY_NEW_MATERIAL);
+  const filtered = useMemo(
+    () =>
+      materials
+        .filter((m) => showArchivedMaterials || m.active)
+        .filter((m) =>
+          `${m.name} ${m.index}`.toLowerCase().includes(query.toLowerCase()),
+        ),
+    [materials, query, showArchivedMaterials],
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
   const [stockInput, setStockInput] = useState("");
@@ -203,7 +220,15 @@ export function WarehouseScreen() {
           />
         </View>
         <View style={{ marginTop: 12 }}>
-          <Button label="Zapisz materiał" onPress={saveMaterial} />
+          <Button
+            label="Zapisz materiał"
+            onPress={() =>
+              saveMaterial(newMaterial, () => {
+                setNewMaterial(EMPTY_NEW_MATERIAL);
+                setShowMaterial(false);
+              })
+            }
+          />
         </View>
       </View>
     )}

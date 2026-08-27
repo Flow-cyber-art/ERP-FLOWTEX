@@ -1,25 +1,55 @@
 import { Pressable, Text, View } from "react-native";
+import { useMemo, useState } from "react";
 import {
   COLORS,
   Button,
   IconBadge,
   ScreenHeader,
+  todayISO,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
 export function TeamTimeScreen() {
-  const {
-    teamPeriod,
-    supervisedEmployeeIds,
-    supervisorPickerOpen,
-    builds,
-    employees,
-    setTeamPeriod,
-    setSupervisedEmployeeIds,
-    setSupervisorPickerOpen,
-    teamEntries,
-    teamChart,
-  } = useAppData();
+  const { builds, employees, timeEntries } = useAppData();
+
+  const [teamPeriod, setTeamPeriod] = useState<
+    "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
+  >("Dzień");
+  const [supervisedEmployeeIds, setSupervisedEmployeeIds] = useState(() =>
+    employees
+      .filter((employee) => employee.role === "Pracownik")
+      .map((employee) => employee.id),
+  );
+  const [supervisorPickerOpen, setSupervisorPickerOpen] = useState(false);
+  const teamEntries = useMemo(() => {
+    const today = new Date();
+    return timeEntries.filter((entry) => {
+      if (!supervisedEmployeeIds.includes(entry.employeeId)) return false;
+      const date = new Date(`${entry.date}T12:00:00`);
+      if (teamPeriod === "Dzień") return entry.date === todayISO();
+      if (teamPeriod === "Rok")
+        return date.getFullYear() === today.getFullYear();
+      if (teamPeriod === "Miesiąc")
+        return (
+          date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth()
+        );
+      const difference = Math.round(
+        (today.getTime() - date.getTime()) / 86400000,
+      );
+      return difference >= 0 && difference < 7;
+    });
+  }, [timeEntries, supervisedEmployeeIds, teamPeriod]);
+  const teamChart = useMemo(() => {
+    const grouped = new Map<string, number>();
+    teamEntries.forEach((entry) =>
+      grouped.set(entry.date, (grouped.get(entry.date) || 0) + entry.hours),
+    );
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-7)
+      .map(([date, hours]) => ({ date, hours }));
+  }, [teamEntries]);
 
   const selectedEmployee = employees.find(
     (employee) => employee.id === supervisedEmployeeIds[0],

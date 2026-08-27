@@ -555,6 +555,219 @@ function AdminTeamSection() {
           </View>
         ))}
       </View>
+
+      <AdminTeamsSubsection />
+    </>
+  );
+}
+
+// Brygady i ich skład — patrz supabase/sql/040_planowany_koszt_
+// robocizny.sql. Wcześniej `teams` istniała w bazie (lider budowy), ale
+// bez UI i bez polityki zapisu — członkostwo (team_members) jest tu
+// zupełnie nowe. Wzorzec identyczny jak lista pracowników wyżej: nagłówek
+// z licznikiem + "+ Dodaj", lista jako jeden kontener z wierszami.
+function AdminTeamsSubsection() {
+  const {
+    teams,
+    teamMembers,
+    employees,
+    newTeam,
+    setNewTeam,
+    saveTeam,
+    addTeamMember,
+    removeTeamMember,
+  } = useAppData();
+
+  const [addTeamOpen, setAddTeamOpen] = useState(false);
+  const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
+
+  return (
+    <>
+      <View className="flex-row justify-between items-center mb-3 mt-2">
+        <Text className="text-base font-bold text-foreground">
+          Brygady ({teams.length})
+        </Text>
+        <Pressable onPress={() => setAddTeamOpen(!addTeamOpen)}>
+          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+            {addTeamOpen ? "Anuluj" : "+ Dodaj brygadę"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {addTeamOpen && (
+        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+          <Field
+            placeholder="Nazwa brygady"
+            value={newTeam.name}
+            onChangeText={(value: string) => setNewTeam({ ...newTeam, name: value })}
+          />
+          <Text className="text-xs text-muted uppercase mb-2 mt-3">
+            Lider (opcjonalnie)
+          </Text>
+          <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+            {employees.map((e) => (
+              <Pressable
+                key={e.id}
+                onPress={() =>
+                  setNewTeam({
+                    ...newTeam,
+                    leadEmployeeId: e.id === newTeam.leadEmployeeId ? "" : e.id,
+                  })
+                }
+                style={{
+                  backgroundColor:
+                    e.id === newTeam.leadEmployeeId ? COLORS.primary : COLORS.background,
+                  borderRadius: 8,
+                  paddingHorizontal: 9,
+                  paddingVertical: 7,
+                  borderWidth: 1,
+                  borderColor:
+                    e.id === newTeam.leadEmployeeId ? COLORS.primary : COLORS.border,
+                }}
+              >
+                <Text
+                  style={{
+                    color: e.id === newTeam.leadEmployeeId ? COLORS.background : COLORS.foreground,
+                    fontWeight: "700",
+                    fontSize: 12,
+                  }}
+                >
+                  {e.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={{ marginTop: 10 }}>
+            <Button
+              label="Dodaj brygadę"
+              onPress={() => {
+                saveTeam();
+                setAddTeamOpen(false);
+              }}
+            />
+          </View>
+        </View>
+      )}
+
+      {teams.length === 0 && (
+        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+          <Text className="text-sm text-muted">Brak dodanych brygad.</Text>
+        </View>
+      )}
+      {teams.length > 0 && (
+        <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+          {teams.map((team, i) => {
+            const members = teamMembers.filter((m) => m.teamId === team.id);
+            const expanded = expandedTeamId === team.id;
+            return (
+              <View
+                key={team.id}
+                style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: COLORS.border }}
+              >
+                <Pressable
+                  onPress={() => {
+                    setExpandedTeamId(expanded ? null : team.id);
+                    setMemberPickerOpen(false);
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+                      {team.name}
+                    </Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                      {members.length} {members.length === 1 ? "osoba" : "osób"}
+                    </Text>
+                  </View>
+                  <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
+                    {expanded ? "⌄" : "›"}
+                  </Text>
+                </Pressable>
+                {expanded && (
+                  <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+                    {members.length === 0 && (
+                      <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 8 }}>
+                        Brak przypisanych pracowników.
+                      </Text>
+                    )}
+                    {members.map((m) => {
+                      const employee = employees.find((e) => e.id === String(m.employeeId));
+                      return (
+                        <View
+                          key={m.employeeId}
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            paddingVertical: 4,
+                          }}
+                        >
+                          <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
+                            {employee?.name ?? "Pracownik usunięty"}
+                          </Text>
+                          <Pressable onPress={() => removeTeamMember(team.id, m.employeeId)}>
+                            <Text style={{ color: COLORS.danger, fontSize: 12, fontWeight: "700" }}>
+                              Usuń
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                    <Pressable
+                      onPress={() => setMemberPickerOpen(!memberPickerOpen)}
+                      style={{ marginTop: 8 }}
+                    >
+                      <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+                        {memberPickerOpen ? "Anuluj" : "+ Dodaj pracownika"}
+                      </Text>
+                    </Pressable>
+                    {memberPickerOpen && (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          gap: 6,
+                          flexWrap: "wrap",
+                          marginTop: 8,
+                        }}
+                      >
+                        {employees
+                          .filter((e) => !members.some((m) => String(m.employeeId) === e.id))
+                          .map((e) => (
+                            <Pressable
+                              key={e.id}
+                              onPress={() => {
+                                addTeamMember(team.id, Number(e.id));
+                                setMemberPickerOpen(false);
+                              }}
+                              style={{
+                                backgroundColor: COLORS.background,
+                                borderRadius: 8,
+                                paddingHorizontal: 9,
+                                paddingVertical: 7,
+                                borderWidth: 1,
+                                borderColor: COLORS.border,
+                              }}
+                            >
+                              <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 12 }}>
+                                {e.name}
+                              </Text>
+                            </Pressable>
+                          ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
     </>
   );
 }

@@ -103,6 +103,10 @@ type Build = {
   address?: string | null;
   areaM2?: string | null;
   contractValue?: string | null;
+  // Planowany koszt robocizny (patrz supabase/sql/040_planowany_koszt_
+  // robocizny.sql).
+  teamId?: number | null;
+  plannedHoursPerDay?: number;
 };
 
 // Single source of truth for colors — mirrors theme.config.js tokens.

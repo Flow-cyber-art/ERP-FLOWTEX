@@ -20,6 +20,7 @@ export type BuildRow = {
   teamId: number | null;
   startDate: string;
   durationDays: number;
+  plannedHoursPerDay: number;
   status: BuildStatus;
   photosUrl: string | null;
   driveFolderId: string | null;
@@ -28,7 +29,7 @@ export type BuildRow = {
 };
 
 const BUILD_COLUMNS =
-  "id, number, name, manager, teamId, startDate, durationDays, status, photosUrl, driveFolderId:drive_folder_id, createdAt, updatedAt";
+  "id, number, name, manager, teamId, startDate, durationDays, plannedHoursPerDay, status, photosUrl, driveFolderId:drive_folder_id, createdAt, updatedAt";
 
 export async function listBuilds(): Promise<BuildRow[]> {
   const { data, error } = await supabase
@@ -48,6 +49,8 @@ export type CreateBuildInput = {
   manager: string;
   startDate: string;
   durationDays: number;
+  teamId?: number | null;
+  plannedHoursPerDay?: number;
 };
 
 /**
@@ -64,6 +67,8 @@ export async function createBuild(input: CreateBuildInput): Promise<BuildRow> {
       manager: input.manager,
       startDate: input.startDate,
       durationDays: input.durationDays,
+      teamId: input.teamId ?? null,
+      plannedHoursPerDay: input.plannedHoursPerDay ?? 8,
       status: "aktywna" satisfies BuildStatus,
     })
     .select(BUILD_COLUMNS)
@@ -117,6 +122,29 @@ export async function reopenBuild(buildId: number): Promise<void> {
   const { error } = await supabase
     .from("builds")
     .update({ status: "aktywna" satisfies BuildStatus, updatedAt: new Date().toISOString() })
+    .eq("id", buildId);
+  if (error) throw new Error(error.message);
+}
+
+export type UpdateBuildLaborPlanInput = {
+  teamId: number | null;
+  durationDays: number;
+  plannedHoursPerDay: number;
+};
+
+/** Edycja brygady/dni roboczych/godzin dziennych po utworzeniu budowy — te same pola co przy tworzeniu. */
+export async function updateBuildLaborPlan(
+  buildId: number,
+  input: UpdateBuildLaborPlanInput,
+): Promise<void> {
+  const { error } = await supabase
+    .from("builds")
+    .update({
+      teamId: input.teamId,
+      durationDays: input.durationDays,
+      plannedHoursPerDay: input.plannedHoursPerDay,
+      updatedAt: new Date().toISOString(),
+    })
     .eq("id", buildId);
   if (error) throw new Error(error.message);
 }

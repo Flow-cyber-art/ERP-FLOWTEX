@@ -117,6 +117,23 @@ export const teams = pgTable("teams", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
+// Skład brygady — patrz supabase/sql/040_planowany_koszt_robocizny.sql.
+// Nowa tabela = snake_case kolumn (jak technology_*/build_material_plan),
+// poza createdAt (camelCase, z premedytacją, jak w innych nowych tabelach).
+export const teamMembers = pgTable(
+  "team_members",
+  {
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    employeeId: integer("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.teamId, table.employeeId] })],
+);
+
 /* ============================================================
  * MAGAZYN GŁÓWNY I PARTIE
  * ============================================================ */
@@ -176,6 +193,13 @@ export const builds = pgTable("builds", {
   address: text("address"),
   areaM2: decimal("areaM2", { precision: 10, scale: 2 }),
   contractValue: decimal("contractValue", { precision: 12, scale: 2 }),
+  // Planowany koszt robocizny (patrz supabase/sql/040_planowany_koszt_
+  // robocizny.sql) — "durationDays" powyżej to już dni ROBOCZE (patrz
+  // builds-screen.tsx), tej kolumnie brakowało tylko godzin/dzień, żeby
+  // policzyć plannedLaborCost = SUM(hourlyRate brygady) × to × durationDays.
+  plannedHoursPerDay: decimal("plannedHoursPerDay", { precision: 5, scale: 2 })
+    .notNull()
+    .default("8"),
 });
 
 export const buildMaterials = pgTable(
@@ -582,6 +606,9 @@ export type InsertEmployee = typeof employees.$inferInsert;
 
 export type Team = typeof teams.$inferSelect;
 export type InsertTeam = typeof teams.$inferInsert;
+
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = typeof teamMembers.$inferInsert;
 
 export type Material = typeof materials.$inferSelect;
 export type InsertMaterial = typeof materials.$inferInsert;

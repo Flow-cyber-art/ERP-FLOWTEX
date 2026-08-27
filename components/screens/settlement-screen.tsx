@@ -25,6 +25,7 @@ export function SettlementScreen() {
     buildMaterialLots,
     savedReports,
     employees,
+    teamMembers,
     timeEntries,
     buildMaterialReturns,
   } = useAppData();
@@ -161,6 +162,21 @@ export function SettlementScreen() {
     const employee = employees.find((e) => e.id === t.employeeId);
     return sum + t.hours * (employee?.hourlyRate || 0);
   }, 0);
+  // Planowany koszt robocizny (patrz supabase/sql/040_planowany_koszt_
+  // robocizny.sql) — suma stawek godzinowych CZŁONKÓW brygady
+  // przypisanej do budowy × planowane godziny/dzień × planowane dni
+  // robocze (durationDays, ISTNIEJĄCE pole, ten sam sens co dotąd).
+  // Zero, gdy budowa nie ma jeszcze przypisanej brygady.
+  const plannedLaborCost = useMemo(() => {
+    if (!build?.teamId) return 0;
+    const memberRateSum = teamMembers
+      .filter((m) => m.teamId === Number(build.teamId))
+      .reduce((sum, m) => {
+        const employee = employees.find((e) => e.id === String(m.employeeId));
+        return sum + (employee?.hourlyRate || 0);
+      }, 0);
+    return memberRateSum * (build.plannedHoursPerDay || 0) * (build.durationDays || 0);
+  }, [build, teamMembers, employees]);
   // Straty materiałowe (§6, docs/PROCES_RAPORTOWANIE_BRYGADZISTA.md) —
   // pozycje pozostałości oznaczone przy zamknięciu budowy jako "Do
   // wyrzucenia" (nie zwrócone na magazyn). Liczone na żywo z trwałego
@@ -419,7 +435,14 @@ export function SettlementScreen() {
             <SummaryRow label="Materiały technologiczne" value={formatPLN(materialsCostTech)} />
             <SummaryRow label="Materiały pomocnicze" value={formatPLN(materialsCostAux)} />
             <SummaryRow label="Kilometrówka" value={formatPLN(kmCost)} />
-            <SummaryRow label="Robocizna" value={formatPLN(laborCost)} />
+            <SummaryRow
+              label={
+                plannedLaborCost > 0
+                  ? `Robocizna (plan ${formatPLN(plannedLaborCost)})`
+                  : "Robocizna"
+              }
+              value={formatPLN(laborCost)}
+            />
             <SummaryRow label="Koszty dodatkowe" value={formatPLN(extraCostsTotal)} />
             {wasteCost > 0 && (
               <SummaryRow label="Straty materiałowe" value={formatPLN(wasteCost)} />

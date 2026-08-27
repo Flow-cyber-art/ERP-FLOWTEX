@@ -31,6 +31,15 @@ import {
   updateEmployeeRate as updateEmployeeRateRemote,
 } from "@/lib/data/employees";
 import {
+  addTeamMember as addTeamMemberRemote,
+  createTeam as createTeamRemote,
+  listTeamMembers,
+  listTeams,
+  removeTeamMember as removeTeamMemberRemote,
+  type TeamMemberRow,
+  type TeamRow,
+} from "@/lib/data/teams";
+import {
   createOrder as createOrderRemote,
   deleteOrder as deleteOrderRemote,
   listOrders,
@@ -424,6 +433,8 @@ function useAppDataState(
     manager: "",
     startDate: todayISO(),
     durationDays: "",
+    teamId: "",
+    plannedHoursPerDay: "8",
     clientName: "",
     address: "",
     contractValue: "",
@@ -477,6 +488,25 @@ function useAppDataState(
     refetchOnWindowFocus: false,
     staleTime: Infinity,
   });
+  // Brygady i ich skład — potrzebne od razu, tak jak pracownicy wyżej:
+  // wybór brygady w formularzu Nowa budowa i planowany koszt robocizny w
+  // karcie budowy (Budowy), oraz zarządzanie składem w Admin (Zespół).
+  const teamsQuery = useQuery({
+    queryKey: ["teams", "list"],
+    queryFn: listTeams,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  const teamMembersQuery = useQuery({
+    queryKey: ["teamMembers", "list"],
+    queryFn: listTeamMembers,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  const teams = (teamsQuery.data ?? []) as TeamRow[];
+  const teamMembers = (teamMembersQuery.data ?? []) as TeamMemberRow[];
   // Leniwe — reszta poniżej odpala się dopiero przy pierwszym wejściu na
   // zakładkę, która ich faktycznie potrzebuje (tabDataEnabled wyżej),
   // zamiast wszystkie naraz na starcie aplikacji. Każde `enabled` wymienia
@@ -621,6 +651,8 @@ function useAppDataState(
           manager: b.manager ?? "",
           startDate: b.startDate,
           durationDays: b.durationDays,
+          teamId: b.teamId,
+          plannedHoursPerDay: Number(b.plannedHoursPerDay ?? 8),
           status: b.status,
           photosUrl: b.photosUrl,
           driveFolderId: b.driveFolderId,
@@ -916,6 +948,15 @@ function useAppDataState(
     mutationFn: (vars: { employeeId: number; hourlyRate: number }) =>
       updateEmployeeRateRemote(vars.employeeId, vars.hourlyRate),
   });
+  const createTeamMutation = useMutation({ mutationFn: createTeamRemote });
+  const addTeamMemberMutation = useMutation({
+    mutationFn: (vars: { teamId: number; employeeId: number }) =>
+      addTeamMemberRemote(vars.teamId, vars.employeeId),
+  });
+  const removeTeamMemberMutation = useMutation({
+    mutationFn: (vars: { teamId: number; employeeId: number }) =>
+      removeTeamMemberRemote(vars.teamId, vars.employeeId),
+  });
   const updateKmRateMutation = useMutation({
     mutationFn: (vars: { kmRate: number }) => updateKmRateRemote(vars.kmRate),
   });
@@ -988,6 +1029,7 @@ function useAppDataState(
     role: "Pracownik",
     hourlyRate: "",
   });
+  const [newTeam, setNewTeam] = useState({ name: "", leadEmployeeId: "" });
   const [hrSaved, setHrSaved] = useState(false);
   const [reportStatus, setReportStatus] = useState<
     "roboczy" | "wysłany" | "do poprawy" | "zatwierdzony"
@@ -1490,6 +1532,10 @@ function useAppDataState(
         manager: newBuild.manager,
         startDate: newBuild.startDate,
         durationDays: duration,
+        teamId: newBuild.teamId ? Number(newBuild.teamId) : null,
+        plannedHoursPerDay: newBuild.plannedHoursPerDay
+          ? Number(newBuild.plannedHoursPerDay)
+          : 8,
         clientName: newBuild.clientName || undefined,
         address: newBuild.address || undefined,
         contractValue: newBuild.contractValue ? Number(newBuild.contractValue) : undefined,
@@ -1501,6 +1547,8 @@ function useAppDataState(
         manager: "",
         startDate: todayISO(),
         durationDays: "",
+        teamId: "",
+        plannedHoursPerDay: "8",
         clientName: "",
         address: "",
         contractValue: "",
@@ -1878,6 +1926,38 @@ function useAppDataState(
       setNewEmployee({ name: "", role: "Pracownik", hourlyRate: "" });
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać pracownika.");
+    }
+  };
+  // Nowa brygada (panel administratora, sekcja Zespół) — lider opcjonalny,
+  // skład dopisywany osobno przez addTeamMember (ten sam wzorzec co
+  // materiał→partia: nagłówek najpierw, powiązane wiersze potem).
+  const saveTeam = async () => {
+    if (!newTeam.name) return;
+    try {
+      await createTeamMutation.mutateAsync({
+        name: newTeam.name,
+        leadEmployeeId: newTeam.leadEmployeeId ? Number(newTeam.leadEmployeeId) : null,
+      });
+      await invalidate("teams");
+      setNewTeam({ name: "", leadEmployeeId: "" });
+    } catch (error) {
+      reportMutationError(error, "Nie udało się dodać brygady.");
+    }
+  };
+  const addTeamMember = async (teamId: number, employeeId: number) => {
+    try {
+      await addTeamMemberMutation.mutateAsync({ teamId, employeeId });
+      await invalidate("teamMembers");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się dodać pracownika do brygady.");
+    }
+  };
+  const removeTeamMember = async (teamId: number, employeeId: number) => {
+    try {
+      await removeTeamMemberMutation.mutateAsync({ teamId, employeeId });
+      await invalidate("teamMembers");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się usunąć pracownika z brygady.");
     }
   };
   // Edycja stawki godzinowej istniejącego pracownika (panel administratora).
@@ -2332,8 +2412,15 @@ function useAppDataState(
     savedReports,
     editingReportId,
     employees,
+    teams,
+    teamMembers,
     timeEntries,
     newEmployee,
+    newTeam,
+    setNewTeam,
+    saveTeam,
+    addTeamMember,
+    removeTeamMember,
     hrSaved,
     reportStatus,
     adminComment,

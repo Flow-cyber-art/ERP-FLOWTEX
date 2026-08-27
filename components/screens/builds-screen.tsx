@@ -31,6 +31,8 @@ export function BuildsScreen() {
     assignments,
     savedReports,
     employees,
+    teams,
+    teamMembers,
     timeEntries,
     buildMaterialActualCost,
     buildOrders,
@@ -256,7 +258,7 @@ export function BuildsScreen() {
           onChange={(v: string) => setNewBuild({ ...newBuild, startDate: v })}
         />
         <Text className="text-xs text-muted uppercase mt-4">
-          Czas trwania (dni)
+          Czas trwania — dni robocze
         </Text>
         <QuantityStepper
           style={{ marginTop: 8 }}
@@ -282,6 +284,79 @@ export function BuildsScreen() {
             · łącznie ok.{" "}
             {Number(newBuild.durationDays) * workdayHours} h przy
             dniówce {workdayHours} h
+          </Text>
+        )}
+
+        {/* Brygada i planowana robocizna — patrz supabase/sql/040_
+            planowany_koszt_robocizny.sql. Opcjonalne: budowę da się
+            założyć bez przypisanej brygady, plan robocizny dochodzi
+            wtedy zerowy, dopóki ktoś jej nie wybierze. */}
+        <Text className="text-xs text-muted uppercase mt-4 mb-2">
+          Brygada (opcjonalnie)
+        </Text>
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+          {teams.map((t) => (
+            <Pressable
+              key={t.id}
+              onPress={() =>
+                setNewBuild({
+                  ...newBuild,
+                  teamId: String(t.id) === newBuild.teamId ? "" : String(t.id),
+                })
+              }
+              style={{
+                backgroundColor:
+                  String(t.id) === newBuild.teamId ? COLORS.primary : COLORS.background,
+                borderRadius: 8,
+                paddingHorizontal: 9,
+                paddingVertical: 7,
+                borderWidth: 1,
+                borderColor:
+                  String(t.id) === newBuild.teamId ? COLORS.primary : COLORS.border,
+              }}
+            >
+              <Text
+                style={{
+                  color:
+                    String(t.id) === newBuild.teamId ? COLORS.background : COLORS.foreground,
+                  fontWeight: "700",
+                  fontSize: 12,
+                }}
+              >
+                {t.name}
+              </Text>
+            </Pressable>
+          ))}
+          {teams.length === 0 && (
+            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+              Brak brygad — dodaj je w Admin → Zespół i dniówka.
+            </Text>
+          )}
+        </View>
+        <Text className="text-xs text-muted uppercase mt-4 mb-2">
+          Planowane godziny / dzień roboczy
+        </Text>
+        <QuantityStepper
+          value={newBuild.plannedHoursPerDay}
+          onChangeText={(v: string) =>
+            setNewBuild({ ...newBuild, plannedHoursPerDay: v })
+          }
+        />
+        {newBuild.teamId && Number(newBuild.durationDays) > 0 && (
+          <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 8 }}>
+            Planowany koszt robocizny:{" "}
+            <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+              {formatPLN(
+                teamMembers
+                  .filter((m) => m.teamId === Number(newBuild.teamId))
+                  .reduce((sum, m) => {
+                    const employee = employees.find((e) => e.id === String(m.employeeId));
+                    return sum + (employee?.hourlyRate || 0);
+                  }, 0) *
+                  (Number(newBuild.plannedHoursPerDay) || 0) *
+                  Number(newBuild.durationDays),
+              )}
+            </Text>
           </Text>
         )}
         <View style={{ marginTop: 12 }}>
@@ -544,39 +619,84 @@ export function BuildsScreen() {
                   </View>
                 )}
 
-                {!pickerOpen && plan.length > 0 && (
-                  <View style={{ marginTop: 10 }}>
-                    {stageOrder.map((stageName) => (
-                      <View key={stageName} style={{ marginBottom: 8 }}>
-                        <Text
-                          style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700" }}
-                        >
-                          {stageName.toUpperCase()}
-                        </Text>
-                        {planByStage[stageName].map((row) => (
-                          <View
-                            key={row.id}
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "space-between",
-                              marginTop: 3,
-                            }}
+                {!pickerOpen && plan.length > 0 && (() => {
+                  // Koszt planowany = plannedQuantity × AKTUALNA cena
+                  // materiału (materials.unitPrice — średnia ważona stanu,
+                  // przeliczana przy każdej partii, patrz fn_recalc_material
+                  // w supabase/sql/001_rpc_functions.sql/040_...sql). Brak
+                  // powiązanego materiału (linkedMaterialId) = koszt
+                  // nieznany, pomijany w sumie zamiast liczony jako 0.
+                  const plannedCostFor = (row: (typeof plan)[number]) => {
+                    if (!row.linkedMaterialId) return null;
+                    const material = materials.find(
+                      (m) => m.id === String(row.linkedMaterialId),
+                    );
+                    if (!material) return null;
+                    return Number(row.plannedQuantity) * material.unitPrice;
+                  };
+                  const totalPlannedCost = plan.reduce((sum, row) => {
+                    const cost = plannedCostFor(row);
+                    return sum + (cost ?? 0);
+                  }, 0);
+                  return (
+                    <View style={{ marginTop: 10 }}>
+                      {stageOrder.map((stageName) => (
+                        <View key={stageName} style={{ marginBottom: 8 }}>
+                          <Text
+                            style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700" }}
                           >
-                            <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
-                              {row.materialName}
-                            </Text>
-                            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                              {row.consumptionPerM2} {row.unit}/m² ·{" "}
-                              <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
-                                {row.plannedQuantity} {row.unit}
-                              </Text>
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    ))}
-                  </View>
-                )}
+                            {stageName.toUpperCase()}
+                          </Text>
+                          {planByStage[stageName].map((row) => {
+                            const cost = plannedCostFor(row);
+                            return (
+                              <View
+                                key={row.id}
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  marginTop: 3,
+                                }}
+                              >
+                                <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                                  {row.materialName}
+                                </Text>
+                                <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                                  {row.consumptionPerM2} {row.unit}/m² ·{" "}
+                                  <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
+                                    {row.plannedQuantity} {row.unit}
+                                  </Text>
+                                  {cost !== null && ` · ${formatPLN(cost)}`}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      ))}
+                      {totalPlannedCost > 0 && (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            marginTop: 4,
+                            paddingTop: 6,
+                            borderTopWidth: 1,
+                            borderTopColor: COLORS.border,
+                          }}
+                        >
+                          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                            Koszt materiałowy planowany razem
+                          </Text>
+                          <Text
+                            style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 13 }}
+                          >
+                            {formatPLN(totalPlannedCost)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
               </View>
             );
           })()}
@@ -1550,6 +1670,21 @@ export function BuildsScreen() {
                 const employee = employees.find((e) => e.id === t.employeeId);
                 return sum + t.hours * (employee?.hourlyRate || 0);
               }, 0);
+              // Planowany koszt robocizny — patrz settlement-screen.tsx
+              // (ten sam wzorzec, ta sama logika, tu tylko podgląd na
+              // liście budów zamiast pełnego ekranu Rozliczenia).
+              const laborCostPlanned = b.teamId
+                ? teamMembers
+                    .filter((m) => m.teamId === Number(b.teamId))
+                    .reduce((sum, m) => {
+                      const employee = employees.find(
+                        (e) => e.id === String(m.employeeId),
+                      );
+                      return sum + (employee?.hourlyRate || 0);
+                    }, 0) *
+                  (b.plannedHoursPerDay || 0) *
+                  (b.durationDays || 0)
+                : 0;
               const buildExtraCosts = buildReports.flatMap(
                 (r) => r.extraCosts || [],
               );
@@ -1588,7 +1723,10 @@ export function BuildsScreen() {
                       paddingVertical: 3,
                     }}
                   >
-                    <Text className="text-xs text-muted">Robocizna</Text>
+                    <Text className="text-xs text-muted">
+                      Robocizna
+                      {laborCostPlanned > 0 && ` (plan ${formatPLN(laborCostPlanned)})`}
+                    </Text>
                     <Text className="text-xs font-bold text-foreground">
                       {formatPLN(laborCostActual)}
                     </Text>

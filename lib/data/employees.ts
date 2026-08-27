@@ -11,16 +11,15 @@ export type EmployeeRow = {
   id: number;
   name: string;
   role: EmployeeRole;
-  hourlyRate: string;
+  // `null` dla każdego, kto nie jest Adminem — patrz
+  // supabase/sql/044_ukryj_stawki_pracownikow.sql. Kolumna nie jest już
+  // czytelna wprost z tabeli (REVOKE), więc idzie przez RPC, która sama
+  // decyduje, czy wywołujący ma prawo zobaczyć realną wartość.
+  hourlyRate: string | null;
 };
 
-const EMPLOYEE_COLUMNS = "id, name, role, hourlyRate";
-
 export async function listEmployees(): Promise<EmployeeRow[]> {
-  const { data, error } = await supabase
-    .from("employees")
-    .select(EMPLOYEE_COLUMNS)
-    .order("name");
+  const { data, error } = await supabase.rpc("get_employees");
   if (error) throw new Error(error.message);
   return (data ?? []) as EmployeeRow[];
 }

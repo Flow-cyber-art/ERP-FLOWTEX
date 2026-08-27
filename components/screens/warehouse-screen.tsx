@@ -368,9 +368,17 @@ export function WarehouseScreen() {
               <View style={{ marginTop: 12 }}>
                 <Button
                   label="Zapisz zmiany"
-                  onPress={() => {
-                    updateMaterialStock(m.id, Number(stockInput) || 0);
-                    updateMaterialPrice(m.id, Number(priceInput) || 0);
+                  onPress={async () => {
+                    // Sekwencyjnie, nie równolegle: korekta stanu w górę
+                    // dopisuje partię i przelicza materials.unitPrice jako
+                    // średnią ważoną partii (fn_recalc_material) — gdyby
+                    // updateMaterialPrice leciał w tym samym czasie,
+                    // wynik wyścigu dwóch zapisów do tej samej kolumny był
+                    // nieprzewidywalny. Cena wpisana ręcznie ma być
+                    // ostateczna, więc idzie DRUGA, po zakończeniu korekty
+                    // stanu.
+                    await updateMaterialStock(m.id, Number(stockInput) || 0);
+                    await updateMaterialPrice(m.id, Number(priceInput) || 0);
                     setEditingId(null);
                   }}
                 />

@@ -141,3 +141,74 @@ chodziło (patrz §1).
   `build_settlement_materials` — ścieżka kosztu RZECZYWISTEGO działa jak
   dotąd, bez zmian logiki.
 - `build_materials."unitPrice"` dla budów zamkniętych — zostaje zamrożona.
+
+## 6. 2026-08-27 — naprawa `linked_material_id` i uproszczenie Rozliczenia
+
+### 6.1 Znaleziony błąd
+
+W tabeli per-etap w Rozliczeniu budowy (`settlement-screen.tsx`) kolumny
+Przypisano/Zużyto/Koszt renderowały się jako 0 dla pozycji planu, których
+`technology_materials.linked_material_id` (skopiowane na
+`build_material_plan.linked_material_id` przy przypisaniu technologii do
+budowy) było `NULL` — mimo że realne zużycie istniało. Powód: dopasowanie
+rzeczywistego zużycia (`assignments`) do wiersza planu odbywa się po
+`materialId`, więc brak powiązania = brak dopasowania. To samo realne
+zużycie trafiało wtedy do sekcji „Materiały pomocnicze (spoza planu
+technologii)” (dopasowanie tam idzie po zbiorze `linkedMaterialId`
+wszystkich wierszy planu budowy) — dla użytkownika wyglądało to jak
+zdublowane/rozjechane dane, choć źródło (`build_materials`) było jedno.
+`linked_material_id` to pole ręczne, ustawiane tylko gdy admin przy
+edycji technologii jawnie wybierze materiał magazynowy z listy — wiele
+istniejących pozycji recepr miało je puste mimo zgodnej nazwy z realnym
+materiałem magazynowym.
+
+### 6.2 Naprawa danych
+
+`supabase/sql/041_napraw_linked_material_id.sql` — jednorazowa naprawa:
+dowiązuje po **dokładnej** nazwie (`materials.name = material_name`),
+tylko gdy trafienie jest jednoznaczne (dokładnie jeden pasujący materiał).
+Obejmuje `technology_materials` (recepta — źródło dla przyszłych
+przypisań) oraz retroaktywnie `build_material_plan` dla budów, które nie
+są jeszcze zamknięte (`status <> 'zamknięta'`) — zamknięte mają
+rozliczenie już zamrożone i nie są ruszane. Migracja loguje przez
+`RAISE NOTICE` liczby: dowiązanych, niejednoznacznych (>1 dopasowanie) i
+bez dopasowania (0 dopasowań) — dokładne liczby zależą od danych w danej
+instancji bazy i pojawiają się w logu przy uruchomieniu migracji na
+Supabase; migracja kończy się też zapytaniem listującym pozycje wciąż
+bez powiązania, do ręcznego dowiązania w edytorze technologii.
+
+### 6.3 Zapobieganie nawrotowi
+
+`components/screens/technologies-screen.tsx` — `save()` odrzuca teraz
+zapis technologii, jeśli którakolwiek pozycja materiałowa nie ma
+wybranego `linkedMaterialId` (komunikat: „Wybierz materiał magazynowy
+dla pozycji: …”). Walidacja jest wyłącznie po stronie klienta — reszta
+schematu w tym obszarze jest równie liberalna (brak `NOT NULL` na
+`linked_material_id` w bazie), a dodanie twardego ograniczenia bazowego
+wymagałoby wcześniej 100% skutecznej naprawy wszystkich istniejących
+wierszy, co nie jest gwarantowane przy dopasowaniu po nazwie — czyszczenie
+pozostałych przypadków zostaje w UI, zgodnie z tym jak reszta modułu
+Technologia już działa (edycja zawsze tworzy nową wersję, nie nadpisuje).
+
+### 6.4 Uproszczenie widoku Rozliczenia
+
+Tabela per-etap: kolumny **Materiał / Plan / Przypisano / Zużyto /
+Pozostało / Koszt** → **Materiał / Plan / Zużyto / Koszt** — „Przypisano”
+i „Pozostało” to stany pośrednie przydatne przy śledzeniu budowy na
+żywo (zostają bez zmian w karcie budowy, `builds-screen.tsx`, sekcja
+„Koszty na bieżąco”), ale w końcowym rozliczeniu tylko rozmywały obraz
+plan → zużycie → koszt. Sekcja „Materiały pomocnicze” analogicznie:
+zamiast `zużyto / plan X · koszt` pokazuje `zużyto [jednostka] · koszt`
+(plan nie ma tu sensu z definicji — to materiały spoza planu technologii).
+Po naprawie z §6.2 ta sekcja powinna zawierać już tylko materiały
+faktycznie spoza planu technologii, nie pozycje planu z brakującym
+powiązaniem.
+
+### 6.5 Pliki zmienione
+
+- `supabase/sql/041_napraw_linked_material_id.sql` (nowy) — naprawa
+  danych opisana w §6.2.
+- `components/screens/technologies-screen.tsx` — walidacja
+  `linkedMaterialId` przy zapisie (§6.3).
+- `components/screens/settlement-screen.tsx` — uproszczone kolumny
+  tabeli per-etap i sekcji materiałów pomocniczych (§6.4).

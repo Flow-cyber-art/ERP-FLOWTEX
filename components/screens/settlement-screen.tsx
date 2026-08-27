@@ -349,13 +349,7 @@ export function SettlementScreen() {
                     Plan
                   </Text>
                   <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
-                    Przypisano
-                  </Text>
-                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
                     Zużyto
-                  </Text>
-                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
-                    Pozostało
                   </Text>
                   <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
                     Koszt
@@ -373,20 +367,7 @@ export function SettlementScreen() {
                       {item.plan} {item.unit}
                     </Text>
                     <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
-                      {item.przypisano}
-                    </Text>
-                    <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
                       {item.zuzyto}
-                    </Text>
-                    <Text
-                      style={{
-                        flex: 1,
-                        fontSize: 12,
-                        textAlign: "right",
-                        color: item.pozostalo < 0 ? COLORS.danger : COLORS.muted,
-                      }}
-                    >
-                      {item.pozostalo}
                     </Text>
                     <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right", fontWeight: "700" }}>
                       {formatPLN(item.koszt)}
@@ -413,7 +394,7 @@ export function SettlementScreen() {
                       {material?.name ?? "Materiał usunięty"}
                     </Text>
                     <Text style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "700" }}>
-                      {a.used} / plan {a.planned} · {formatPLN(materialCostFor(a.materialId))}
+                      {a.used} {material?.unit ?? ""} · {formatPLN(materialCostFor(a.materialId))}
                     </Text>
                   </View>
                 );

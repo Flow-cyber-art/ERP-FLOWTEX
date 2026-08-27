@@ -287,6 +287,18 @@ export function TechnologiesScreen() {
       setLoadError("Dodaj przynajmniej jeden etap z jednym materiałem.");
       return;
     }
+    // Wymagamy powiązania każdej pozycji materiałowej z magazynem —
+    // bez tego rozliczenie budowy (settlement-screen.tsx) nie potrafi
+    // dopasować realnego zużycia do planu i pokazuje pozycję jako
+    // "materiał pomocniczy spoza planu" mimo że plan istnieje (patrz
+    // docs/PROCES_KOSZT_PLANOWANY_VS_RZECZYWISTY.md).
+    const unlinked = payload.flatMap((s) => s.materials.filter((m) => m.linkedMaterialId == null));
+    if (unlinked.length > 0) {
+      setLoadError(
+        `Wybierz materiał magazynowy dla pozycji: ${unlinked.map((m) => m.name).join(", ")}.`,
+      );
+      return;
+    }
     // Tryb pojedynczej wartości (domyślny — patrz thicknessRangeMode):
     // "do" nie jest w ogóle pokazywane, więc przy zapisie kopiuje "od" —
     // w bazie zakres i tak zawsze ma obie granice (min = max = ta sama

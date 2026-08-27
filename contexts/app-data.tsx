@@ -2261,9 +2261,30 @@ function useAppDataState(
   // rzeczywistości nadpisywałby poprzedni zamiast utworzyć kolejny.
   // selectedBuildId celowo NIE jest resetowany — to zwykle ta sama
   // budowa, na której brygadzista właśnie pracuje.
+  //
+  // Pole "zużyto" per materiał trzyma NOWY STAN CAŁKOWITY (skumulowany od
+  // początku budowy), nie przyrost dnia — tak liczy różnicę
+  // submit_daily_report/saveDailyReportUnsafe (`delta = wpisana_ilość -
+  // assignment.used`). Startowanie od pustego pola przy nowym raporcie
+  // (dzień 2., 3., ...) prowadziło do tego, że brygadzista, wpisując
+  // naturalnie "ile zużyłem DZIŚ" zamiast sumy narastająco, wywoływał
+  // ujemną deltę — RPC brał to za korektę w dół, cichcem "zwracał"
+  // materiał do puli budowy i zaniżał koszt budowy, mimo że fizycznie nic
+  // nie wróciło. Dlatego pole musi startować od bieżącego `a.used`, nie
+  // od zera — brygadzista wtedy dopisuje dzisiejszą ilość NA WIERZCHU
+  // sumy, zamiast wpisywać ją od zera.
+  const getReportDefaults = (buildId: string): Record<string, string> => {
+    const defaults: Record<string, string> = {};
+    for (const a of assignments) {
+      if (a.buildId === buildId) {
+        defaults[a.materialId] = String(a.used);
+      }
+    }
+    return defaults;
+  };
   const startNewReport = () => {
     setEditingReportId(null);
-    setReportValues({});
+    setReportValues(selectedBuildId ? getReportDefaults(selectedBuildId) : {});
     setReasons({});
     setDraftPeople([]);
     setDraftExtraCosts([]);
@@ -2476,6 +2497,7 @@ function useAppDataState(
     setEditingReportId,
     openSavedReport,
     startNewReport,
+    getReportDefaults,
     approveReport,
     closeBuild,
     reopenBuild,

@@ -3,22 +3,54 @@ import {
   Text,
   View,
 } from "react-native";
+import { useMemo, useState } from "react";
 import {
   COLORS,
   ScreenHeader,
+  todayISO,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
 export function WorkerScreen() {
-  const {
-    workerPeriod,
-    workerEmployeeId,
-    builds,
-    employees,
-    setWorkerPeriod,
-    workerEntries,
-    workerChart,
-  } = useAppData();
+  const { builds, employees, timeEntries } = useAppData();
+
+  const [workerPeriod, setWorkerPeriod] = useState<
+    "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
+  >("Dzień");
+  const [workerEmployeeId] = useState(
+    () =>
+      employees.find((employee) => employee.role === "Pracownik")?.id ||
+      employees[0].id,
+  );
+  const workerEntries = useMemo(() => {
+    const today = new Date();
+    return timeEntries.filter((entry) => {
+      if (entry.employeeId !== workerEmployeeId) return false;
+      const date = new Date(`${entry.date}T12:00:00`);
+      if (workerPeriod === "Dzień") return entry.date === todayISO();
+      if (workerPeriod === "Rok")
+        return date.getFullYear() === today.getFullYear();
+      if (workerPeriod === "Miesiąc")
+        return (
+          date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth()
+        );
+      const difference = Math.round(
+        (today.getTime() - date.getTime()) / 86400000,
+      );
+      return difference >= 0 && difference < 7;
+    });
+  }, [timeEntries, workerEmployeeId, workerPeriod]);
+  const workerChart = useMemo(() => {
+    const grouped = new Map<string, number>();
+    workerEntries.forEach((entry) =>
+      grouped.set(entry.date, (grouped.get(entry.date) || 0) + entry.hours),
+    );
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-7)
+      .map(([date, hours]) => ({ date, hours }));
+  }, [workerEntries]);
 
   return (
     <>

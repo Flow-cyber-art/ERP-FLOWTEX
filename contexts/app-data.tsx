@@ -100,6 +100,47 @@ import {
 } from "@/lib/data/build-orders";
 export type SavedReportStatus = "submitted" | "approved";
 
+export type NewMaterialInput = {
+  name: string;
+  index: string;
+  unit: string;
+  stock: string;
+  min: string;
+  unitPrice: string;
+};
+
+export type NewBuildInput = {
+  number: string;
+  name: string;
+  manager: string;
+  startDate: string;
+  durationDays: string;
+  teamId: string;
+  plannedHoursPerDay: string;
+  clientName: string;
+  address: string;
+  contractValue: string;
+};
+
+export type NewEmployeeInput = {
+  name: string;
+  role: string;
+  hourlyRate: string;
+};
+
+export type NewTeamInput = {
+  name: string;
+  leadEmployeeId: string;
+};
+
+export type OrderCartItem = {
+  id: string;
+  materialName: string;
+  quantity: number;
+  unit: string;
+  materialId?: string;
+};
+
 export type SavedReport = {
   id: string;
   date: string;
@@ -235,22 +276,6 @@ function useAppDataState(
   const [devRole, setDevRole] = useState<"Admin" | "Brygadzista" | "Pracownik">(
     initialRole,
   );
-  const [workerPeriod, setWorkerPeriod] = useState<
-    "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
-  >("Dzień");
-  const [teamPeriod, setTeamPeriod] = useState<
-    "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
-  >("Dzień");
-  const [supervisedEmployeeIds, setSupervisedEmployeeIds] = useState(
-    initialEmployees
-      .filter((employee) => employee.role === "Pracownik")
-      .map((employee) => employee.id),
-  );
-  const [supervisorPickerOpen, setSupervisorPickerOpen] = useState(false);
-  const [workerEmployeeId, setWorkerEmployeeId] = useState(
-    initialEmployees.find((employee) => employee.role === "Pracownik")?.id ||
-      initialEmployees[0].id,
-  );
   const [materials, setMaterials] = useState(initialMaterials);
   // Partie zakupowe — źródło prawdy dla stanu i ceny. `materials[].stock`
   // i `.unitPrice` zostają jako pola pochodne (suma / średnia ważona
@@ -381,14 +406,6 @@ function useAppDataState(
     Record<string, number>
   >({});
   const [assignments, setAssignments] = useState(initialAssignments);
-  const [query, setQuery] = useState("");
-  // Domyślnie ukrywa zarchiwizowane materiały na liście Magazynu (ten sam
-  // wzorzec co showArchivedBuilds w settlement-screen.tsx) — wciąż
-  // podpowiadane przy dopasowaniu nazwy (materials pozostaje pełną listą),
-  // tylko nie zaśmiecają widoku do codziennej pracy.
-  const [showArchivedMaterials, setShowArchivedMaterials] = useState(false);
-  const [showMaterial, setShowMaterial] = useState(false);
-  const [showBuild, setShowBuild] = useState(false);
   const [showAssignment, setShowAssignment] = useState(false);
   // Aktywne/Archiwum na ekranie Budowy. Trzymane tu (nie lokalnie w
   // BuildsScreen), bo na desktopie steruje tym osobna pozycja menu w
@@ -419,26 +436,6 @@ function useAppDataState(
   const [draftAssignments, setDraftAssignments] = useState<
     { batchId: string; materialId: string; quantity: number }[]
   >([]);
-  const [newMaterial, setNewMaterial] = useState({
-    name: "",
-    index: "",
-    unit: "szt.",
-    stock: "0",
-    min: "5",
-    unitPrice: "0",
-  });
-  const [newBuild, setNewBuild] = useState({
-    number: "",
-    name: "",
-    manager: "",
-    startDate: todayISO(),
-    durationDays: "",
-    teamId: "",
-    plannedHoursPerDay: "8",
-    clientName: "",
-    address: "",
-    contractValue: "",
-  });
   const [workdayHours, setWorkdayHours] = useState(8);
   const [workdayHoursInput, setWorkdayHoursInput] = useState("8");
   const [reportValues, setReportValues] = useState<Record<string, string>>({});
@@ -1024,12 +1021,6 @@ function useAppDataState(
     notify("Nie udało się zapisać", message || fallback);
   }
 
-  const [newEmployee, setNewEmployee] = useState({
-    name: "",
-    role: "Pracownik",
-    hourlyRate: "",
-  });
-  const [newTeam, setNewTeam] = useState({ name: "", leadEmployeeId: "" });
   const [hrSaved, setHrSaved] = useState(false);
   const [reportStatus, setReportStatus] = useState<
     "roboczy" | "wysłany" | "do poprawy" | "zatwierdzony"
@@ -1066,29 +1057,6 @@ function useAppDataState(
   // informacyjna, nie wpływa na żadne wyliczenia.
   const [draftNote, setDraftNote] = useState("");
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
-  const [orderMaterialNameRaw, setOrderMaterialNameRaw] = useState("");
-  const [orderQuantity, setOrderQuantity] = useState("");
-  const [orderSaved, setOrderSaved] = useState(false);
-  // Czy wpisana nazwa (bez jednoznacznego dopasowania w magazynie) została
-  // JAWNIE potwierdzona jako nowy materiał — patrz addToOrderCart niżej.
-  // Reset przy każdej zmianie nazwy (setOrderMaterialName), żeby literówka
-  // poprawiona na coś innego wymagała ponownego potwierdzenia.
-  const [orderConfirmedNewMaterial, setOrderConfirmedNewMaterial] = useState(false);
-  const orderMaterialName = orderMaterialNameRaw;
-  const setOrderMaterialName = (name: string) => {
-    setOrderMaterialNameRaw(name);
-    setOrderConfirmedNewMaterial(false);
-  };
-  // Koszyk zamówienia ręcznego ("Zamów materiał spoza listy") — pozycje
-  // zbierane lokalnie, zanim cokolwiek trafi do bazy. Wcześniej każde
-  // "Utwórz zamówienie" od razu tworzyło osobne zamówienie w Supabase;
-  // teraz "Dodaj do koszyka" tylko dokłada wiersz tutaj, a dopiero
-  // finalne zatwierdzenie (submitOrderCart) tworzy zamówienia — po
-  // jednym na każdą pozycję koszyka, bo `material_orders` nie ma
-  // nagłówka+pozycji jak `orders`/`order_items` (Faza 3).
-  const [orderCart, setOrderCart] = useState<
-    { id: string; materialName: string; quantity: number; unit: string; materialId?: string }[]
-  >([]);
   useEffect(() => {
     AsyncStorage.getItem("budowy-simulator").then((raw) => {
       if (raw) {
@@ -1154,73 +1122,6 @@ function useAppDataState(
     workdayHours,
     savedReports,
   ]);
-  const filtered = useMemo(
-    () =>
-      materials
-        .filter((m) => showArchivedMaterials || m.active)
-        .filter((m) =>
-          `${m.name} ${m.index}`.toLowerCase().includes(query.toLowerCase()),
-        ),
-    [materials, query, showArchivedMaterials],
-  );
-  const workerEntries = useMemo(() => {
-    const today = new Date();
-    return timeEntries.filter((entry) => {
-      if (entry.employeeId !== workerEmployeeId) return false;
-      const date = new Date(`${entry.date}T12:00:00`);
-      if (workerPeriod === "Dzień") return entry.date === todayISO();
-      if (workerPeriod === "Rok")
-        return date.getFullYear() === today.getFullYear();
-      if (workerPeriod === "Miesiąc")
-        return (
-          date.getFullYear() === today.getFullYear() &&
-          date.getMonth() === today.getMonth()
-        );
-      const difference = Math.round(
-        (today.getTime() - date.getTime()) / 86400000,
-      );
-      return difference >= 0 && difference < 7;
-    });
-  }, [timeEntries, workerEmployeeId, workerPeriod]);
-  const workerChart = useMemo(() => {
-    const grouped = new Map<string, number>();
-    workerEntries.forEach((entry) =>
-      grouped.set(entry.date, (grouped.get(entry.date) || 0) + entry.hours),
-    );
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-7)
-      .map(([date, hours]) => ({ date, hours }));
-  }, [workerEntries]);
-  const teamEntries = useMemo(() => {
-    const today = new Date();
-    return timeEntries.filter((entry) => {
-      if (!supervisedEmployeeIds.includes(entry.employeeId)) return false;
-      const date = new Date(`${entry.date}T12:00:00`);
-      if (teamPeriod === "Dzień") return entry.date === todayISO();
-      if (teamPeriod === "Rok")
-        return date.getFullYear() === today.getFullYear();
-      if (teamPeriod === "Miesiąc")
-        return (
-          date.getFullYear() === today.getFullYear() &&
-          date.getMonth() === today.getMonth()
-        );
-      const difference = Math.round(
-        (today.getTime() - date.getTime()) / 86400000,
-      );
-      return difference >= 0 && difference < 7;
-    });
-  }, [timeEntries, supervisedEmployeeIds, teamPeriod]);
-  const teamChart = useMemo(() => {
-    const grouped = new Map<string, number>();
-    teamEntries.forEach((entry) =>
-      grouped.set(entry.date, (grouped.get(entry.date) || 0) + entry.hours),
-    );
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-7)
-      .map(([date, hours]) => ({ date, hours }));
-  }, [teamEntries]);
   const activeBuild = builds.find((b) => b.id === selectedBuildId) || builds[0];
   const buildAssignments = assignments.filter(
     (a) => a.buildId === activeBuild?.id,
@@ -1445,7 +1346,7 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się wznowić etapu.");
     }
   };
-  const saveMaterial = async () => {
+  const saveMaterial = async (newMaterial: NewMaterialInput, onSaved: () => void) => {
     // Był tu cichy `return` bez żadnej informacji dla użytkownika — z
     // zewnątrz wyglądało jak "przycisk nic nie robi" (najczęściej dlatego,
     // że pole "Ilość początkowa" zostaje puste, jeśli nikt go nie dotknie —
@@ -1484,8 +1385,7 @@ function useAppDataState(
           unitPrice,
         });
         await invalidate("materials");
-        setNewMaterial({ name: "", index: "", unit: "szt.", stock: "0", min: "5", unitPrice: "0" });
-        setShowMaterial(false);
+        onSaved();
       } catch (error) {
         reportMutationError(error, "Nie udało się dodać materiału.");
       }
@@ -1513,7 +1413,7 @@ function useAppDataState(
     }
     await createIt();
   };
-  const saveBuild = async () => {
+  const saveBuild = async (newBuild: NewBuildInput, onSaved: () => void) => {
     const duration = Number(newBuild.durationDays);
     const missing: string[] = [];
     if (!newBuild.number) missing.push("Numer budowy");
@@ -1541,19 +1441,7 @@ function useAppDataState(
         contractValue: newBuild.contractValue ? Number(newBuild.contractValue) : undefined,
       });
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
-      setNewBuild({
-        number: "",
-        name: "",
-        manager: "",
-        startDate: todayISO(),
-        durationDays: "",
-        teamId: "",
-        plannedHoursPerDay: "8",
-        clientName: "",
-        address: "",
-        contractValue: "",
-      });
-      setShowBuild(false);
+      onSaved();
       // Katalog na zdjęcia (Google Drive) NIE jest tworzony tu automatycznie
       // — Admin robi to świadomie przyciskiem "Stwórz katalog na zdjęcia"
       // na karcie budowy (builds-screen.tsx), przez Supabase Edge Function
@@ -1909,7 +1797,7 @@ function useAppDataState(
       });
     }
   };
-  const saveEmployee = async () => {
+  const saveEmployee = async (newEmployee: NewEmployeeInput, onSaved: () => void) => {
     if (!newEmployee.name || !newEmployee.role) return;
     // Kartoteka pracowników zna tylko dwie role (Brygadzista/Pracownik) —
     // "Admin" w wyborze na ekranie Administratora to rola aplikacyjna
@@ -1925,7 +1813,7 @@ function useAppDataState(
         hourlyRate: Number(newEmployee.hourlyRate) || 0,
       });
       await invalidate("employees");
-      setNewEmployee({ name: "", role: "Pracownik", hourlyRate: "" });
+      onSaved();
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać pracownika.");
     }
@@ -1933,7 +1821,7 @@ function useAppDataState(
   // Nowa brygada (panel administratora, sekcja Zespół) — lider opcjonalny,
   // skład dopisywany osobno przez addTeamMember (ten sam wzorzec co
   // materiał→partia: nagłówek najpierw, powiązane wiersze potem).
-  const saveTeam = async () => {
+  const saveTeam = async (newTeam: NewTeamInput, onSaved: () => void) => {
     if (!newTeam.name) return;
     try {
       await createTeamMutation.mutateAsync({
@@ -1941,7 +1829,7 @@ function useAppDataState(
         leadEmployeeId: newTeam.leadEmployeeId ? Number(newTeam.leadEmployeeId) : null,
       });
       await invalidate("teams");
-      setNewTeam({ name: "", leadEmployeeId: "" });
+      onSaved();
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać brygady.");
     }
@@ -2049,49 +1937,16 @@ function useAppDataState(
       );
     }
   };
-  // Dokłada bieżąco wpisany materiał+ilość do koszyka (patrz orderCart
-  // wyżej) — NIE tworzy jeszcze zamówienia w bazie. Formularz czyści się
-  // od razu, żeby dało się dopisać kolejną pozycję.
-  const addToOrderCart = () => {
-    const quantity = Number(orderQuantity);
-    if (!orderMaterialName.trim() || !quantity || quantity <= 0) return;
-    const matched = materials.find(
-      (m) => normalizeMaterialName(m.name) === normalizeMaterialName(orderMaterialName),
-    );
-    // Nazwa nie pasuje jednoznacznie do żadnego materiału w magazynie —
-    // wymagamy jawnego potwierdzenia "to nowy materiał" (przycisk w
-    // orders-screen.tsx), żeby literówka nie utworzyła po cichu pozycji
-    // niepowiązanej z żadnym wierszem magazynowym (patrz
-    // docs/PROCES_ZARZADZANIE_MATERIALEM.md, Ryzyko 6).
-    if (!matched && !orderConfirmedNewMaterial) return;
-    setOrderCart((prev) => [
-      ...prev,
-      {
-        id: `cart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        materialName: orderMaterialName.trim(),
-        quantity,
-        unit: matched?.unit || "szt.",
-        materialId: matched?.id,
-      },
-    ]);
-    setOrderMaterialName("");
-    setOrderQuantity("");
-  };
-  // Jawne potwierdzenie "materiału nie ma na liście, dodaj go jako nowy" —
-  // pokazywane w UI tylko gdy wpisana nazwa nie ma jednoznacznego
-  // dopasowania w magazynie.
-  const confirmOrderNewMaterial = () => setOrderConfirmedNewMaterial(true);
-  const removeFromOrderCart = (id: string) => {
-    setOrderCart((prev) => prev.filter((item) => item.id !== id));
-  };
-  // Finalne zatwierdzenie koszyka: tworzy jedno zamówienie w Supabase per
-  // pozycja koszyka (material_orders nie ma nagłówka+pozycji), dopiero
-  // teraz — nie przy każdym dodaniu do koszyka. Wszystkie pozycje
-  // dostają ten sam batchId, żeby OrdersScreen mógł je pokazać i
-  // obsłużyć (Złożono u dostawcy / Usuń) jako jedno zgrupowane
-  // zamówienie, mimo że w bazie to nadal osobne wiersze.
-  const submitOrderCart = async () => {
-    if (orderCart.length === 0) return;
+  // Finalne zatwierdzenie koszyka (patrz OrderCartItem/koszyk lokalny w
+  // orders-screen.tsx): tworzy jedno zamówienie w Supabase per pozycja
+  // koszyka (material_orders nie ma nagłówka+pozycji), dopiero teraz — nie
+  // przy każdym dodaniu do koszyka. Wszystkie pozycje dostają ten sam
+  // batchId, żeby OrdersScreen mógł je pokazać i obsłużyć (Złożono u
+  // dostawcy / Usuń) jako jedno zgrupowane zamówienie, mimo że w bazie to
+  // nadal osobne wiersze. Zwraca true przy powodzeniu, żeby ekran mógł
+  // wyczyścić swój lokalny koszyk.
+  const submitOrderCart = async (orderCart: OrderCartItem[]) => {
+    if (orderCart.length === 0) return false;
     const batchId =
       orderCart.length > 1
         ? `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -2107,10 +1962,10 @@ function useAppDataState(
         });
       }
       await invalidate("orders");
-      setOrderCart([]);
-      setOrderSaved(true);
+      return true;
     } catch (error) {
       reportMutationError(error, "Nie udało się złożyć zamówienia.");
+      return false;
     }
   };
   // Jedno tapnięcie z listy braków magazynowych: materiał (i jego jednostka)
@@ -2382,11 +2237,6 @@ function useAppDataState(
     tab,
     devRole,
     myProfileId,
-    workerPeriod,
-    teamPeriod,
-    supervisedEmployeeIds,
-    supervisorPickerOpen,
-    workerEmployeeId,
     materials,
     materialBatches,
     buildMaterialActualCost,
@@ -2412,9 +2262,6 @@ function useAppDataState(
     selectedBatchId,
     setSelectedBatchId,
     assignments,
-    query,
-    showMaterial,
-    showBuild,
     showAssignment,
     buildsView,
     warehouseView,
@@ -2424,8 +2271,6 @@ function useAppDataState(
     picker,
     pickerQuery,
     draftAssignments,
-    newMaterial,
-    newBuild,
     workdayHours,
     workdayHoursInput,
     reportValues,
@@ -2438,9 +2283,6 @@ function useAppDataState(
     teams,
     teamMembers,
     timeEntries,
-    newEmployee,
-    newTeam,
-    setNewTeam,
     saveTeam,
     addTeamMember,
     removeTeamMember,
@@ -2459,26 +2301,11 @@ function useAppDataState(
     kmRate,
     closeBuildPin,
     orders,
-    orderMaterialName,
-    orderQuantity,
-    orderSaved,
-    orderCart,
-    orderConfirmedNewMaterial,
-    showArchivedMaterials,
     setTab,
     setDevRole,
-    setWorkerPeriod,
-    setTeamPeriod,
-    setSupervisedEmployeeIds,
-    setSupervisorPickerOpen,
-    setWorkerEmployeeId,
     setMaterials,
     setBuilds,
     setAssignments,
-    setQuery,
-    setShowMaterial,
-    setShowArchivedMaterials,
-    setShowBuild,
     setShowAssignment,
     setBuildsView,
     setWarehouseView,
@@ -2488,8 +2315,6 @@ function useAppDataState(
     setPicker,
     setPickerQuery,
     setDraftAssignments,
-    setNewMaterial,
-    setNewBuild,
     setWorkdayHours,
     setWorkdayHoursInput,
     setReportValues,
@@ -2506,7 +2331,6 @@ function useAppDataState(
     updateBuildPhotosUrl,
     setEmployees,
     setTimeEntries,
-    setNewEmployee,
     setHrSaved,
     setReportStatus,
     setAdminComment,
@@ -2520,14 +2344,6 @@ function useAppDataState(
     setDraftKm,
     setDraftNote,
     setOrders,
-    setOrderMaterialName,
-    setOrderQuantity,
-    setOrderSaved,
-    filtered,
-    workerEntries,
-    workerChart,
-    teamEntries,
-    teamChart,
     activeBuild,
     buildAssignments,
     shortages,
@@ -2550,9 +2366,6 @@ function useAppDataState(
     updateMaterialPrice,
     updateMaterialStock,
     setMaterialActive,
-    addToOrderCart,
-    confirmOrderNewMaterial,
-    removeFromOrderCart,
     submitOrderCart,
     createOrderFromShortage,
     markOrderOrdered,

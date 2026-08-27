@@ -15,9 +15,23 @@ import {
   ScreenHeader,
   StatusBadge,
 } from "@/components/report-ui";
-import { useAppData } from "@/contexts/app-data";
+import { useAppData, type NewBuildInput } from "@/contexts/app-data";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 import { BuildPhotosSection } from "@/components/build-photos-section";
+import { todayISO } from "@/components/report-ui";
+
+const createEmptyNewBuild = (): NewBuildInput => ({
+  number: "",
+  name: "",
+  manager: "",
+  startDate: todayISO(),
+  durationDays: "",
+  teamId: "",
+  plannedHoursPerDay: "8",
+  clientName: "",
+  address: "",
+  contractValue: "",
+});
 
 export function BuildsScreen() {
   const {
@@ -42,7 +56,6 @@ export function BuildsScreen() {
     cancelBuildOrder,
     deleteBuildOrder,
     receiveBuildOrder,
-    showBuild,
     selectedBatchId,
     warehouseBatches,
     plannedAmount,
@@ -50,15 +63,12 @@ export function BuildsScreen() {
     pickerQuery,
     draftAssignments,
     setDraftAssignments,
-    newBuild,
     workdayHours,
-    setShowBuild,
     setSelectedBuildId,
     setSelectedBatchId,
     setPlannedAmount,
     setPicker,
     setPickerQuery,
-    setNewBuild,
     addToDraft,
     commitAssignments,
     saveBuild,
@@ -69,6 +79,9 @@ export function BuildsScreen() {
     buildsView,
     closeBuildPin,
   } = useAppData();
+
+  const [showBuild, setShowBuild] = useState(false);
+  const [newBuild, setNewBuild] = useState<NewBuildInput>(createEmptyNewBuild);
 
   const isArchiveView = buildsView === "archive";
 
@@ -360,7 +373,15 @@ export function BuildsScreen() {
           </Text>
         )}
         <View style={{ marginTop: 12 }}>
-          <Button label="Zapisz budowę" onPress={saveBuild} />
+          <Button
+            label="Zapisz budowę"
+            onPress={() =>
+              saveBuild(newBuild, () => {
+                setNewBuild(createEmptyNewBuild());
+                setShowBuild(false);
+              })
+            }
+          />
         </View>
       </View>
     )}

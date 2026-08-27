@@ -47,6 +47,8 @@ function json(body: unknown, status = 200) {
 // Edge Functions -> admin-users -> Settings -> dodaj sekret
 // PROTECTED_ADMIN_EMAIL), żeby nie trzeba było zmieniać kodu przy zmianie
 // docelowego adresu głównego admina.
+const MIN_PASSWORD_LENGTH = 10;
+
 const PROTECTED_ADMIN_EMAIL = (
   Deno.env.get("PROTECTED_ADMIN_EMAIL") ?? "admin@flowtex.pl"
 ).trim().toLowerCase();
@@ -133,8 +135,11 @@ Deno.serve(async (req) => {
     const password = String(body.password ?? "");
     const role = body.role;
     const employeeId = body.employeeId ? Number(body.employeeId) : null;
-    if (!email || password.length < 6 || !role) {
-      return json({ error: "Email, hasło (min. 6 znaków) i rola są wymagane." }, 400);
+    if (!email || password.length < MIN_PASSWORD_LENGTH || !role) {
+      return json(
+        { error: `Email, hasło (min. ${MIN_PASSWORD_LENGTH} znaków) i rola są wymagane.` },
+        400,
+      );
     }
     const { data: created, error } = await admin.auth.admin.createUser({
       email,
@@ -155,8 +160,11 @@ Deno.serve(async (req) => {
   if (action === "setPassword") {
     const userId = String(body.userId ?? "");
     const password = String(body.password ?? "");
-    if (!userId || password.length < 6) {
-      return json({ error: "Wymagany userId i hasło (min. 6 znaków)." }, 400);
+    if (!userId || password.length < MIN_PASSWORD_LENGTH) {
+      return json(
+        { error: `Wymagany userId i hasło (min. ${MIN_PASSWORD_LENGTH} znaków).` },
+        400,
+      );
     }
     // Hasła głównego konta administratora NIE da się ustawić stąd — nawet
     // sobie samemu. To celowe: panel "Konta logowania" pokazuje listę

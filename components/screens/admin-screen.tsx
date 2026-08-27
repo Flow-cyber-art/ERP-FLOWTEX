@@ -843,7 +843,7 @@ function AdminAccountsSection() {
             keyboardType="email-address"
           />
           <Text className="text-xs text-muted uppercase mb-2 mt-3">
-            Hasło (min. 6 znaków)
+            Hasło (min. 10 znaków)
           </Text>
           <Field
             placeholder="••••••••"
@@ -1203,7 +1203,7 @@ function AdminAccountsSection() {
               {passwordEditId === u.id && (
                 <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
                   <Text className="text-xs text-muted uppercase mb-2">
-                    Nowe hasło (min. 6 znaków)
+                    Nowe hasło (min. 10 znaków)
                   </Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
                     <View style={{ flex: 1 }}>
@@ -1217,7 +1217,7 @@ function AdminAccountsSection() {
                     </View>
                     <Pressable
                       onPress={async () => {
-                        if (passwordInput.length < 6) return;
+                        if (passwordInput.length < 10) return;
                         try {
                           await setAdminUserPassword(u.id, passwordInput);
                           setPasswordEditId(null);

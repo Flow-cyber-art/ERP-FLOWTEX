@@ -46,8 +46,8 @@ export function AccountSettingsSection() {
   };
 
   const savePassword = async () => {
-    if (newPassword.length < 6) {
-      notify("Za krótkie hasło", "Nowe hasło musi mieć co najmniej 6 znaków.");
+    if (newPassword.length < 10) {
+      notify("Za krótkie hasło", "Nowe hasło musi mieć co najmniej 10 znaków.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -96,7 +96,7 @@ export function AccountSettingsSection() {
         Zmień hasło
       </Text>
       <Field
-        placeholder="Nowe hasło (min. 6 znaków)"
+        placeholder="Nowe hasło (min. 10 znaków)"
         value={newPassword}
         onChangeText={setNewPassword}
         secureTextEntry

@@ -76,6 +76,29 @@ export function SettlementScreen() {
     return a ? a.used * a.unitPrice : 0;
   };
 
+  // Dopasowanie planu (build_material_plan) do realnego zużycia
+  // (assignments/build_materials): najpierw po linked_material_id (gdy
+  // ustawione — np. przez naprawę danych 041 albo ręcznie), a w
+  // przeciwnym razie po znormalizowanej nazwie materiału (trim +
+  // lowercase) — ten sam wzorzec co stageNameForMaterial w
+  // contexts/app-data.tsx i assignmentByMaterialName w report-screen.tsx.
+  // Technologia jest definiowana zanim materiał fizycznie istnieje w
+  // magazynie (dopiero receive_order() go tworzy/dopasowuje po nazwie),
+  // więc linked_material_id zwykle jest null — dopasowanie po nazwie
+  // jest normalnym przypadkiem, nie wyjątkiem.
+  const resolveMaterialIdForPlanRow = (
+    r: { linkedMaterialId: number | string | null; materialName: string },
+  ): string | null => {
+    if (r.linkedMaterialId != null) return String(r.linkedMaterialId);
+    if (!build) return null;
+    const name = r.materialName.trim().toLowerCase();
+    if (!name) return null;
+    const a = assignments.find(
+      (x) => x.buildId === build.id && materials.find((m) => m.id === x.materialId)?.name?.trim().toLowerCase() === name,
+    );
+    return a ? a.materialId : null;
+  };
+
   const stages = useMemo(() => {
     if (!build) return [];
     const plans = buildMaterialPlans.filter((p) => p.buildId === Number(build.id));
@@ -87,7 +110,7 @@ export function SettlementScreen() {
     });
     return Array.from(byStage.entries()).map(([stageName, rows]) => {
       const items = rows.map((r) => {
-        const materialId = r.linkedMaterialId != null ? String(r.linkedMaterialId) : null;
+        const materialId = resolveMaterialIdForPlanRow(r);
         const material = materialId ? materials.find((m) => m.id === materialId) : null;
         const a = materialId
           ? assignments.find((x) => x.buildId === build.id && x.materialId === materialId)
@@ -115,15 +138,18 @@ export function SettlementScreen() {
     });
   }, [build, buildMaterialPlans, materials, assignments, buildMaterialLots]);
 
-  const planMaterialIds = useMemo(
-    () =>
-      new Set(
-        buildMaterialPlans
-          .filter((p) => build && p.buildId === Number(build.id) && p.linkedMaterialId != null)
-          .map((p) => String(p.linkedMaterialId)),
-      ),
-    [build, buildMaterialPlans],
-  );
+  // Zbiór materialId dopasowanych do planu (po ID lub po nazwie) — używany
+  // do wykluczenia tych materiałów z sekcji "pomocnicze spoza planu", żeby
+  // ta sama pozycja nie pojawiła się w obu tabelach naraz.
+  const planMaterialIds = useMemo(() => {
+    if (!build) return new Set<string>();
+    const plans = buildMaterialPlans.filter((p) => p.buildId === Number(build.id));
+    return new Set(
+      plans
+        .map((p) => resolveMaterialIdForPlanRow(p))
+        .filter((id): id is string => id != null),
+    );
+  }, [build, buildMaterialPlans, assignments, materials]);
 
   const auxAssignments = useMemo(
     () =>

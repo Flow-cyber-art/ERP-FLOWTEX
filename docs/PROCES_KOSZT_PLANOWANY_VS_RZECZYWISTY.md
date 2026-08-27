@@ -212,3 +212,48 @@ powiązaniem.
   `linkedMaterialId` przy zapisie (§6.3).
 - `components/screens/settlement-screen.tsx` — uproszczone kolumny
   tabeli per-etap i sekcji materiałów pomocniczych (§6.4).
+
+## 7. Cofnięcie walidacji przy zapisie technologii (27.08.2026)
+
+Walidacja z §6.3 (`save()` w `technologies-screen.tsx` blokujący zapis
+technologii bez `linkedMaterialId` na każdej pozycji materiałowej) okazała
+się błędna i została **cofnięta**. Powód: w realnym procesie tej firmy
+receptura technologii jest tworzona ZANIM materiał fizycznie istnieje w
+katalogu magazynowym — materiał powstaje/dopasowuje się dopiero przy
+przyjęciu zamówienia (`receive_order()`,
+`supabase/sql/038_archiwizacja_materialow.sql`), po nazwie. Wymaganie
+powiązania już przy zapisie receptury blokowało ten realny przepływ pracy
+(nie dawało zapisać technologii, dopóki magazyn nie „dogonił" recepty).
+
+Właściwą naprawą luki opisanej w §6.1/§6.2 nie jest wymuszanie zapisu
+`linked_material_id`, tylko dopasowanie po nazwie w samym widoku
+Rozliczenia — dokładnie ten sam, już istniejący i sprawdzony wzorzec co
+`stageNameForMaterial` w `contexts/app-data.tsx` (~linia 1842) i
+`assignmentByMaterialName` w `report-screen.tsx` (~linia 149): trim +
+lowercase porównanie `materials.name` względem
+`build_material_plan.materialName`. Rozważano też zapis zwrotny
+(auto-linkowanie) `linked_material_id` przy `receive_order()`, ale
+odrzucono — `build_materials` już ma prawdziwy `materialId` tej pozycji,
+druga zsynchronizowana kopia tego faktu w `build_material_plan` tylko
+rodzi ryzyko rozjazdu (co gdy materiał zostanie później przeniesiony/
+scalony/przemianowany).
+
+### 7.1 Co zaimplementowano
+
+- `components/screens/technologies-screen.tsx` — usunięta walidacja
+  blokująca zapis bez `linkedMaterialId`. Uproszczenie kolumn tabeli w
+  Rozliczeniu (§6.4) zostaje bez zmian.
+- `components/screens/settlement-screen.tsx` — dopasowanie planu do
+  realnego zużycia (`resolveMaterialIdForPlanRow`): najpierw po
+  `linked_material_id` gdy ustawione (np. z jednorazowej naprawy §6.2 albo
+  ręcznie), w przeciwnym razie po znormalizowanej nazwie materiału. Zbiór
+  `planMaterialIds` (używany do wykluczenia z sekcji „Materiały
+  pomocnicze spoza planu") teraz zawiera materiały dopasowane OBOMA
+  sposobami, nie tylko po ID — inaczej pozycja dopasowana po nazwie
+  pojawiałaby się jednocześnie w tabeli planu i w sekcji pomocniczych
+  (podwójne liczenie/wyciek, główny zarzut zgłoszenia błędu).
+- Migracja `041_napraw_linked_material_id.sql` (§6.2) pozostaje bez zmian
+  — jednorazowa naprawa danych po nazwie jest nieszkodliwa i uzupełnia
+  nowy fallback (dopasowanie po ID nadal próbowane jako pierwsze).
+- `receive_order()` / `supabase/sql/038_archiwizacja_materialow.sql`
+  nietknięte, zgodnie z decyzją z akapitu wyżej.

@@ -16,6 +16,9 @@ export type EmployeeRow = {
   // czytelna wprost z tabeli (REVOKE), więc idzie przez RPC, która sama
   // decyduje, czy wywołujący ma prawo zobaczyć realną wartość.
   hourlyRate: string | null;
+  // Stawka kosztowa (koszt budowy) — ta sama ochrona co hourlyRate,
+  // patrz supabase/sql/048_stawka_kosztowa_pracownika.sql.
+  costRate: string | null;
 };
 
 export async function listEmployees(): Promise<EmployeeRow[]> {
@@ -28,6 +31,7 @@ export type CreateEmployeeInput = {
   name: string;
   role: EmployeeRole;
   hourlyRate: number;
+  costRate: number;
 };
 
 export async function createEmployee(input: CreateEmployeeInput): Promise<void> {
@@ -35,6 +39,7 @@ export async function createEmployee(input: CreateEmployeeInput): Promise<void> 
     name: input.name,
     role: input.role,
     hourlyRate: input.hourlyRate,
+    costRate: input.costRate,
   });
   if (error) throw new Error(error.message);
 }
@@ -43,6 +48,14 @@ export async function updateEmployeeRate(employeeId: number, hourlyRate: number)
   const { error } = await supabase
     .from("employees")
     .update({ hourlyRate, updatedAt: new Date().toISOString() })
+    .eq("id", employeeId);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateEmployeeCostRate(employeeId: number, costRate: number): Promise<void> {
+  const { error } = await supabase
+    .from("employees")
+    .update({ costRate, updatedAt: new Date().toISOString() })
     .eq("id", employeeId);
   if (error) throw new Error(error.message);
 }

@@ -20,6 +20,19 @@ import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { todayISO } from "@/components/report-ui";
 
+// Wartość kontraktu bywa 6-7 cyfrowa (setki tysięcy) — bez separatora
+// tysięcznego zera się zlewają w jeden ciąg trudny do odczytania na
+// pierwszy rzut oka. `newBuild.contractValue` w stanie zostaje "czystą"
+// liczbą (bez spacji) — separator dochodzi wyłącznie przy wyświetlaniu.
+const formatThousands = (raw: string): string => {
+  if (!raw) return raw;
+  const [intPart, decPart] = raw.split(".");
+  const withSeparators = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return decPart !== undefined ? `${withSeparators}.${decPart}` : withSeparators;
+};
+const parseThousands = (formatted: string): string =>
+  formatted.replace(/\s/g, "").replace(",", ".").replace(/[^0-9.]/g, "");
+
 const createEmptyNewBuild = (): NewBuildInput => ({
   number: "",
   name: "",
@@ -256,10 +269,10 @@ export function BuildsScreen() {
           Wartość kontraktu (PLN, opcjonalnie)
         </Text>
         <Field
-          placeholder="np. 250000"
-          value={newBuild.contractValue}
+          placeholder="np. 250 000"
+          value={formatThousands(newBuild.contractValue)}
           onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, contractValue: v.replace(",", ".") })
+            setNewBuild({ ...newBuild, contractValue: parseThousands(v) })
           }
           keyboardType="decimal-pad"
         />
@@ -346,18 +359,14 @@ export function BuildsScreen() {
             </Text>
           )}
         </View>
-        <Text className="text-xs text-muted uppercase mt-4 mb-2">
-          Planowane godziny / dzień roboczy
-        </Text>
-        <QuantityStepper
-          value={newBuild.plannedHoursPerDay}
-          onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, plannedHoursPerDay: v })
-          }
-        />
+        {/* Dniówka NIE jest tu edytowalna per budowa — używamy globalnego
+            ustawienia z Admin → Zespół i dniówka (workdayHours), tego
+            samego, co w podglądzie "łącznie ok. Xh" wyżej. Osobne pole tu
+            dublowało tamto ustawienie i myliło (dwie różne "dniówki" w
+            jednym formularzu). */}
         {newBuild.teamId && Number(newBuild.durationDays) > 0 && (
           <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 8 }}>
-            Planowany koszt robocizny:{" "}
+            Planowany koszt robocizny (przy dniówce {workdayHours} h):{" "}
             <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
               {formatPLN(
                 teamMembers
@@ -366,7 +375,7 @@ export function BuildsScreen() {
                     const employee = employees.find((e) => e.id === String(m.employeeId));
                     return sum + (employee?.hourlyRate || 0);
                   }, 0) *
-                  (Number(newBuild.plannedHoursPerDay) || 0) *
+                  workdayHours *
                   Number(newBuild.durationDays),
               )}
             </Text>
@@ -376,10 +385,13 @@ export function BuildsScreen() {
           <Button
             label="Zapisz budowę"
             onPress={() =>
-              saveBuild(newBuild, () => {
-                setNewBuild(createEmptyNewBuild());
-                setShowBuild(false);
-              })
+              saveBuild(
+                { ...newBuild, plannedHoursPerDay: String(workdayHours) },
+                () => {
+                  setNewBuild(createEmptyNewBuild());
+                  setShowBuild(false);
+                },
+              )
             }
           />
         </View>

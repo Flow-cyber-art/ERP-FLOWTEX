@@ -213,7 +213,7 @@ begin
 
   update leave_requests
   set
-    status = case when p_approve then 'zatwierdzony' else 'odrzucony' end,
+    status = (case when p_approve then 'zatwierdzony' else 'odrzucony' end)::leave_status,
     "decidedBy" = v_decider_id,
     "decidedAt" = now(),
     "updatedAt" = now()

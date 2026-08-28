@@ -64,8 +64,14 @@ function countBusinessDays(dateFrom: string, dateTo: string): number {
 }
 
 export function LeaveScreen() {
-  const { myEmployeeId, employees, leaveRequests, submitLeaveRequest, cancelLeaveRequest } =
-    useAppData();
+  const {
+    myEmployeeId,
+    employees,
+    leaveRequests,
+    submitLeaveRequest,
+    updateLeaveRequest,
+    cancelLeaveRequest,
+  } = useAppData();
   const [view, setView] = useState<"list" | "form">("list");
 
   const me = employees.find((e) => e.id === myEmployeeId);
@@ -76,6 +82,9 @@ export function LeaveScreen() {
         .sort((a, b) => b.dateFrom.localeCompare(a.dateFrom)),
     [leaveRequests, myEmployeeId],
   );
+  const [editingRequest, setEditingRequest] = useState<
+    (typeof myRequests)[number] | null
+  >(null);
 
   const currentYear = new Date().getFullYear();
   const usedDays = myRequests
@@ -106,9 +115,11 @@ export function LeaveScreen() {
   if (view === "form") {
     return (
       <LeaveRequestForm
+        editing={editingRequest}
         onCancel={() => setView("list")}
         onSubmitted={() => setView("list")}
         submitLeaveRequest={submitLeaveRequest}
+        updateLeaveRequest={updateLeaveRequest}
       />
     );
   }
@@ -119,7 +130,10 @@ export function LeaveScreen() {
         title="Urlopy"
         action={
           <Pressable
-            onPress={() => setView("form")}
+            onPress={() => {
+              setEditingRequest(null);
+              setView("form");
+            }}
             style={({ pressed }) => ({
               backgroundColor: COLORS.primary,
               borderRadius: 10,
@@ -183,21 +197,32 @@ export function LeaveScreen() {
               />
             </View>
             {r.status === "oczekujący" && (
-              <Pressable
-                onPress={() =>
-                  confirmAction(
-                    "Anulować wniosek?",
-                    "Wniosek zostanie anulowany. Będziesz mógł złożyć nowy na ten sam termin.",
-                    "Anuluj wniosek",
-                    () => cancelLeaveRequest(String(r.id)),
-                  )
-                }
-                style={{ marginTop: 10, alignSelf: "flex-start" }}
-              >
-                <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
-                  Anuluj wniosek
-                </Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: 16, marginTop: 10 }}>
+                <Pressable
+                  onPress={() => {
+                    setEditingRequest(r);
+                    setView("form");
+                  }}
+                >
+                  <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                    Edytuj
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    confirmAction(
+                      "Anulować wniosek?",
+                      "Wniosek zostanie anulowany. Będziesz mógł złożyć nowy na ten sam termin.",
+                      "Anuluj wniosek",
+                      () => cancelLeaveRequest(String(r.id)),
+                    )
+                  }
+                >
+                  <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                    Anuluj wniosek
+                  </Text>
+                </Pressable>
+              </View>
             )}
           </View>
         ))
@@ -264,11 +289,22 @@ export function LeavePendingApprovals() {
   );
 }
 
+type LeaveFormRequest = {
+  id: number;
+  type: LeaveType;
+  dateFrom: string;
+  dateTo: string;
+  note: string | null;
+};
+
 function LeaveRequestForm({
+  editing,
   onCancel,
   onSubmitted,
   submitLeaveRequest,
+  updateLeaveRequest,
 }: {
+  editing: LeaveFormRequest | null;
   onCancel: () => void;
   onSubmitted: () => void;
   submitLeaveRequest: (input: {
@@ -277,11 +313,15 @@ function LeaveRequestForm({
     dateTo: string;
     note?: string;
   }) => Promise<boolean>;
+  updateLeaveRequest: (
+    requestId: string,
+    input: { type: LeaveType; dateFrom: string; dateTo: string; note?: string },
+  ) => Promise<boolean>;
 }) {
-  const [type, setType] = useState<LeaveType>("wypoczynkowy");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [note, setNote] = useState("");
+  const [type, setType] = useState<LeaveType>(editing?.type ?? "wypoczynkowy");
+  const [dateFrom, setDateFrom] = useState(editing?.dateFrom ?? "");
+  const [dateTo, setDateTo] = useState(editing?.dateTo ?? "");
+  const [note, setNote] = useState(editing?.note ?? "");
   const [submitting, setSubmitting] = useState(false);
 
   const businessDays = countBusinessDays(dateFrom, dateTo || dateFrom);
@@ -289,7 +329,9 @@ function LeaveRequestForm({
 
   const submit = async () => {
     setSubmitting(true);
-    const ok = await submitLeaveRequest({ type, dateFrom, dateTo, note });
+    const ok = editing
+      ? await updateLeaveRequest(String(editing.id), { type, dateFrom, dateTo, note })
+      : await submitLeaveRequest({ type, dateFrom, dateTo, note });
     setSubmitting(false);
     if (ok) onSubmitted();
   };
@@ -299,7 +341,7 @@ function LeaveRequestForm({
       <Pressable onPress={onCancel} style={{ marginBottom: 12 }}>
         <Text style={{ color: COLORS.primary, fontWeight: "700" }}>← Wróć</Text>
       </Pressable>
-      <ScreenHeader title="Nowy wniosek" />
+      <ScreenHeader title={editing ? "Edytuj wniosek" : "Nowy wniosek"} />
 
       <View className="bg-surface border border-border rounded-2xl p-4">
         <Text className="text-xs text-muted uppercase mb-2">Rodzaj urlopu</Text>
@@ -372,7 +414,13 @@ function LeaveRequestForm({
           </View>
           <View style={{ flex: 1 }}>
             <Button
-              label={submitting ? "Wysyłanie…" : "Złóż wniosek"}
+              label={
+                submitting
+                  ? "Zapisywanie…"
+                  : editing
+                    ? "Zapisz zmiany"
+                    : "Złóż wniosek"
+              }
               onPress={submit}
               disabled={!canSubmit}
             />

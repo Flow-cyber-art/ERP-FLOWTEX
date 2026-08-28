@@ -54,6 +54,7 @@ import {
   listLeaveRequests,
   requestLeave as requestLeaveRemote,
   updateEmployeeLeaveDays as updateEmployeeLeaveDaysRemote,
+  updateLeaveRequest as updateLeaveRequestRemote,
   type LeaveRequestRow,
   type LeaveType,
 } from "@/lib/data/leave";
@@ -994,6 +995,12 @@ function useAppDataState(
       updateEmployeeLeaveDaysRemote(vars.employeeId, vars.leaveDaysPerYear),
   });
   const requestLeaveMutation = useMutation({ mutationFn: requestLeaveRemote });
+  const updateLeaveRequestMutation = useMutation({
+    mutationFn: (vars: {
+      requestId: number;
+      input: { type: LeaveType; dateFrom: string; dateTo: string; note?: string };
+    }) => updateLeaveRequestRemote(vars.requestId, vars.input),
+  });
   const cancelLeaveRequestMutation = useMutation({
     mutationFn: cancelLeaveRequestRemote,
   });
@@ -2000,6 +2007,24 @@ function useAppDataState(
       return false;
     }
   };
+  // Edycja własnego, jeszcze nierozpatrzonego wniosku (patrz
+  // update_leave_request w supabase/sql/050_edycja_urlopu_i_fix_decyzji.sql)
+  // — zamiast zmuszać pracownika do anuluj+złóż nowy przy pomyłce.
+  const updateLeaveRequest = async (
+    requestId: string,
+    input: { type: LeaveType; dateFrom: string; dateTo: string; note?: string },
+  ): Promise<boolean> => {
+    const numericId = Number(requestId);
+    if (Number.isNaN(numericId)) return false;
+    try {
+      await updateLeaveRequestMutation.mutateAsync({ requestId: numericId, input });
+      await invalidate("leaveRequests");
+      return true;
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać zmian we wniosku.");
+      return false;
+    }
+  };
   const cancelLeaveRequest = async (requestId: string) => {
     const numericId = Number(requestId);
     if (Number.isNaN(numericId)) return;
@@ -2542,6 +2567,7 @@ function useAppDataState(
     leaveRequests,
     updateEmployeeLeaveDays,
     submitLeaveRequest,
+    updateLeaveRequest,
     cancelLeaveRequest,
     decideLeaveRequest,
     updateKmRate,

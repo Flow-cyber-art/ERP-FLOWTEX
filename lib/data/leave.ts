@@ -57,6 +57,25 @@ export async function requestLeave(input: {
   if (error) throw new Error(error.message);
 }
 
+export async function updateLeaveRequest(
+  requestId: number,
+  input: {
+    type: LeaveType;
+    dateFrom: string;
+    dateTo: string;
+    note?: string;
+  },
+): Promise<void> {
+  const { error } = await supabase.rpc("update_leave_request", {
+    p_request_id: requestId,
+    p_type: input.type,
+    p_date_from: input.dateFrom,
+    p_date_to: input.dateTo,
+    p_note: input.note ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function cancelLeaveRequest(requestId: number): Promise<void> {
   const { error } = await supabase.rpc("cancel_leave_request", {
     p_request_id: requestId,

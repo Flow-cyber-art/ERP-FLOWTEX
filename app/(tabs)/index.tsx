@@ -317,7 +317,7 @@ function HomeScreenInner() {
     ? routeButton("warehouse", "▦", "Magazyn", { badgeCount: shortageCount })
     : routeButton(
         "warehouse",
-        isTechnologiesView ? "⚗" : "▦",
+        isTechnologiesView ? "⬡" : "▦",
         isTechnologiesView ? "Technologie" : "Magazyn",
         {
           isActive: tab === "warehouse",
@@ -332,7 +332,7 @@ function HomeScreenInner() {
           },
         },
       );
-  const technologiesButton = routeButton("technologies", "⚗", "Technologie");
+  const technologiesButton = routeButton("technologies", "⬡", "Technologie");
   // Zamówienia/Raporty: tak samo jak Magazyn/Technologie wyżej, mobile ma
   // za mało miejsca w dolnym pasku na dwie osobne pozycje — jedna
   // pozycja, która pokazuje aktualnie wybraną z tych dwóch zakładek, a

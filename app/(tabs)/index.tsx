@@ -312,19 +312,26 @@ function HomeScreenInner() {
   // pasku — jedna pozycja "Magazyn", a powtórne wciśnięcie (gdy ta
   // zakładka jest już otwarta) przełącza na Technologie, tak samo jak
   // buildsButton przełącza Budowy/Archiwum.
+  const isTechnologiesView = tab === "warehouse" && warehouseView === "technologies";
   const warehouseButton = isDesktop
     ? routeButton("warehouse", "▦", "Magazyn", { badgeCount: shortageCount })
-    : routeButton("warehouse", "▦", "Magazyn", {
-        badgeCount: shortageCount,
-        onPress: () => {
-          if (tab === "warehouse") {
-            setWarehouseView(warehouseView === "materials" ? "technologies" : "materials");
-          } else {
-            setTab("warehouse");
-            setWarehouseView("materials");
-          }
+    : routeButton(
+        "warehouse",
+        isTechnologiesView ? "⚗" : "▦",
+        isTechnologiesView ? "Technologie" : "Magazyn",
+        {
+          isActive: tab === "warehouse",
+          badgeCount: shortageCount,
+          onPress: () => {
+            if (tab === "warehouse") {
+              setWarehouseView(warehouseView === "materials" ? "technologies" : "materials");
+            } else {
+              setTab("warehouse");
+              setWarehouseView("materials");
+            }
+          },
         },
-      });
+      );
   const technologiesButton = routeButton("technologies", "⚗", "Technologie");
   // Zamówienia/Raporty: tak samo jak Magazyn/Technologie wyżej, mobile ma
   // za mało miejsca w dolnym pasku na dwie osobne pozycje — jedna

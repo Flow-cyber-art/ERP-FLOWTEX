@@ -8,9 +8,15 @@ import {
   formatPLN,
   IconBadge,
   QuantityStepper,
+  StatusBadge,
 } from "@/components/report-ui";
 import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
+import {
+  LEAVE_STATUS_BADGE,
+  LEAVE_TYPE_LABELS,
+  LeavePendingApprovals,
+} from "@/components/screens/leave-screen";
 import { AccountSettingsSection } from "@/components/account-settings-section";
 import type { AppRole } from "@/lib/data/auth";
 import { signOut } from "@/lib/data/auth";
@@ -32,7 +38,7 @@ import {
 // tu (mimo że to też "konfiguracja firmy") — mają własną pozycję w
 // nawigacji (patrz app/(tabs)/index.tsx), bo na desktopie zasługują na
 // stałą widoczność, a na mobile dzielą miejsce z zakładką Magazyn.
-type AdminTab = "team" | "hours" | "accounts" | "settings";
+type AdminTab = "team" | "hours" | "leaves" | "accounts" | "settings";
 
 export function AdminScreen() {
   // "Ustawienia" pierwsza — najczęstszy powód wejścia w tę zakładkę jest
@@ -61,6 +67,7 @@ export function AdminScreen() {
               ["settings", "Ustawienia"],
               ["team", "Zespół i dniówka"],
               ["hours", "Rozliczenie godzin"],
+              ["leaves", "HR — Urlopy"],
               ["accounts", "Konta logowania"],
             ] as const
           ).map(([value, label]) => (
@@ -94,6 +101,8 @@ export function AdminScreen() {
         <AdminTeamSection />
       ) : section === "hours" ? (
         <HrSection />
+      ) : section === "leaves" ? (
+        <AdminLeaveSection />
       ) : section === "accounts" ? (
         <AdminAccountsSection />
       ) : (
@@ -622,6 +631,116 @@ function AdminTeamSection() {
       </View>
 
       <AdminTeamsSubsection />
+    </>
+  );
+}
+
+// HR — Urlopy: pula dni urlopowych per pracownik (edytowalna, bo staż
+// pracy nie jest nigdzie śledzony) + wszystkie wnioski do wglądu/decyzji.
+// Zatwierdzanie samo w sobie może zrobić też Brygadzista (patrz
+// team-time-screen.tsx) — Admin dodatkowo widzi historię i ustawia pulę.
+function AdminLeaveSection() {
+  const { employees, leaveRequests, updateEmployeeLeaveDays } = useAppData();
+  const [editingPoolId, setEditingPoolId] = useState<string | null>(null);
+  const [poolInput, setPoolInput] = useState("");
+
+  const decidedRequests = leaveRequests
+    .filter((r) => r.status !== "oczekujący")
+    .sort((a, b) => (b.decidedAt || "").localeCompare(a.decidedAt || ""))
+    .slice(0, 20);
+
+  return (
+    <>
+      <LeavePendingApprovals />
+
+      <Text className="text-lg font-bold text-foreground mb-3">
+        Pula dni urlopowych
+      </Text>
+      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+        {employees.map((employee, i) => (
+          <View
+            key={employee.id}
+            style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: COLORS.border }}
+          >
+            <Pressable
+              onPress={() => {
+                if (editingPoolId === employee.id) {
+                  setEditingPoolId(null);
+                } else {
+                  setEditingPoolId(employee.id);
+                  setPoolInput(String(employee.leaveDaysPerYear ?? 26));
+                }
+              }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+              }}
+            >
+              <Text
+                style={{ flex: 1, color: COLORS.foreground, fontWeight: "700", fontSize: 14 }}
+                numberOfLines={1}
+              >
+                {employee.name}
+              </Text>
+              <Text style={{ color: COLORS.muted, fontSize: 13 }}>
+                {employee.leaveDaysPerYear ?? 26} dni/rok
+              </Text>
+            </Pressable>
+            {editingPoolId === employee.id && (
+              <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+                <QuantityStepper value={poolInput} onChangeText={setPoolInput} step={1} />
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Button label="Anuluj" secondary onPress={() => setEditingPoolId(null)} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label="Zapisz"
+                      onPress={() => {
+                        updateEmployeeLeaveDays(employee.id, Number(poolInput) || 0);
+                        setEditingPoolId(null);
+                      }}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+        ))}
+      </View>
+
+      <Text className="text-lg font-bold text-foreground mb-3">
+        Historia wniosków
+      </Text>
+      {decidedRequests.length === 0 ? (
+        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+          <Text className="text-sm text-muted">Brak rozpatrzonych wniosków.</Text>
+        </View>
+      ) : (
+        decidedRequests.map((r) => {
+          const badge = LEAVE_STATUS_BADGE[r.status] ?? LEAVE_STATUS_BADGE.oczekujący;
+          return (
+            <View
+              key={r.id}
+              className="bg-surface border border-border rounded-2xl p-4 mb-3"
+              style={{ flexDirection: "row", alignItems: "flex-start" }}
+            >
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text className="text-sm font-bold text-foreground">
+                  {employees.find((e) => e.id === r.employeeId)?.name || "Pracownik"}
+                </Text>
+                <Text className="text-xs text-muted mt-1">
+                  {LEAVE_TYPE_LABELS[r.type]} · {r.dateFrom}
+                  {r.dateFrom !== r.dateTo ? ` – ${r.dateTo}` : ""} · {r.businessDays} dni
+                </Text>
+              </View>
+              <StatusBadge status={badge.status} label={badge.label} />
+            </View>
+          );
+        })
+      )}
     </>
   );
 }

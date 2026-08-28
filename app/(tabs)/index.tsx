@@ -80,6 +80,11 @@ const SettlementScreen = lazy(() =>
     default: m.SettlementScreen,
   })),
 );
+const LeaveScreen = lazy(() =>
+  import("@/components/screens/leave-screen").then((m) => ({
+    default: m.LeaveScreen,
+  })),
+);
 
 function HomeScreenInner() {
   const {
@@ -354,10 +359,12 @@ function HomeScreenInner() {
               badgeCount: reportsNeedingFixCount,
             }),
             routeButton("teamTime", "◷", "Czas zespołu"),
+            routeButton("leaves", "☀", "Urlopy"),
             routeButton("admin", "⚙", "Admin"),
           ]
         : [
             routeButton("worker", "◷", "Mój czas"),
+            routeButton("leaves", "☀", "Urlopy"),
             routeButton("admin", "⚙", "Admin"),
           ];
   const nav = isDesktop ? (
@@ -542,6 +549,10 @@ function HomeScreenInner() {
                 <TeamTimeScreen />
               )}
               {tab === "worker" && devRole === "Pracownik" && <WorkerScreen />}
+              {tab === "leaves" &&
+                (devRole === "Pracownik" || devRole === "Brygadzista") && (
+                  <LeaveScreen />
+                )}
               {tab === "admin" &&
                 (devRole === "Brygadzista" || devRole === "Pracownik") && (
                   <SettingsScreen />
@@ -561,7 +572,11 @@ export default function HomeScreen() {
   return (
     <AuthGate>
       {(profile) => (
-        <AppDataProvider initialRole={profile.role} myProfileId={profile.id}>
+        <AppDataProvider
+          initialRole={profile.role}
+          myProfileId={profile.id}
+          myEmployeeId={profile.employeeId != null ? String(profile.employeeId) : null}
+        >
           <HomeScreenInner />
         </AppDataProvider>
       )}

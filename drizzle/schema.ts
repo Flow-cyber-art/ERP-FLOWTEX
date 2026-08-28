@@ -100,8 +100,47 @@ export const employees = pgTable("employees", {
   // ZUS pracodawcy, urlopy, sprzęt) — osobna od "hourlyRate" (wypłata).
   // Patrz supabase/sql/048_stawka_kosztowa_pracownika.sql.
   costRate: decimal("costRate", { precision: 10, scale: 2 }),
+  // Pula dni urlopowych na rok — ustawiana ręcznie przez Admina (staż
+  // pracy, który w Polsce decyduje o 20 vs 26 dniach, nie jest śledzony).
+  // Patrz supabase/sql/049_urlopy.sql.
+  leaveDaysPerYear: integer("leaveDaysPerYear").notNull().default(26),
   userId: integer("userId").references(() => users.id, { onDelete: "set null" }),
   active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const leaveTypeEnum = pgEnum("leave_type", [
+  "wypoczynkowy",
+  "na_zadanie",
+  "L4",
+  "okolicznościowy",
+  "bezpłatny",
+]);
+
+export const leaveStatusEnum = pgEnum("leave_status", [
+  "oczekujący",
+  "zatwierdzony",
+  "odrzucony",
+  "anulowany",
+]);
+
+// Wnioski urlopowe — patrz supabase/sql/049_urlopy.sql. Zapis idzie
+// wyłącznie przez RPC (request_leave/cancel_leave_request/
+// decide_leave_request), ten opis tabeli jest tu tylko dla typów.
+export const leaveRequests = pgTable("leave_requests", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employeeId")
+    .notNull()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  type: leaveTypeEnum("type").notNull(),
+  dateFrom: date("dateFrom").notNull(),
+  dateTo: date("dateTo").notNull(),
+  businessDays: integer("businessDays").notNull(),
+  status: leaveStatusEnum("status").notNull().default("oczekujący"),
+  note: text("note"),
+  decidedBy: integer("decidedBy").references(() => employees.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decidedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

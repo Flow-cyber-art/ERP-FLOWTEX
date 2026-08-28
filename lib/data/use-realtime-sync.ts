@@ -46,6 +46,10 @@ const REALTIME_TABLES: { table: string; queryKey: string }[] = [
   // to jedyny sposób, w jaki inne urządzenie/sesja dowie się o nowych
   // godzinach bez pełnego przeładowania strony.
   { table: "time_entries", queryKey: "timeEntries" },
+  // Wnioski urlopowe — żeby zatwierdzenie przez Brygadzistę/Admina od
+  // razu było widoczne u pracownika (i odwrotnie: nowy wniosek u tych,
+  // którzy go zatwierdzają), patrz supabase/sql/049_urlopy.sql.
+  { table: "leave_requests", queryKey: "leaveRequests" },
 ];
 
 export function useRealtimeSync(queryClient: QueryClient) {

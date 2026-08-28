@@ -19,6 +19,9 @@ export type EmployeeRow = {
   // Stawka kosztowa (koszt budowy) — ta sama ochrona co hourlyRate,
   // patrz supabase/sql/048_stawka_kosztowa_pracownika.sql.
   costRate: string | null;
+  // Pula dni urlopowych na rok — NIE ukryta jak stawki, widoczna dla
+  // każdego (pracownik musi widzieć swoją). Patrz 049_urlopy.sql.
+  leaveDaysPerYear: number;
 };
 
 export async function listEmployees(): Promise<EmployeeRow[]> {

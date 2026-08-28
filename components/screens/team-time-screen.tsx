@@ -8,6 +8,7 @@ import {
   todayISO,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { LeavePendingApprovals } from "@/components/screens/leave-screen";
 
 export function TeamTimeScreen() {
   const { builds, employees, timeEntries } = useAppData();
@@ -61,6 +62,8 @@ export function TeamTimeScreen() {
         title="Czas pracy zespołu"
         description="Wybierz jednego pracownika, aby zobaczyć jego indywidualną ewidencję."
       />
+
+      <LeavePendingApprovals />
 
       <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
         <Pressable

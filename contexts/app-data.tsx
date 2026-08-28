@@ -49,6 +49,15 @@ import {
 } from "@/lib/data/orders";
 import { listTimeEntries } from "@/lib/data/time-entries";
 import {
+  cancelLeaveRequest as cancelLeaveRequestRemote,
+  decideLeaveRequest as decideLeaveRequestRemote,
+  listLeaveRequests,
+  requestLeave as requestLeaveRemote,
+  updateEmployeeLeaveDays as updateEmployeeLeaveDaysRemote,
+  type LeaveRequestRow,
+  type LeaveType,
+} from "@/lib/data/leave";
+import {
   assignMaterialBatchesToBuild,
   unassignMaterialFromBuild,
   listBuildMaterialLots as listBuildMaterialLotsRemote,
@@ -251,6 +260,7 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
 function useAppDataState(
   initialRole: "Admin" | "Brygadzista" | "Pracownik" = "Brygadzista",
   myProfileId: string | null = null,
+  myEmployeeId: string | null = null,
 ) {
   const [tab, setTab] = useState(
     initialRole === "Pracownik"
@@ -496,6 +506,22 @@ function useAppDataState(
     refetchOnWindowFocus: false,
     staleTime: Infinity,
   });
+  const leaveRequestsQuery = useQuery({
+    queryKey: ["leaveRequests", "list"],
+    queryFn: listLeaveRequests,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  const leaveRequests = useMemo(
+    () =>
+      (leaveRequestsQuery.data ?? []).map((r) => ({
+        ...r,
+        employeeId: String(r.employeeId),
+        decidedBy: r.decidedBy != null ? String(r.decidedBy) : null,
+      })),
+    [leaveRequestsQuery.data],
+  );
   // Brygady i ich skład — potrzebne od razu, tak jak pracownicy wyżej:
   // wybór brygady w formularzu Nowa budowa i planowany koszt robocizny w
   // karcie budowy (Budowy), oraz zarządzanie składem w Admin (Zespół).
@@ -720,6 +746,7 @@ function useAppDataState(
         role: e.role,
         hourlyRate: Number(e.hourlyRate),
         costRate: Number(e.costRate) || 0,
+        leaveDaysPerYear: Number(e.leaveDaysPerYear) || 26,
       })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -962,6 +989,18 @@ function useAppDataState(
     mutationFn: (vars: { employeeId: number; costRate: number }) =>
       updateEmployeeCostRateRemote(vars.employeeId, vars.costRate),
   });
+  const updateEmployeeLeaveDaysMutation = useMutation({
+    mutationFn: (vars: { employeeId: number; leaveDaysPerYear: number }) =>
+      updateEmployeeLeaveDaysRemote(vars.employeeId, vars.leaveDaysPerYear),
+  });
+  const requestLeaveMutation = useMutation({ mutationFn: requestLeaveRemote });
+  const cancelLeaveRequestMutation = useMutation({
+    mutationFn: cancelLeaveRequestRemote,
+  });
+  const decideLeaveRequestMutation = useMutation({
+    mutationFn: (vars: { requestId: number; approve: boolean }) =>
+      decideLeaveRequestRemote(vars.requestId, vars.approve),
+  });
   const createTeamMutation = useMutation({ mutationFn: createTeamRemote });
   const addTeamMemberMutation = useMutation({
     mutationFn: (vars: { teamId: number; employeeId: number }) =>
@@ -1110,6 +1149,7 @@ function useAppDataState(
             ...e,
             hourlyRate: e.hourlyRate || 0,
             costRate: e.costRate || 0,
+            leaveDaysPerYear: e.leaveDaysPerYear || 26,
           })),
         );
         setTimeEntries(d.timeEntries || initialTimeEntries);
@@ -1928,6 +1968,63 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać stawki kosztowej.");
     }
   };
+  // Pula dni urlopowych na rok (panel administratora, sekcja HR).
+  const updateEmployeeLeaveDays = async (employeeId: string, days: number) => {
+    const numericId = Number(employeeId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await updateEmployeeLeaveDaysMutation.mutateAsync({
+        employeeId: numericId,
+        leaveDaysPerYear: days,
+      });
+      await invalidate("employees");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać puli dni urlopowych.");
+    }
+  };
+  // Nowy wniosek urlopowy (ekran Pracownika/Brygadzisty) — employeeId
+  // wnioskującego dociąga serwer sam z profilu (patrz request_leave w
+  // supabase/sql/049_urlopy.sql), więc klient go tu nie podaje.
+  const submitLeaveRequest = async (input: {
+    type: LeaveType;
+    dateFrom: string;
+    dateTo: string;
+    note?: string;
+  }): Promise<boolean> => {
+    try {
+      await requestLeaveMutation.mutateAsync(input);
+      await invalidate("leaveRequests");
+      return true;
+    } catch (error) {
+      reportMutationError(error, "Nie udało się złożyć wniosku urlopowego.");
+      return false;
+    }
+  };
+  const cancelLeaveRequest = async (requestId: string) => {
+    const numericId = Number(requestId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await cancelLeaveRequestMutation.mutateAsync(numericId);
+      await invalidate("leaveRequests");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się anulować wniosku.");
+    }
+  };
+  // Zatwierdzenie/odrzucenie wniosku (Brygadzista/Admin) — patrz
+  // components/screens/team-time-screen.tsx i sekcja HR w admin-screen.tsx.
+  const decideLeaveRequest = async (requestId: string, approve: boolean) => {
+    const numericId = Number(requestId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await decideLeaveRequestMutation.mutateAsync({ requestId: numericId, approve });
+      await invalidate("leaveRequests");
+    } catch (error) {
+      reportMutationError(
+        error,
+        approve ? "Nie udało się zatwierdzić wniosku." : "Nie udało się odrzucić wniosku.",
+      );
+    }
+  };
   // Stawka za km (Faza 7) — edytowana wyłącznie przez Admina (RLS), patrz
   // AdminSettingsSection w components/screens/admin-screen.tsx.
   const updateKmRate = async (rate: number) => {
@@ -2441,6 +2538,12 @@ function useAppDataState(
     saveEmployee,
     updateEmployeeRate,
     updateEmployeeCostRate,
+    myEmployeeId,
+    leaveRequests,
+    updateEmployeeLeaveDays,
+    submitLeaveRequest,
+    cancelLeaveRequest,
+    decideLeaveRequest,
     updateKmRate,
     updateCloseBuildPin: updateCloseBuildPinValue,
     updateMaterialPrice,
@@ -2467,12 +2570,14 @@ export function AppDataProvider({
   children,
   initialRole,
   myProfileId,
+  myEmployeeId,
 }: {
   children: ReactNode;
   initialRole?: "Admin" | "Brygadzista" | "Pracownik";
   myProfileId?: string | null;
+  myEmployeeId?: string | null;
 }) {
-  const value = useAppDataState(initialRole, myProfileId ?? null);
+  const value = useAppDataState(initialRole, myProfileId ?? null, myEmployeeId ?? null);
   return (
     <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
   );

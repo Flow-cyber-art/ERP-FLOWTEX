@@ -171,6 +171,9 @@ type Employee = {
   // budowie (ZUS pracodawcy, urlopy, sprzęt), osobna od wypłaty
   // ("hourlyRate"). Tak samo widoczna tylko dla Admina.
   costRate: number;
+  // Pula dni urlopowych na rok — widoczna dla każdego (patrz
+  // components/screens/leave-screen.tsx), niepoufna jak stawki powyżej.
+  leaveDaysPerYear: number;
 };
 
 type TimeEntry = {
@@ -287,9 +290,9 @@ const initialAssignments: Assignment[] = [
 ];
 
 const initialEmployees: Employee[] = [
-  { id: "e1", name: "Piotr Zieliński", role: "Brygadzista", hourlyRate: 45, costRate: 0 },
-  { id: "e2", name: "Tomasz Wójcik", role: "Pracownik", hourlyRate: 35, costRate: 0 },
-  { id: "e3", name: "Kamil Mazur", role: "Pracownik", hourlyRate: 35, costRate: 0 },
+  { id: "e1", name: "Piotr Zieliński", role: "Brygadzista", hourlyRate: 45, costRate: 0, leaveDaysPerYear: 26 },
+  { id: "e2", name: "Tomasz Wójcik", role: "Pracownik", hourlyRate: 35, costRate: 0, leaveDaysPerYear: 26 },
+  { id: "e3", name: "Kamil Mazur", role: "Pracownik", hourlyRate: 35, costRate: 0, leaveDaysPerYear: 26 },
 ];
 
 const initialTimeEntries: TimeEntry[] = [];

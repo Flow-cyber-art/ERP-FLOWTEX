@@ -385,12 +385,12 @@ function HomeScreenInner() {
               badgeCount: reportsNeedingFixCount,
             }),
             routeButton("teamTime", "◷", "Czas zespołu"),
-            routeButton("leaves", "☀", "Urlopy"),
+            routeButton("leaves", "☼", "Urlopy"),
             routeButton("admin", "⚙", "Admin"),
           ]
         : [
             routeButton("worker", "◷", "Mój czas"),
-            routeButton("leaves", "☀", "Urlopy"),
+            routeButton("leaves", "☼", "Urlopy"),
             routeButton("admin", "⚙", "Admin"),
           ];
   const nav = isDesktop ? (

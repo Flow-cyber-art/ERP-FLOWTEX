@@ -69,6 +69,24 @@ export type SubmitDailyReportResult = {
   kmCost: number | null;
 };
 
+/**
+ * Błąd z odpowiedzi Supabase (RPC/Postgres) — w odróżnieniu od zwykłego
+ * `Error` niesie `code` z bazy (np. kod wyjątku Postgresa przy
+ * `RAISE EXCEPTION` w `submit_daily_report`). Kolejka offline
+ * (`lib/offline-outbox.ts`) używa obecności `code`, żeby odróżnić
+ * "serwer aktywnie odrzucił zapis" (nie pomoże czekać na internet, bo
+ * internet już jest) od prawdziwego braku połączenia (fetch w ogóle nie
+ * doszedł do serwera, więc `code` nie ma skąd wziąć).
+ */
+export class SupabaseRpcError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "SupabaseRpcError";
+    this.code = code;
+  }
+}
+
 export async function submitDailyReport(
   input: SubmitDailyReportInput,
 ): Promise<SubmitDailyReportResult> {
@@ -81,7 +99,7 @@ export async function submitDailyReport(
     p_km: input.km || null,
     p_note: input.note?.trim() || null,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new SupabaseRpcError(error.message, error.code);
   const result = data as {
     reportId: number;
     materials: SubmitDailyReportResult["materials"];

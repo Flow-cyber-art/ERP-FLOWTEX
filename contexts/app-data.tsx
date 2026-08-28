@@ -1765,12 +1765,26 @@ function useAppDataState(
         extraCosts: extraCostsPayload,
         km: reportSnapshot.km,
         note: reportSnapshot.note,
-      }).then(({ sent }) => {
+      }).then(({ sent, errorMessage, isNetworkError }) => {
         if (!sent) {
-          notify(
-            "Raport zapisany lokalnie",
-            "Brak połączenia z serwerem — raport wyśle się automatycznie, gdy pojawi się internet.",
-          );
+          // isNetworkError === false znaczy, że serwer AKTYWNIE odrzucił
+          // zapis (ma kod błędu z Postgresa) — to nie jest brak internetu,
+          // więc mówienie brygadziście "wyśle się, gdy pojawi się
+          // internet" byłoby mylące: nie wyśle się, dopóki przyczyna nie
+          // zostanie poprawiona. Patrz lib/offline-outbox.ts.
+          if (isNetworkError === false) {
+            notify(
+              "Nie udało się wysłać raportu",
+              errorMessage
+                ? `Raport zapisany lokalnie, ale serwer go odrzucił: ${errorMessage}`
+                : "Raport zapisany lokalnie, ale serwer go odrzucił. Spróbuj ponownie lub skontaktuj się z administratorem.",
+            );
+          } else {
+            notify(
+              "Raport zapisany lokalnie",
+              "Brak połączenia z serwerem — raport wyśle się automatycznie, gdy pojawi się internet.",
+            );
+          }
         } else {
           // Odśwież listę raportów od razu po realnym wysłaniu do
           // Supabase, zamiast czekać na najbliższy refetchInterval

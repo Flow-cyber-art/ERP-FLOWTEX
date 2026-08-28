@@ -284,34 +284,17 @@ function HomeScreenInner() {
     </Pressable>
     );
   };
-  // Desktop: "Budowy" i "Archiwum" to dwie osobne pozycje w sidebarze.
-  // Mobile: w dolnym pasku jest na to za mało miejsca, więc zostaje
-  // jeden przycisk "Budowy" — pierwsze wejście pokazuje aktywne, drugie
-  // wciśnięcie (gdy ta zakładka jest już otwarta) przełącza na archiwum,
-  // trzecie wraca do aktywnych, itd.
-  const buildsButton = isDesktop
-    ? routeButton("builds", "⌂", "Budowy", {
-        isActive: tab === "builds" && buildsView === "active",
-        onPress: () => {
-          setTab("builds");
-          setBuildsView("active");
-        },
-      })
-    : routeButton("builds", "⌂", "Budowy", {
-        onPress: () => {
-          if (tab === "builds") {
-            setBuildsView(buildsView === "active" ? "archive" : "active");
-          } else {
-            setTab("builds");
-            setBuildsView("active");
-          }
-        },
-      });
-  const buildsArchiveButton = routeButton("buildsArchive", "🗄", "Archiwum", {
-    isActive: tab === "builds" && buildsView === "archive",
+  // "Budowy" i "Archiwum budów" to teraz jedna zakładka z filtrem
+  // wewnątrz ekranu (mały przełącznik "Archiwum" obok wyszukiwarki, ten
+  // sam standard co w Magazynie/Raportach/Rozliczeniu), nie osobna
+  // pozycja nawigacji — wejście zawsze pokazuje aktywne budowy,
+  // buildsView (filtr) zostaje w kontekście tylko dlatego, że steruje
+  // nim ekran builds-screen.tsx, a nie ten pasek.
+  const buildsButton = routeButton("builds", "⌂", "Budowy", {
+    isActive: tab === "builds",
     onPress: () => {
       setTab("builds");
-      setBuildsView("archive");
+      setBuildsView("active");
     },
   });
   // Admin: od scalenia z HR (patrz admin-screen.tsx) to jedna zakładka
@@ -338,15 +321,14 @@ function HomeScreenInner() {
         },
       });
   const technologiesButton = routeButton("technologies", "⚗", "Technologie");
-  // Kolejność wg cyklu życia budowy: Budowy (+ Archiwum, sparowane jako
-  // toggle wyżej) → Technologie (receptura) → Magazyn (materiały, sparowane
-  // z Technologie jako toggle na mobile) → Zamówienia → Raporty →
-  // Rozliczenie → Admin na końcu jako funkcja "meta", poza flow budowy.
+  // Kolejność wg cyklu życia budowy: Budowy → Technologie (receptura) →
+  // Magazyn (materiały, sparowane z Technologie jako toggle na mobile) →
+  // Zamówienia → Raporty → Rozliczenie → Admin na końcu jako funkcja
+  // "meta", poza flow budowy.
   const visibleRoutes =
     devRole === "Admin"
       ? [
           buildsButton,
-          ...(isDesktop ? [buildsArchiveButton] : []),
           ...(isDesktop ? [technologiesButton] : []),
           warehouseButton,
           routeButton("orders", "▧", "Zamówienia", {

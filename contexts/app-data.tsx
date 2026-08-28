@@ -2284,6 +2284,13 @@ function useAppDataState(
   return {
     tab,
     devRole,
+    // Prawdziwa rola z profilu Supabase (profiles.role), niezależna od
+    // `devRole` — ta druga zostaje lokalnym, nietrwałym "widokiem"
+    // (patrz setDevRole/"Widok" w admin-screen.tsx), więc UI potrzebuje
+    // sposobu odróżnienia "kim naprawdę jest ten użytkownik" od "co teraz
+    // ogląda", żeby np. Admin podglądający widok Brygadzisty miał gdzie
+    // wrócić.
+    realRole: initialRole,
     myProfileId,
     materials,
     materialBatches,

@@ -99,14 +99,42 @@ export function AdminScreen() {
   );
 }
 
-// Sekcja na przyszłe ustawienia aplikacji. Na razie tylko wylogowanie —
-// celowo na samym końcu i z potwierdzeniem, żeby nie dało się go
-// nacisnąć przez przypadek. Stawka za km (Faza 7) przeniesiona do
-// "Zespół i dniówka" (AdminTeamSection) — dniówka i stawka za km to ten
-// sam rodzaj ustawienia (parametr rozliczeniowy), więc żyją razem.
+// Sekcja na przyszłe ustawienia aplikacji. Stawka za km (Faza 7)
+// przeniesiona do "Zespół i dniówka" (AdminTeamSection) — dniówka i
+// stawka za km to ten sam rodzaj ustawienia (parametr rozliczeniowy),
+// więc żyją razem. Wylogowanie celowo na samym końcu i z potwierdzeniem,
+// żeby nie dało się go nacisnąć przez przypadek.
 function AdminSettingsSection() {
+  const { setDevRole, setTab } = useAppData();
   return (
     <>
+      {/* "Widok Brygadzisty" — Admin bywa na budowie i chce od razu
+          wypełnić raport dzienny bez zakładania osobnego konta
+          brygadzisty. Przełącza tylko lokalny, nietrwały `devRole`
+          (widok UI) — backend i tak autoryzuje Admina do wszystkiego, co
+          może zrobić Brygadzista (submit_daily_report itd.), więc to
+          czysto kosmetyczne uproszczenie ekranu, nie zmiana uprawnień.
+          Powrót: zakładka "Admin" w widoku Brygadzisty pokazuje
+          Ustawienia z przyciskiem "Wróć do widoku Admina" (patrz
+          settings-screen.tsx + realRole w app-data.tsx). */}
+      <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+        <Text className="text-xs text-muted uppercase">Widok</Text>
+        <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
+          Jesteś na budowie i chcesz od razu wypełnić raport? Przełącz się na
+          widok Brygadzisty — bez zakładania osobnego konta. Wrócisz z
+          zakładki „Admin” w tamtym widoku.
+        </Text>
+        <View style={{ marginTop: 12 }}>
+          <Button
+            label="Przełącz na widok Brygadzisty"
+            secondary
+            onPress={() => {
+              setDevRole("Brygadzista");
+              setTab("savedReports");
+            }}
+          />
+        </View>
+      </View>
       <AccountSettingsSection />
       <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
         <Button

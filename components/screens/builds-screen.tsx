@@ -91,6 +91,7 @@ export function BuildsScreen() {
     reopenBuild,
     updateBuildPhotosUrl,
     buildsView,
+    setBuildsView,
     closeBuildPin,
   } = useAppData();
 
@@ -102,9 +103,10 @@ export function BuildsScreen() {
   // Które budowy mają rozwiniętą sekcję raportów, i który konkretny raport
   // (w obrębie dowolnej budowy) jest rozwinięty — jeden na raz wystarcza.
   // Szukajka po numerze/nazwie budowy — ten sam mechanizm co w Raportach
-  // Admina (manager-screen.tsx). Aktywne/Archiwum zostają osobnymi
-  // zakładkami nawigacji (sterowanymi z index.tsx), więc bez osobnego
-  // checkboxa "pokaż zarchiwizowane" — to już robi przełączenie zakładki.
+  // Admina (manager-screen.tsx). Aktywne/Archiwum: mały przełącznik
+  // "Archiwum" obok wyszukiwarki (ten sam standard co w Magazynie/
+  // Raportach/Rozliczeniu), nie osobna zakładka nawigacji — patrz
+  // buildsView w kontekście i setBuildsView niżej.
   const [buildQuery, setBuildQuery] = useState("");
   const [expandedBuildReports, setExpandedBuildReports] = useState<
     Record<string, boolean>
@@ -219,19 +221,45 @@ export function BuildsScreen() {
     <>
   <>
     <ScreenHeader
-      title={isArchiveView ? "Archiwum budów" : "Budowy"}
+      title="Budowy"
       action={
         !isArchiveView ? (
           <Button label="+ Nowa" onPress={() => setShowBuild(!showBuild)} />
         ) : undefined
       }
     />
-    <Field
-      placeholder="🔍 Szukaj budowy…"
-      value={buildQuery}
-      onChangeText={setBuildQuery}
-      style={{ marginBottom: 16 }}
-    />
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
+      <View style={{ flex: 1 }}>
+        <Field
+          placeholder="🔍 Szukaj budowy…"
+          value={buildQuery}
+          onChangeText={setBuildQuery}
+        />
+      </View>
+      <Pressable
+        onPress={() => setBuildsView(isArchiveView ? "active" : "archive")}
+        hitSlop={8}
+        style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+      >
+        <View
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 5,
+            borderWidth: 1,
+            borderColor: isArchiveView ? COLORS.primary : COLORS.border,
+            backgroundColor: isArchiveView ? COLORS.primary : "transparent",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {isArchiveView && (
+            <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>✓</Text>
+          )}
+        </View>
+        <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "600" }}>Archiwum</Text>
+      </Pressable>
+    </View>
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
         <Field

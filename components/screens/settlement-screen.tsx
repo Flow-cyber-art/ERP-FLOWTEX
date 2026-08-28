@@ -277,13 +277,13 @@ export function SettlementScreen() {
         <Pressable
           onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
           hitSlop={8}
-          style={{ alignItems: "center", paddingHorizontal: 2 }}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
         >
           <View
             style={{
-              width: 22,
-              height: 22,
-              borderRadius: 6,
+              width: 18,
+              height: 18,
+              borderRadius: 5,
               borderWidth: 1,
               borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
               backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
@@ -292,12 +292,12 @@ export function SettlementScreen() {
             }}
           >
             {showArchivedBuilds && (
-              <Text style={{ color: COLORS.background, fontSize: 13, fontWeight: "800" }}>
+              <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
                 ✓
               </Text>
             )}
           </View>
-          <Text style={{ color: COLORS.muted, fontSize: 9, marginTop: 2 }}>Archiwum</Text>
+          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "600" }}>Archiwum</Text>
         </Pressable>
       </View>
 

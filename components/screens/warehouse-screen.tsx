@@ -266,13 +266,13 @@ export function WarehouseScreen() {
       <Pressable
         onPress={() => setShowArchivedMaterials(!showArchivedMaterials)}
         hitSlop={8}
-        style={{ alignItems: "center", paddingHorizontal: 2 }}
+        style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
       >
         <View
           style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
+            width: 18,
+            height: 18,
+            borderRadius: 5,
             borderWidth: 1,
             borderColor: showArchivedMaterials ? COLORS.primary : COLORS.border,
             backgroundColor: showArchivedMaterials ? COLORS.primary : "transparent",
@@ -281,10 +281,10 @@ export function WarehouseScreen() {
           }}
         >
           {showArchivedMaterials && (
-            <Text style={{ color: COLORS.background, fontSize: 13, fontWeight: "800" }}>✓</Text>
+            <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>✓</Text>
           )}
         </View>
-        <Text style={{ color: COLORS.muted, fontSize: 9, marginTop: 2 }}>Archiwum</Text>
+        <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "600" }}>Archiwum</Text>
       </Pressable>
     </View>
     <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>

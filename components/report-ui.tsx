@@ -136,6 +136,13 @@ type Assignment = {
   // budowy — żeby późniejsza zmiana ceny w magazynie nie przeliczała
   // wstecz kosztu już trwających/zamkniętych budów.
   unitPrice: number;
+  // Skumulowany, RZECZYWISTY koszt FIFO tego, co faktycznie zeszło z
+  // partii przy raportach dziennych (build_materials."actualCost",
+  // liczone przez submit_daily_report) — NIE to samo co `used * unitPrice`
+  // (ta ostatnia to tylko cena zamrożona przy przypisaniu, uśredniona,
+  // niezależna od realnych cen konkretnych partii, z których materiał
+  // faktycznie zszedł).
+  actualCost: number;
 };
 
 export type ExtraCost = {
@@ -269,10 +276,10 @@ const initialBuilds: Build[] = [
 ];
 
 const initialAssignments: Assignment[] = [
-  { buildId: "b1", materialId: "m1", planned: 18, used: 0, unitPrice: 58 },
-  { buildId: "b1", materialId: "m2", planned: 24, used: 0, unitPrice: 34 },
-  { buildId: "b1", materialId: "m4", planned: 4, used: 0, unitPrice: 12 },
-  { buildId: "b2", materialId: "m3", planned: 36, used: 0, unitPrice: 6.5 },
+  { buildId: "b1", materialId: "m1", planned: 18, used: 0, unitPrice: 58, actualCost: 0 },
+  { buildId: "b1", materialId: "m2", planned: 24, used: 0, unitPrice: 34, actualCost: 0 },
+  { buildId: "b1", materialId: "m4", planned: 4, used: 0, unitPrice: 12, actualCost: 0 },
+  { buildId: "b2", materialId: "m3", planned: 36, used: 0, unitPrice: 6.5, actualCost: 0 },
 ];
 
 const initialEmployees: Employee[] = [

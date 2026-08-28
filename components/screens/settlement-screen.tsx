@@ -23,7 +23,6 @@ export function SettlementScreen() {
     materials,
     assignments,
     buildMaterialPlans,
-    buildMaterialLots,
     savedReports,
     employees,
     teamMembers,
@@ -63,18 +62,21 @@ export function SettlementScreen() {
   const build =
     visibleBuilds.find((b) => b.id === selectedId) ?? visibleBuilds[0] ?? null;
 
+  // Koszt materiału na budowie = RZECZYWISTY, skumulowany koszt FIFO
+  // doliczony przez submit_daily_report przy raportach dziennych
+  // (build_materials."actualCost", patrz Assignment.actualCost w
+  // components/report-ui.tsx) — NIE wartość partii aktualnie
+  // przypisanych/leżących na budowie (build_material_lots), która rosła
+  // już przy samym PRZYPISANIU materiału, zanim ktokolwiek go zużył —
+  // stąd wcześniej "Koszt" potrafił pokazywać wartość, mimo że "Zużyto"
+  // było wciąż zerowe (materiał trafił na budowę, ale nie było jeszcze
+  // żadnego raportu, który by go rozliczył).
   const materialCostFor = (materialId: string) => {
     if (!build) return 0;
-    const lots = buildMaterialLots.filter(
-      (l) => l.buildId === Number(build.id) && String(l.materialId) === materialId,
-    );
-    if (lots.length > 0) {
-      return lots.reduce((sum, l) => sum + Number(l.quantity) * Number(l.unitPrice), 0);
-    }
     const a = assignments.find(
       (x) => x.buildId === build.id && x.materialId === materialId,
     );
-    return a ? a.used * a.unitPrice : 0;
+    return a?.actualCost ?? 0;
   };
 
   // Dopasowanie planu (build_material_plan) do realnego zużycia
@@ -139,7 +141,7 @@ export function SettlementScreen() {
         koszt: items.reduce((sum, i) => sum + i.koszt, 0),
       };
     });
-  }, [build, buildMaterialPlans, materials, assignments, buildMaterialLots]);
+  }, [build, buildMaterialPlans, materials, assignments]);
 
   // Zbiór materialId dopasowanych do planu (po ID lub po nazwie) — używany
   // do wykluczenia tych materiałów z sekcji "pomocnicze spoza planu", żeby

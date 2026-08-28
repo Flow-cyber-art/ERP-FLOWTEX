@@ -15,9 +15,13 @@ export type BuildMaterialRow = {
   planned: string;
   used: string;
   unitPrice: string;
+  // Skumulowany, RZECZYWISTY koszt FIFO doliczany przez submit_daily_report
+  // przy każdym raporcie — patrz komentarz przy Assignment.actualCost w
+  // components/report-ui.tsx.
+  actualCost: string;
 };
 
-const BUILD_MATERIAL_COLUMNS = "buildId, materialId, planned, used, unitPrice";
+const BUILD_MATERIAL_COLUMNS = 'buildId, materialId, planned, used, unitPrice, "actualCost"';
 
 export async function listBuildMaterials(): Promise<BuildMaterialRow[]> {
   const { data, error } = await supabase.from("build_materials").select(BUILD_MATERIAL_COLUMNS);

@@ -792,6 +792,7 @@ function useAppDataState(
         planned: Number(a.planned),
         used: Number(a.used),
         unitPrice: Number(a.unitPrice),
+        actualCost: Number(a.actualCost),
       })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1080,6 +1081,7 @@ function useAppDataState(
           (d.assignments || initialAssignments).map((a: Assignment) => ({
             ...a,
             unitPrice: a.unitPrice || 0,
+            actualCost: a.actualCost || 0,
           })),
         );
         setEmployees(

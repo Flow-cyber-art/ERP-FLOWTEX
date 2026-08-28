@@ -251,40 +251,47 @@ export function WarehouseScreen() {
         </View>
       </View>
     )}
-    <Field
-      placeholder="Szukaj po nazwie lub indeksie"
-      value={query}
-      onChangeText={setQuery}
-    />
-    <Pressable
-      onPress={() => setShowArchivedMaterials(!showArchivedMaterials)}
-      style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}
-    >
-      <View
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: 4,
-          borderWidth: 1,
-          borderColor: showArchivedMaterials ? COLORS.primary : COLORS.border,
-          backgroundColor: showArchivedMaterials ? COLORS.primary : "transparent",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {showArchivedMaterials && (
-          <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>✓</Text>
-        )}
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <View style={{ flex: 1 }}>
+        <Field
+          placeholder="Szukaj po nazwie lub indeksie"
+          value={query}
+          onChangeText={setQuery}
+        />
       </View>
-      <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
-        Pokaż zarchiwizowane materiały
-      </Text>
-    </Pressable>
+      {/* Mały przełącznik obok wyszukiwarki, nie osobny wiersz na pełną
+          szerokość — to rzadko używana opcja (archiwum), nie jedno z
+          głównych pytań, na które ekran ma odpowiadać (patrz filtr
+          przypisania niżej), więc nie zasługuje na tyle samo miejsca. */}
+      <Pressable
+        onPress={() => setShowArchivedMaterials(!showArchivedMaterials)}
+        hitSlop={8}
+        style={{ alignItems: "center", paddingHorizontal: 2 }}
+      >
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: showArchivedMaterials ? COLORS.primary : COLORS.border,
+            backgroundColor: showArchivedMaterials ? COLORS.primary : "transparent",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {showArchivedMaterials && (
+            <Text style={{ color: COLORS.background, fontSize: 13, fontWeight: "800" }}>✓</Text>
+          )}
+        </View>
+        <Text style={{ color: COLORS.muted, fontSize: 9, marginTop: 2 }}>Archiwum</Text>
+      </Pressable>
+    </View>
     <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
       {(
         [
           { key: "all", label: "Wszystkie" },
-          { key: "assigned", label: "Przypisane do budowy" },
+          { key: "assigned", label: "Przypisane" },
           { key: "unassigned", label: "Nieprzypisane" },
         ] as const
       ).map((opt) => {

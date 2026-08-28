@@ -19,6 +19,11 @@ alter table employees add column if not exists "costRate" decimal(10, 2);
 
 revoke select ("costRate") on employees from authenticated;
 
+-- CREATE OR REPLACE nie pozwala zmienić kształtu wiersza zwracanego przez
+-- funkcję z OUT-parametrami ("cannot change return type of existing
+-- function") — trzeba najpierw usunąć starą wersję (z 044).
+drop function if exists get_employees();
+
 create or replace function get_employees()
 returns table (
   id integer,

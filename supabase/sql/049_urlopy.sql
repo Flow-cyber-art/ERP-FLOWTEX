@@ -62,6 +62,10 @@ create index if not exists leave_requests_employee_idx on leave_requests ("emplo
 -- 044/048) — pracownik musi widzieć własną pulę na ekranie Urlopy, więc
 -- rozszerzamy get_employees() o tę kolumnę bez ukrywania (widoczna dla
 -- każdego zalogowanego, tak jak name/role).
+-- CREATE OR REPLACE nie pozwala zmienić kształtu wiersza zwracanego przez
+-- funkcję z OUT-parametrami — trzeba najpierw usunąć starą wersję (z 048).
+drop function if exists get_employees();
+
 create or replace function get_employees()
 returns table (
   id integer,

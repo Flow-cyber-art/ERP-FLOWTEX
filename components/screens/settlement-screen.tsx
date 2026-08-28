@@ -248,10 +248,7 @@ export function SettlementScreen() {
 
   return (
     <>
-      <ScreenHeader
-        title="Rozliczenie budowy"
-        description="Plan, przypisano, zużyto, koszt i marża — spięte z faz 0–7."
-      />
+      <ScreenHeader title="Rozliczenie budowy" />
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <Pressable

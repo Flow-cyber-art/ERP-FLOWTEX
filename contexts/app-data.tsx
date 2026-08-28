@@ -468,7 +468,16 @@ function useAppDataState(
     queryKey: ["builds", "list"],
     queryFn: listBuilds,
     retry: 1,
-    refetchOnWindowFocus: false,
+    // Realtime samo w sobie potrafi zgubić zdarzenie (zerwane websocket na
+    // telefonie brygadzisty, apka w tle w momencie, gdy Admin tworzy
+    // katalog na zdjęcia) — bez siatki bezpieczeństwa `photosUrl` zostawał
+    // wtedy na zawsze `null` w tej sesji, dopóki ktoś nie zrestartował
+    // apki (zgłoszone: przycisk "Zrób zdjęcie" u brygadzisty nie
+    // odblokowywał się po utworzeniu katalogu przez Admina). Ten sam wzorzec
+    // co reportsQuery niżej: refetch przy powrocie na kartę/ekran +
+    // lekki interval jako fallback.
+    refetchOnWindowFocus: true,
+    refetchInterval: 60000,
     staleTime: Infinity,
   });
   const materialsQuery = useQuery({

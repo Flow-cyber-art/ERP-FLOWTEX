@@ -326,6 +326,21 @@ function HomeScreenInner() {
         },
       });
   const technologiesButton = routeButton("technologies", "⚗", "Technologie");
+  // Zamówienia/Raporty: tak samo jak Magazyn/Technologie wyżej, mobile ma
+  // za mało miejsca w dolnym pasku na dwie osobne pozycje — jedna
+  // pozycja, która pokazuje aktualnie wybraną z tych dwóch zakładek, a
+  // powtórne wciśnięcie przełącza na drugą. Desktop (sidebar, miejsca pod
+  // dostatkiem) zostaje przy dwóch osobnych pozycjach.
+  const ordersManagerButton = routeButton(
+    "ordersManager",
+    tab === "manager" ? "▥" : "▧",
+    tab === "manager" ? "Raporty" : "Zamówienia",
+    {
+      isActive: tab === "orders" || tab === "manager",
+      badgeCount: pendingOrdersCount + reportsPendingApprovalCount,
+      onPress: () => setTab(tab === "orders" ? "manager" : "orders"),
+    },
+  );
   // Kolejność wg cyklu życia budowy: Budowy → Technologie (receptura) →
   // Magazyn (materiały, sparowane z Technologie jako toggle na mobile) →
   // Zamówienia → Raporty → Rozliczenie → Admin na końcu jako funkcja
@@ -336,12 +351,16 @@ function HomeScreenInner() {
           buildsButton,
           ...(isDesktop ? [technologiesButton] : []),
           warehouseButton,
-          routeButton("orders", "▧", "Zamówienia", {
-            badgeCount: pendingOrdersCount,
-          }),
-          routeButton("manager", "▥", "Raporty", {
-            badgeCount: reportsPendingApprovalCount,
-          }),
+          ...(isDesktop
+            ? [
+                routeButton("orders", "▧", "Zamówienia", {
+                  badgeCount: pendingOrdersCount,
+                }),
+                routeButton("manager", "▥", "Raporty", {
+                  badgeCount: reportsPendingApprovalCount,
+                }),
+              ]
+            : [ordersManagerButton]),
           routeButton("settlement", "Σ", "Rozliczenie"),
           adminButton,
         ]

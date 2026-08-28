@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { DateField } from "@/components/date-field";
 import {
   COLORS,
@@ -152,6 +153,11 @@ export function BuildsScreen() {
   // karty budowy — trzyma id tej budowy, więc formularz nie musi już pytać
   // o budowę (setSelectedBuildId dzieje się przy otwarciu).
   const [assignBuildId, setAssignBuildId] = useState<string | null>(null);
+  // Filtr w wyszukiwarce partii przy przypisywaniu materiału do budowy —
+  // pokazuje tylko materiały, których ta budowa jeszcze w ogóle nie ma
+  // (żadnej partii), żeby szybko widzieć, czego jeszcze brakuje, zamiast
+  // przewijać całą listę magazynu wymieszaną z tym, co już przypisane.
+  const [onlyUnassignedInPicker, setOnlyUnassignedInPicker] = useState(false);
   // Wiersz materiału dodatkowego jest klikalny i rozwija swoje szczegóły
   // (cena, wartość) — jeden naraz, ten sam wzorzec co reszta akordeonów
   // na tym ekranie. Klucz: `${buildId}-${materialId}`.
@@ -1212,6 +1218,31 @@ export function BuildsScreen() {
                             value={pickerQuery}
                             onChangeText={setPickerQuery}
                           />
+                          <Pressable
+                            onPress={() => setOnlyUnassignedInPicker(!onlyUnassignedInPicker)}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              marginTop: 8,
+                              paddingVertical: 4,
+                            }}
+                          >
+                            <MaterialIcons
+                              name={onlyUnassignedInPicker ? "check-box" : "check-box-outline-blank"}
+                              size={18}
+                              color={onlyUnassignedInPicker ? COLORS.primary : COLORS.muted}
+                            />
+                            <Text
+                              style={{
+                                color: onlyUnassignedInPicker ? COLORS.foreground : COLORS.muted,
+                                fontSize: 12,
+                                fontWeight: "600",
+                                marginLeft: 6,
+                              }}
+                            >
+                              Tylko nieprzypisane do tej budowy
+                            </Text>
+                          </Pressable>
                           <ScrollView style={{ maxHeight: 260 }}>
                             {warehouseBatches
                               .map((wb) => ({
@@ -1225,6 +1256,13 @@ export function BuildsScreen() {
                                 `${material!.name} ${material!.index}`
                                   .toLowerCase()
                                   .includes(pickerQuery.toLowerCase()),
+                              )
+                              .filter(
+                                ({ material }) =>
+                                  !onlyUnassignedInPicker ||
+                                  !buildAssignments.some(
+                                    (a) => a.materialId === material!.id,
+                                  ),
                               )
                               .sort((x, y) => x.material!.name.localeCompare(y.material!.name))
                               .map(({ batch, material }) => (

@@ -164,6 +164,7 @@ const EMPTY_NEW_EMPLOYEE: NewEmployeeInput = {
   name: "",
   role: "Pracownik",
   hourlyRate: "",
+  costRate: "",
 };
 
 function AdminTeamSection() {
@@ -179,6 +180,7 @@ function AdminTeamSection() {
     updateCloseBuildPin,
     saveEmployee,
     updateEmployeeRate,
+    updateEmployeeCostRate,
   } = useAppData();
 
   const [newEmployee, setNewEmployee] = useState<NewEmployeeInput>(EMPTY_NEW_EMPLOYEE);
@@ -190,6 +192,7 @@ function AdminTeamSection() {
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [editingRateId, setEditingRateId] = useState<string | null>(null);
   const [rateInput, setRateInput] = useState("");
+  const [costRateInput, setCostRateInput] = useState("");
 
   useEffect(() => {
     setKmRateInput(kmRate ? String(kmRate) : "");
@@ -465,12 +468,23 @@ function AdminTeamSection() {
           </View>
           <View style={{ marginTop: 10 }}>
             <Text className="text-xs text-muted uppercase mb-2">
-              Stawka godzinowa (PLN/h)
+              Stawka godzinowa (PLN/h) — wypłata
             </Text>
             <QuantityStepper
               value={newEmployee.hourlyRate}
               onChangeText={(value: string) =>
                 setNewEmployee({ ...newEmployee, hourlyRate: value })
+              }
+            />
+          </View>
+          <View style={{ marginTop: 10 }}>
+            <Text className="text-xs text-muted uppercase mb-2">
+              Stawka kosztowa (PLN/h) — koszt budowy
+            </Text>
+            <QuantityStepper
+              value={newEmployee.costRate}
+              onChangeText={(value: string) =>
+                setNewEmployee({ ...newEmployee, costRate: value })
               }
             />
           </View>
@@ -509,6 +523,7 @@ function AdminTeamSection() {
                 } else {
                   setEditingRateId(employee.id);
                   setRateInput(String(employee.hourlyRate || ""));
+                  setCostRateInput(String(employee.costRate || ""));
                 }
               }}
               style={{
@@ -526,7 +541,8 @@ function AdminTeamSection() {
                   {employee.name}
                 </Text>
                 <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                  {formatPLN(employee.hourlyRate || 0)}/h
+                  {formatPLN(employee.hourlyRate || 0)}/h wypłata ·{" "}
+                  {formatPLN(employee.costRate || 0)}/h koszt budowy
                 </Text>
               </View>
               <Text
@@ -547,21 +563,29 @@ function AdminTeamSection() {
                 }}
               >
                 <Text className="text-xs text-muted uppercase mb-2">
-                  Stawka godzinowa (PLN/h)
+                  Stawka godzinowa (PLN/h) — wypłata
                 </Text>
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  <View style={{ flex: 1 }}>
-                    <QuantityStepper
-                      value={rateInput}
-                      onChangeText={setRateInput}
-                    />
-                  </View>
+                <QuantityStepper value={rateInput} onChangeText={setRateInput} />
+                <Text
+                  className="text-xs text-muted uppercase mb-2"
+                  style={{ marginTop: 10 }}
+                >
+                  Stawka kosztowa (PLN/h) — koszt budowy
+                </Text>
+                <QuantityStepper
+                  value={costRateInput}
+                  onChangeText={setCostRateInput}
+                />
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
                   <Pressable
                     onPress={() => setEditingRateId(null)}
                     style={{
+                      flex: 1,
                       borderRadius: 10,
                       paddingHorizontal: 16,
+                      paddingVertical: 12,
                       justifyContent: "center",
+                      alignItems: "center",
                       borderWidth: 1,
                       borderColor: COLORS.border,
                     }}
@@ -573,13 +597,17 @@ function AdminTeamSection() {
                   <Pressable
                     onPress={() => {
                       updateEmployeeRate(employee.id, Number(rateInput) || 0);
+                      updateEmployeeCostRate(employee.id, Number(costRateInput) || 0);
                       setEditingRateId(null);
                     }}
                     style={{
+                      flex: 1,
                       backgroundColor: COLORS.primary,
                       borderRadius: 10,
                       paddingHorizontal: 16,
+                      paddingVertical: 12,
                       justifyContent: "center",
+                      alignItems: "center",
                     }}
                   >
                     <Text style={{ color: COLORS.background, fontWeight: "700" }}>

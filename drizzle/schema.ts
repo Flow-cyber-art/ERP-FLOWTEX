@@ -96,6 +96,10 @@ export const employees = pgTable("employees", {
   hourlyRate: decimal("hourlyRate", { precision: 10, scale: 2 })
     .notNull()
     .default("0"),
+  // Stawka kosztowa doliczana do kosztów budowy (narzuty ponad wypłatę:
+  // ZUS pracodawcy, urlopy, sprzęt) — osobna od "hourlyRate" (wypłata).
+  // Patrz supabase/sql/048_stawka_kosztowa_pracownika.sql.
+  costRate: decimal("costRate", { precision: 10, scale: 2 }),
   userId: integer("userId").references(() => users.id, { onDelete: "set null" }),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

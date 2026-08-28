@@ -167,6 +167,10 @@ type Employee = {
   // zespołem (panel administratora). Widoczna tylko tam, nie na
   // ekranach Brygadzisty/Pracownika.
   hourlyRate: number;
+  // Stawka kosztowa (PLN/h) — narzuty doliczane do kosztu robocizny na
+  // budowie (ZUS pracodawcy, urlopy, sprzęt), osobna od wypłaty
+  // ("hourlyRate"). Tak samo widoczna tylko dla Admina.
+  costRate: number;
 };
 
 type TimeEntry = {
@@ -283,9 +287,9 @@ const initialAssignments: Assignment[] = [
 ];
 
 const initialEmployees: Employee[] = [
-  { id: "e1", name: "Piotr Zieliński", role: "Brygadzista", hourlyRate: 45 },
-  { id: "e2", name: "Tomasz Wójcik", role: "Pracownik", hourlyRate: 35 },
-  { id: "e3", name: "Kamil Mazur", role: "Pracownik", hourlyRate: 35 },
+  { id: "e1", name: "Piotr Zieliński", role: "Brygadzista", hourlyRate: 45, costRate: 0 },
+  { id: "e2", name: "Tomasz Wójcik", role: "Pracownik", hourlyRate: 35, costRate: 0 },
+  { id: "e3", name: "Kamil Mazur", role: "Pracownik", hourlyRate: 35, costRate: 0 },
 ];
 
 const initialTimeEntries: TimeEntry[] = [];

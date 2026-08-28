@@ -28,6 +28,7 @@ import {
 import {
   createEmployee,
   listEmployees,
+  updateEmployeeCostRate as updateEmployeeCostRateRemote,
   updateEmployeeRate as updateEmployeeRateRemote,
 } from "@/lib/data/employees";
 import {
@@ -126,6 +127,7 @@ export type NewEmployeeInput = {
   name: string;
   role: string;
   hourlyRate: string;
+  costRate: string;
 };
 
 export type NewTeamInput = {
@@ -717,6 +719,7 @@ function useAppDataState(
         name: e.name,
         role: e.role,
         hourlyRate: Number(e.hourlyRate),
+        costRate: Number(e.costRate) || 0,
       })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -955,6 +958,10 @@ function useAppDataState(
     mutationFn: (vars: { employeeId: number; hourlyRate: number }) =>
       updateEmployeeRateRemote(vars.employeeId, vars.hourlyRate),
   });
+  const updateEmployeeCostRateMutation = useMutation({
+    mutationFn: (vars: { employeeId: number; costRate: number }) =>
+      updateEmployeeCostRateRemote(vars.employeeId, vars.costRate),
+  });
   const createTeamMutation = useMutation({ mutationFn: createTeamRemote });
   const addTeamMemberMutation = useMutation({
     mutationFn: (vars: { teamId: number; employeeId: number }) =>
@@ -1102,6 +1109,7 @@ function useAppDataState(
           (d.employees || initialEmployees).map((e: Employee) => ({
             ...e,
             hourlyRate: e.hourlyRate || 0,
+            costRate: e.costRate || 0,
           })),
         );
         setTimeEntries(d.timeEntries || initialTimeEntries);
@@ -1851,6 +1859,7 @@ function useAppDataState(
         name: newEmployee.name,
         role: newEmployee.role,
         hourlyRate: Number(newEmployee.hourlyRate) || 0,
+        costRate: Number(newEmployee.costRate) || 0,
       });
       await invalidate("employees");
       onSaved();
@@ -1902,6 +1911,21 @@ function useAppDataState(
       await invalidate("employees");
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać stawki.");
+    }
+  };
+  // Edycja stawki kosztowej (koszty budowy) istniejącego pracownika —
+  // osobna od stawki wypłatowej powyżej (panel administratora).
+  const updateEmployeeCostRate = async (employeeId: string, rate: number) => {
+    const numericId = Number(employeeId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await updateEmployeeCostRateMutation.mutateAsync({
+        employeeId: numericId,
+        costRate: rate,
+      });
+      await invalidate("employees");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać stawki kosztowej.");
     }
   };
   // Stawka za km (Faza 7) — edytowana wyłącznie przez Admina (RLS), patrz
@@ -2416,6 +2440,7 @@ function useAppDataState(
     saveDailyReport,
     saveEmployee,
     updateEmployeeRate,
+    updateEmployeeCostRate,
     updateKmRate,
     updateCloseBuildPin: updateCloseBuildPinValue,
     updateMaterialPrice,

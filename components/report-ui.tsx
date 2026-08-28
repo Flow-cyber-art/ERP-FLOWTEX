@@ -1325,11 +1325,25 @@ const ReportCard = ({
               Object.entries(report.materialValues).map(
                 ([materialId, used], i) => {
                   const material = materials.find((m) => m.id === materialId);
-                  const plan = planned.find(
+                  const assignment = planned.find(
                     (a) => a.materialId === materialId,
-                  )?.planned;
+                  );
+                  const plan = assignment?.planned;
+                  // `used` w report.materialValues to DZISIEJSZE zużycie
+                  // TEGO raportu (od 047_raport_dzienna_ilosc_nie_
+                  // skumulowana.sql), nie stan całkowity budowy — do
+                  // porównania z planem bierzemy ŻYWY licznik budowy
+                  // (assignment.used), nie wartość z tego pojedynczego
+                  // raportu. Dla raportu, który jest najnowszym dla tej
+                  // budowy/materiału (typowy przypadek: przegląd świeżo
+                  // wysłanego raportu), to dokładny stan "do tej pory";
+                  // dla starszych, już zatwierdzonych raportów pokazuje
+                  // aktualny stan budowy, nie historyczny zamrożony stan z
+                  // dnia wysyłki (ta historia już nigdzie nie jest
+                  // trzymana, patrz nagłówek migracji 047).
                   const usedNum = Number(used) || 0;
-                  const ratio = plan ? usedNum / plan : null;
+                  const totalUsed = assignment ? assignment.used : usedNum;
+                  const ratio = plan ? totalUsed / plan : null;
                   // Zielony = w normie, pomarańczowy = lekkie przekroczenie,
                   // czerwony = znaczne — żeby nie trzeba było porównywać dwóch
                   // liczb w głowie, sam kolor/pasek już to mówi.
@@ -1339,7 +1353,7 @@ const ReportCard = ({
                       : ratio <= 1.15
                         ? COLORS.warning
                         : COLORS.danger;
-                  const differs = plan !== undefined && usedNum !== plan;
+                  const differs = plan !== undefined && totalUsed !== plan;
                   const reason = report.reasons[materialId];
                   const cost = report.materialCosts?.[materialId];
                   return (
@@ -1364,15 +1378,22 @@ const ReportCard = ({
                       >
                         <Text
                           style={{
-                            color: differs ? COLORS.warning : COLORS.foreground,
+                            color: COLORS.foreground,
                             fontWeight: "800",
                             fontSize: 15,
                           }}
                         >
-                          {usedNum} {material?.unit}
+                          dziś: {usedNum} {material?.unit}
                         </Text>
-                        <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                          {plan !== undefined ? `z ${plan} ${material?.unit} planu` : ""}
+                        <Text
+                          style={{
+                            color: differs ? COLORS.warning : COLORS.muted,
+                            fontSize: 12,
+                          }}
+                        >
+                          {plan !== undefined
+                            ? `łącznie ${totalUsed} z ${plan} ${material?.unit} planu`
+                            : `łącznie ${totalUsed} ${material?.unit}`}
                         </Text>
                       </View>
                       {plan !== undefined && plan > 0 && (
@@ -1389,7 +1410,7 @@ const ReportCard = ({
                             style={{
                               height: 4,
                               borderRadius: 2,
-                              width: `${Math.min(100, (usedNum / plan) * 100)}%`,
+                              width: `${Math.min(100, (totalUsed / plan) * 100)}%`,
                               backgroundColor: barColor,
                             }}
                           />

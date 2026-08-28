@@ -1036,9 +1036,14 @@ function useAppDataState(
     "roboczy" | "wysłany" | "do poprawy" | "zatwierdzony"
   >("roboczy");
   const [adminComment, setAdminComment] = useState("");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(
-    initialEmployees[0].id,
-  );
+  // Celowo BEZ domyślnej osoby — wcześniej startowało od
+  // `initialEmployees[0].id`, więc wciśnięcie "Dodaj" bez otwierania
+  // listy pracowników po cichu dodawało pierwszego z listy, jakby ktoś go
+  // wybrał (zgłoszone jako "dodanie pustej osoby bez wybierania niczego").
+  // Pusty string nie pasuje do żadnego prawdziwego pracownika, więc
+  // przycisk pokazuje placeholder "Wybierz pracownika", a addPersonToDraft
+  // niżej wymaga jawnego wyboru.
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
   const [personStart, setPersonStart] = useState("07:00");
   const [personEnd, setPersonEnd] = useState("15:00");
@@ -1617,8 +1622,16 @@ function useAppDataState(
     };
     relevantAssignments.forEach((assignment) => {
       if (reportValues[assignment.materialId] === undefined) return;
-      const newUsed = Number(reportValues[assignment.materialId] || 0);
-      const delta = newUsed - assignment.used;
+      // reportValues trzyma DZISIEJSZE zużycie tego raportu (od zera), nie
+      // nowy stan całkowity budowy — patrz getReportDefaults i
+      // 047_raport_dzienna_ilosc_nie_skumulowana.sql. Delta do zastosowania
+      // liczona jest więc względem tego, co TEN SAM raport już wcześniej
+      // zapisał (existingReport), nie względem życiowego `assignment.used`.
+      const newDaily = Number(reportValues[assignment.materialId] || 0);
+      const oldDaily = Number(
+        existingReport?.materialValues[assignment.materialId] || 0,
+      );
+      const delta = newDaily - oldDaily;
       if (delta > 0) {
         const result = consumeFIFOWithCostPure(
           nextBatches,
@@ -1688,7 +1701,9 @@ function useAppDataState(
       prevAssignments.map((a) => {
         if (a.buildId !== buildId || reportValues[a.materialId] === undefined)
           return a;
-        return { ...a, used: Number(reportValues[a.materialId] || 0) };
+        const newDaily = Number(reportValues[a.materialId] || 0);
+        const oldDaily = Number(existingReport?.materialValues[a.materialId] || 0);
+        return { ...a, used: Math.max(0, a.used + (newDaily - oldDaily)) };
       }),
     );
     if (draftPeople.length) {
@@ -2067,7 +2082,14 @@ function useAppDataState(
     }
   };
   const addPersonToDraft = () => {
-    if (!selectedEmployeeId || !personStart || !personEnd) return;
+    if (!selectedEmployeeId) {
+      notify(
+        "Nie wybrano pracownika",
+        "Wskaż osobę z listy przed dodaniem godzin pracy.",
+      );
+      return;
+    }
+    if (!personStart || !personEnd) return;
     const [sh, sm] = personStart.split(":").map(Number);
     const [eh, em] = personEnd.split(":").map(Number);
     if (
@@ -2100,6 +2122,17 @@ function useAppDataState(
       "lastPersonTime",
       JSON.stringify({ start: personStart, end: personEnd }),
     );
+    // Wróć do "nikt nie wybrany" po dodaniu — inaczej selectedEmployeeId
+    // zostawałby ustawiony na ostatnio dodaną osobę i drugie "Dodaj" z
+    // rzędu (np. przez pomyłkę) po cichu dodałoby ją ponownie zamiast
+    // wymagać nowego, świadomego wyboru.
+    setSelectedEmployeeId("");
+  };
+  // Usunięcie pomyłkowo dodanej osoby z koszyka raportu (np. zły
+  // pracownik albo złe godziny) — analogiczne "✕" jak przy materiałach
+  // pomocniczych (removeFromDraft).
+  const removePersonFromDraft = (employeeId: string) => {
+    setDraftPeople(draftPeople.filter((person) => person.employeeId !== employeeId));
   };
   const addExtraCostToDraft = (
     label: string,
@@ -2144,25 +2177,15 @@ function useAppDataState(
   // selectedBuildId celowo NIE jest resetowany — to zwykle ta sama
   // budowa, na której brygadzista właśnie pracuje.
   //
-  // Pole "zużyto" per materiał trzyma NOWY STAN CAŁKOWITY (skumulowany od
-  // początku budowy), nie przyrost dnia — tak liczy różnicę
-  // submit_daily_report/saveDailyReportUnsafe (`delta = wpisana_ilość -
-  // assignment.used`). Startowanie od pustego pola przy nowym raporcie
-  // (dzień 2., 3., ...) prowadziło do tego, że brygadzista, wpisując
-  // naturalnie "ile zużyłem DZIŚ" zamiast sumy narastająco, wywoływał
-  // ujemną deltę — RPC brał to za korektę w dół, cichcem "zwracał"
-  // materiał do puli budowy i zaniżał koszt budowy, mimo że fizycznie nic
-  // nie wróciło. Dlatego pole musi startować od bieżącego `a.used`, nie
-  // od zera — brygadzista wtedy dopisuje dzisiejszą ilość NA WIERZCHU
-  // sumy, zamiast wpisywać ją od zera.
-  const getReportDefaults = (buildId: string): Record<string, string> => {
-    const defaults: Record<string, string> = {};
-    for (const a of assignments) {
-      if (a.buildId === buildId) {
-        defaults[a.materialId] = String(a.used);
-      }
-    }
-    return defaults;
+  // Pole "zużyto" per materiał trzyma DZISIEJSZE zużycie tego raportu
+  // (od zera), NIE nowy stan całkowity — patrz 047_raport_dzienna_ilosc_
+  // nie_skumulowana.sql. Brygadzista wie, ile zużył dziś; nie zna (i nie
+  // powinien pamiętać) sumy od początku budowy — bazę dolicza sama RPC
+  // (`build_materials.used = used + delta`). Dlatego nowy raport startuje
+  // z pustym polem (stepper i tak pokazuje "0" jako fallback), a nie od
+  // `a.used`, jak wcześniej.
+  const getReportDefaults = (_buildId: string): Record<string, string> => {
+    return {};
   };
   const startNewReport = () => {
     setEditingReportId(null);
@@ -2397,6 +2420,7 @@ function useAppDataState(
     deleteOrder,
     receiveOrder,
     addPersonToDraft,
+    removePersonFromDraft,
     addExtraCostToDraft,
     removeExtraCostFromDraft,
     reportsPendingApprovalCount,

@@ -62,6 +62,7 @@ export function ReportScreen() {
     saveDailyReport,
     getReportDefaults,
     addPersonToDraft,
+    removePersonFromDraft,
     addExtraCostToDraft,
     removeExtraCostFromDraft,
     updateBuildPhotosUrl,
@@ -173,7 +174,16 @@ export function ReportScreen() {
     removable: boolean,
   ) => {
     const m = materials.find((x) => x.id === a.materialId);
-    const currentValue = Number(reportValues[a.materialId] || 0);
+    // reportValues trzyma DZISIEJSZE zużycie (od zera), nie stan
+    // całkowity — do porównania z planem (Admin: "plan/pozostało") trzeba
+    // doliczyć to, co budowa ma już zużyte życiowo (a.used), pomniejszone
+    // o to, co ten sam, otwarty raport już wcześniej wpisał (bo inaczej
+    // policzyłoby się podwójnie przy edycji istniejącego raportu).
+    const dailyValue = Number(reportValues[a.materialId] || 0);
+    const alreadyCountedInTotal = Number(
+      editingReport?.materialValues[a.materialId] || 0,
+    );
+    const currentValue = a.used + dailyValue - alreadyCountedInTotal;
     const different =
       devRole === "Admin" &&
       reportValues[a.materialId] !== undefined &&
@@ -395,11 +405,9 @@ export function ReportScreen() {
                       onPress={() => {
                         setSelectedBuildId(b.id);
                         setPicker(null);
-                        // Pole "zużyto" trzyma stan skumulowany, nie
-                        // przyrost dnia — startowanie od zera zamiast od
-                        // bieżącego zużycia budowy cofało koszt przy
-                        // kolejnych dniach raportowania (patrz
-                        // getReportDefaults w app-data.tsx).
+                        // Zmiana budowy w trakcie zaczynania nowego
+                        // raportu — pola "zużyto dziś" i tak startują puste
+                        // (patrz getReportDefaults w app-data.tsx).
                         setReportValues(getReportDefaults(b.id));
                         setDraftExtraCosts([]);
                         setDraftNote("");
@@ -896,6 +904,15 @@ export function ReportScreen() {
                       >
                         {person.start}–{person.end}
                       </Text>
+                      {!reportApproved && (
+                        <Pressable
+                          onPress={() => removePersonFromDraft(person.employeeId)}
+                          hitSlop={8}
+                          style={{ marginLeft: 8 }}
+                        >
+                          <MaterialIcons name="close" size={18} color={COLORS.muted} />
+                        </Pressable>
+                      )}
                     </View>
                   );
                 })}
@@ -1243,6 +1260,15 @@ export function ReportScreen() {
                     >
                       {person.start}–{person.end}
                     </Text>
+                    {!reportApproved && (
+                      <Pressable
+                        onPress={() => removePersonFromDraft(person.employeeId)}
+                        hitSlop={8}
+                        style={{ marginLeft: 8 }}
+                      >
+                        <MaterialIcons name="close" size={18} color={COLORS.muted} />
+                      </Pressable>
+                    )}
                   </View>
                 );
               })

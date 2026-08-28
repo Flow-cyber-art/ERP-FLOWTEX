@@ -22,6 +22,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        {/* Bez tego przeglądarka pokazuje na karcie sam adres (np.
+            "erp.flowtex.pl") zamiast nazwy aplikacji — ten szablon
+            całkowicie podmienia domyślny <head> Expo Routera, który
+            normalnie wstawiłby <title> sam, więc trzeba go dopisać
+            ręcznie. */}
+        <title>FLOWTEX ERP</title>
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"

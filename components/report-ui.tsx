@@ -395,6 +395,12 @@ const Field = ({
   autoCapitalize,
   secureTextEntry,
   style,
+  // Domyślnie pojedynczy wiersz (jak dotąd) — `multiline` + `numberOfLines`
+  // przekazywane tylko tam, gdzie pole faktycznie ma być wieloliniowe (np.
+  // notatka do raportu w report-screen.tsx), żeby nie zmieniać wyglądu
+  // wszystkich pozostałych, jednowierszowych użyć tego komponentu.
+  multiline,
+  numberOfLines,
 }: any) => (
   <TextInput
     value={value}
@@ -407,6 +413,8 @@ const Field = ({
     onBlur={onBlur}
     autoCapitalize={autoCapitalize}
     secureTextEntry={secureTextEntry}
+    multiline={multiline}
+    numberOfLines={numberOfLines}
     style={[
       {
         backgroundColor: COLORS.background,
@@ -417,6 +425,7 @@ const Field = ({
         marginTop: 8,
         minWidth: 0,
       },
+      multiline ? { textAlignVertical: "top" } : null,
       style,
     ]}
   />

@@ -1261,7 +1261,9 @@ export function ReportScreen() {
               placeholder="Coś, co warto zapamiętać do tego dnia (opcjonalnie)"
               value={draftNote}
               onChangeText={setDraftNote}
-              style={{ marginTop: 0 }}
+              multiline
+              numberOfLines={4}
+              style={{ marginTop: 0, minHeight: 96 }}
             />
           </View>
         )}

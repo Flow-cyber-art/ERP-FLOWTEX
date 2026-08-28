@@ -101,7 +101,7 @@ export function ManagerScreen() {
         <Pressable
           onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
           hitSlop={8}
-          style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+          style={{ alignItems: "center", gap: 4 }}
         >
           <View
             style={{
@@ -121,7 +121,7 @@ export function ManagerScreen() {
               </Text>
             )}
           </View>
-          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "600" }}>Archiwum</Text>
+          <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>
         </Pressable>
       </View>
 

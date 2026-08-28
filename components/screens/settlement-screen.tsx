@@ -253,51 +253,53 @@ export function SettlementScreen() {
         description="Plan, przypisano, zużyto, koszt i marża — spięte z faz 0–7."
       />
 
-      <Pressable
-        onPress={() => setPickerOpen(true)}
-        className="bg-surface border border-border rounded-2xl p-4 mb-3"
-        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-      >
-        <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-          <Text style={{ color: COLORS.muted, fontSize: 11 }}>Budowa</Text>
-          <Text
-            style={{ color: COLORS.foreground, fontWeight: "700", marginTop: 2 }}
-            numberOfLines={1}
-          >
-            {build ? `${build.number} · ${build.name}` : "Brak budów"}
-          </Text>
-        </View>
-        <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-          Zmień
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
-        style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}
-      >
-        <View
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 4,
-            borderWidth: 1,
-            borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
-            backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <Pressable
+          onPress={() => setPickerOpen(true)}
+          className="bg-surface border border-border rounded-2xl p-4"
+          style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
         >
-          {showArchivedBuilds && (
-            <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
-              ✓
+          <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>Budowa</Text>
+            <Text
+              style={{ color: COLORS.foreground, fontWeight: "700", marginTop: 2 }}
+              numberOfLines={1}
+            >
+              {build ? `${build.number} · ${build.name}` : "Brak budów"}
             </Text>
-          )}
-        </View>
-        <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
-          Pokaż zarchiwizowane budowy w wyszukiwarce
-        </Text>
-      </Pressable>
+          </View>
+          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+            Zmień
+          </Text>
+        </Pressable>
+        {/* Mały przełącznik zamiast pełnowymiarowego wiersza tekstu — ten
+            sam wzorzec co "Archiwum" w warehouse-screen.tsx/manager-screen.tsx. */}
+        <Pressable
+          onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
+          hitSlop={8}
+          style={{ alignItems: "center", paddingHorizontal: 2 }}
+        >
+          <View
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
+              backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {showArchivedBuilds && (
+              <Text style={{ color: COLORS.background, fontSize: 13, fontWeight: "800" }}>
+                ✓
+              </Text>
+            )}
+          </View>
+          <Text style={{ color: COLORS.muted, fontSize: 9, marginTop: 2 }}>Archiwum</Text>
+        </Pressable>
+      </View>
 
       <SearchablePicker
         visible={pickerOpen}

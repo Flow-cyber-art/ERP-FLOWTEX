@@ -35,7 +35,11 @@ import {
 type AdminTab = "team" | "hours" | "accounts" | "settings";
 
 export function AdminScreen() {
-  const [section, setSection] = useState<AdminTab>("team");
+  // "Ustawienia" pierwsza — najczęstszy powód wejścia w tę zakładkę jest
+  // teraz szybkie przełączenie widoku Admin/Brygadzista (patrz
+  // AdminSettingsSection niżej), nie zarządzanie zespołem, więc nie ma
+  // sensu robić na to dodatkowego kliknięcia za każdym razem.
+  const [section, setSection] = useState<AdminTab>("settings");
 
   return (
     <>
@@ -54,10 +58,10 @@ export function AdminScreen() {
         >
           {(
             [
+              ["settings", "Ustawienia"],
               ["team", "Zespół i dniówka"],
               ["hours", "Rozliczenie godzin"],
               ["accounts", "Konta logowania"],
-              ["settings", "Ustawienia"],
             ] as const
           ).map(([value, label]) => (
             <Pressable

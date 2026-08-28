@@ -30,6 +30,7 @@ export function WarehouseScreen() {
   const {
     materials,
     warehouseBatches,
+    assignments,
     saveMaterial,
     updateMaterialPrice,
     updateMaterialStock,
@@ -42,6 +43,19 @@ export function WarehouseScreen() {
   // podpowiadane przy dopasowaniu nazwy (materials pozostaje pełną listą),
   // tylko nie zaśmiecają widoku do codziennej pracy.
   const [showArchivedMaterials, setShowArchivedMaterials] = useState(false);
+  // Filtr "przypisania do budowy" — czy dany materiał ma choć jedną
+  // partię przypisaną do JAKIEJKOLWIEK budowy (niekoniecznie konkretnej —
+  // to widok zarządzania materiałami, nie pojedynczej budowy, patrz
+  // odpowiednik per-budowa w builds-screen.tsx). "Nieprzypisane" pomaga
+  // szybko znaleźć materiały leżące w magazynie, których jeszcze nikt
+  // nigdzie nie użył.
+  const [assignmentFilter, setAssignmentFilter] = useState<
+    "all" | "assigned" | "unassigned"
+  >("all");
+  const assignedMaterialIds = useMemo(
+    () => new Set(assignments.map((a) => a.materialId)),
+    [assignments],
+  );
   const [showMaterial, setShowMaterial] = useState(false);
   const [newMaterial, setNewMaterial] = useState<NewMaterialInput>(EMPTY_NEW_MATERIAL);
   const filtered = useMemo(
@@ -50,8 +64,13 @@ export function WarehouseScreen() {
         .filter((m) => showArchivedMaterials || m.active)
         .filter((m) =>
           `${m.name} ${m.index}`.toLowerCase().includes(query.toLowerCase()),
-        ),
-    [materials, query, showArchivedMaterials],
+        )
+        .filter((m) => {
+          if (assignmentFilter === "all") return true;
+          const isAssigned = assignedMaterialIds.has(m.id);
+          return assignmentFilter === "assigned" ? isAssigned : !isAssigned;
+        }),
+    [materials, query, showArchivedMaterials, assignmentFilter, assignedMaterialIds],
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
@@ -261,6 +280,42 @@ export function WarehouseScreen() {
         Pokaż zarchiwizowane materiały
       </Text>
     </Pressable>
+    <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+      {(
+        [
+          { key: "all", label: "Wszystkie" },
+          { key: "assigned", label: "Przypisane do budowy" },
+          { key: "unassigned", label: "Nieprzypisane" },
+        ] as const
+      ).map((opt) => {
+        const active = assignmentFilter === opt.key;
+        return (
+          <Pressable
+            key={opt.key}
+            onPress={() => setAssignmentFilter(opt.key)}
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              borderRadius: 10,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: active ? COLORS.primary : COLORS.border,
+              backgroundColor: active ? COLORS.primary : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                color: active ? COLORS.background : COLORS.muted,
+                fontSize: 12,
+                fontWeight: "700",
+              }}
+            >
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
     <View className="mt-4 rounded-2xl border border-border overflow-hidden">
       {filtered.map((m, i) => {
         const batchCount = warehouseBatches.filter(

@@ -174,6 +174,9 @@ type Employee = {
   // Pula dni urlopowych na rok — widoczna dla każdego (patrz
   // components/screens/leave-screen.tsx), niepoufna jak stawki powyżej.
   leaveDaysPerYear: number;
+  // Archiwizacja — jak materiały (active=false = ukryty z domyślnych
+  // list, nie usunięty). Patrz 051_archiwizacja_pracownikow.sql.
+  active: boolean;
 };
 
 type TimeEntry = {
@@ -290,9 +293,9 @@ const initialAssignments: Assignment[] = [
 ];
 
 const initialEmployees: Employee[] = [
-  { id: "e1", name: "Piotr Zieliński", role: "Brygadzista", hourlyRate: 45, costRate: 0, leaveDaysPerYear: 26 },
-  { id: "e2", name: "Tomasz Wójcik", role: "Pracownik", hourlyRate: 35, costRate: 0, leaveDaysPerYear: 26 },
-  { id: "e3", name: "Kamil Mazur", role: "Pracownik", hourlyRate: 35, costRate: 0, leaveDaysPerYear: 26 },
+  { id: "e1", name: "Piotr Zieliński", role: "Brygadzista", hourlyRate: 45, costRate: 0, leaveDaysPerYear: 26, active: true },
+  { id: "e2", name: "Tomasz Wójcik", role: "Pracownik", hourlyRate: 35, costRate: 0, leaveDaysPerYear: 26, active: true },
+  { id: "e3", name: "Kamil Mazur", role: "Pracownik", hourlyRate: 35, costRate: 0, leaveDaysPerYear: 26, active: true },
 ];
 
 const initialTimeEntries: TimeEntry[] = [];

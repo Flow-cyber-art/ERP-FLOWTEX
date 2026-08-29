@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, Text, View, Pressable } from "react-native";
-import { Button, COLORS, IconBadge, formatPLN } from "@/components/report-ui";
+import { Platform, ScrollView, Text, View, Pressable } from "react-native";
+import { Button, COLORS, IconBadge, formatPLN, notify } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
 /**
@@ -188,6 +188,56 @@ export function PayrollSection() {
     { workedDays: 0, leaveDays: 0, missingDays: 0, payout: 0 },
   );
 
+  // Eksport "Lista płac" — na razie tylko web: buduje wydruk-owalną
+  // stronę HTML w nowym oknie i od razu otwiera dialog druku
+  // przeglądarki (zapis jako PDF to jedna z opcji tego dialogu, bez
+  // dodatkowej biblioteki). Natywna wersja (expo-print) to osobny krok.
+  const exportPayrollPdf = () => {
+    if (Platform.OS !== "web" || typeof window === "undefined") {
+      notify("Eksport niedostępny", "Lista płac do PDF działa na razie tylko w wersji web.");
+      return;
+    }
+    const escapeHtml = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const rowsHtml = rows
+      .map(
+        (r) =>
+          `<tr><td>${escapeHtml(r.employee.name)}</td><td class="num">${r.workedDays}</td><td class="num">${r.leaveDays}</td><td class="num">${formatPLN(r.payout)}</td></tr>`,
+      )
+      .join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Lista płac ${escapeHtml(rangeLabel)}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}
+  h1{font-size:18px;margin-bottom:2px}
+  p{color:#555;margin-top:0}
+  table{width:100%;border-collapse:collapse;margin-top:16px}
+  th,td{padding:8px 10px;border-bottom:1px solid #ddd;font-size:13px}
+  th{text-align:left;color:#555;font-size:11px;text-transform:uppercase}
+  .num{text-align:right}
+  tfoot td{font-weight:700;border-top:2px solid #111;border-bottom:none}
+</style></head><body>
+  <h1>Lista płac</h1>
+  <p>Okres: ${escapeHtml(rangeLabel)}</p>
+  <table>
+    <thead><tr><th>Pracownik</th><th class="num">Dniówki</th><th class="num">Urlop</th><th class="num">Do wypłaty</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot><tr><td>RAZEM</td><td class="num">${totals.workedDays}</td><td class="num">${totals.leaveDays}</td><td class="num">${formatPLN(totals.payout)}</td></tr></tfoot>
+  </table>
+</body></html>`;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      notify(
+        "Nie udało się otworzyć okna",
+        "Zezwól przeglądarce na wyskakujące okienka dla tej strony i spróbuj ponownie.",
+      );
+      return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   return (
     <>
       <View className="bg-surface border border-border rounded-2xl p-2 mb-3">
@@ -295,36 +345,59 @@ export function PayrollSection() {
         ))}
       </View>
 
-      <View style={{ flexDirection: "row", gap: 6, marginBottom: 12 }}>
-        {(
-          [
-            ["list", "Lista"],
-            ["calendar", "Kalendarz"],
-          ] as const
-        ).map(([value, label]) => (
-          <Pressable
-            key={value}
-            onPress={() => setView(value)}
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: view === value ? COLORS.primary : COLORS.border,
-              backgroundColor: view === value ? COLORS.primary : "transparent",
-            }}
-          >
-            <Text
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          {(
+            [
+              ["list", "Lista"],
+              ["calendar", "Kalendarz"],
+            ] as const
+          ).map(([value, label]) => (
+            <Pressable
+              key={value}
+              onPress={() => setView(value)}
               style={{
-                color: view === value ? COLORS.background : COLORS.muted,
-                fontWeight: "700",
-                fontSize: 13,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: view === value ? COLORS.primary : COLORS.border,
+                backgroundColor: view === value ? COLORS.primary : "transparent",
               }}
             >
-              {label}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                style={{
+                  color: view === value ? COLORS.background : COLORS.muted,
+                  fontWeight: "700",
+                  fontSize: 13,
+                }}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable
+          onPress={exportPayrollPdf}
+          style={{
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+          }}
+        >
+          <Text style={{ color: COLORS.muted, fontWeight: "700", fontSize: 13 }}>
+            ⭳ Lista płac
+          </Text>
+        </Pressable>
       </View>
 
       {view === "calendar" ? (

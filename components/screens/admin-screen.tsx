@@ -103,7 +103,33 @@ export function AdminScreen() {
 // więc żyją razem. Wylogowanie celowo na samym końcu i z potwierdzeniem,
 // żeby nie dało się go nacisnąć przez przypadek.
 function AdminSettingsSection() {
-  const { setDevRole, setTab } = useAppData();
+  const {
+    setDevRole,
+    setTab,
+    workdayHours,
+    workdayHoursInput,
+    kmRate,
+    closeBuildPin,
+    setWorkdayHoursInput,
+    saveWorkdayHours,
+    updateKmRate,
+    updateCloseBuildPin,
+  } = useAppData();
+
+  const [workdayOpen, setWorkdayOpen] = useState(false);
+  const [kmRateOpen, setKmRateOpen] = useState(false);
+  const [kmRateInput, setKmRateInput] = useState(kmRate ? String(kmRate) : "");
+  const [closeBuildPinOpen, setCloseBuildPinOpen] = useState(false);
+  const [closeBuildPinInput, setCloseBuildPinInput] = useState(closeBuildPin ?? "");
+
+  useEffect(() => {
+    setKmRateInput(kmRate ? String(kmRate) : "");
+  }, [kmRate]);
+
+  useEffect(() => {
+    setCloseBuildPinInput(closeBuildPin ?? "");
+  }, [closeBuildPin]);
+
   return (
     <>
       {/* "Widok Brygadzisty" — Admin bywa na budowie i chce od razu
@@ -133,85 +159,11 @@ function AdminSettingsSection() {
           />
         </View>
       </View>
-      <AccountSettingsSection />
-      <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
-        <Button
-          label="Wyloguj"
-          secondary
-          onPress={() =>
-            confirmAction(
-              "Wylogować się?",
-              "Będzie trzeba zalogować się ponownie.",
-              "Wyloguj",
-              () => {
-                signOut();
-              },
-            )
-          }
-        />
-      </View>
-    </>
-  );
-}
 
-const EMPTY_NEW_EMPLOYEE: NewEmployeeInput = {
-  name: "",
-  role: "Pracownik",
-  hourlyRate: "",
-  costRate: "",
-};
-
-const TEAM_COL_NUMERIC = { flex: 1, textAlign: "right" as const };
-const TEAM_TABLE_HEADER_STYLE = {
-  color: COLORS.muted,
-  fontSize: 10,
-  fontWeight: "700" as const,
-  flex: 2,
-};
-const TEAM_CELL_STYLE = { color: COLORS.foreground, fontSize: 12, fontWeight: "700" as const };
-
-export function AdminTeamSection() {
-  const {
-    workdayHours,
-    workdayHoursInput,
-    kmRate,
-    closeBuildPin,
-    employees,
-    setWorkdayHoursInput,
-    saveWorkdayHours,
-    updateKmRate,
-    updateCloseBuildPin,
-    saveEmployee,
-    updateEmployeeRate,
-    updateEmployeeCostRate,
-  } = useAppData();
-
-  const [newEmployee, setNewEmployee] = useState<NewEmployeeInput>(EMPTY_NEW_EMPLOYEE);
-  const [workdayOpen, setWorkdayOpen] = useState(false);
-  const [kmRateOpen, setKmRateOpen] = useState(false);
-  const [kmRateInput, setKmRateInput] = useState(kmRate ? String(kmRate) : "");
-  const [closeBuildPinOpen, setCloseBuildPinOpen] = useState(false);
-  const [closeBuildPinInput, setCloseBuildPinInput] = useState(closeBuildPin ?? "");
-  const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
-  const [editingRateId, setEditingRateId] = useState<string | null>(null);
-  const [rateInput, setRateInput] = useState("");
-  const [costRateInput, setCostRateInput] = useState("");
-
-  useEffect(() => {
-    setKmRateInput(kmRate ? String(kmRate) : "");
-  }, [kmRate]);
-
-  useEffect(() => {
-    setCloseBuildPinInput(closeBuildPin ?? "");
-  }, [closeBuildPin]);
-
-  return (
-    <>
-      {/* Dniówka i stawka za km obok siebie — dwa krótkie parametry
-          rozliczeniowe firmy, jeden rząd zamiast dwóch pełnych wierszy.
-          Rozwinięcie (edycja) którejkolwiek pokazuje się pod całym
-          rzędem, nie w połówce kolumny — za mało miejsca na stepper +
-          przyciski obok siebie w wąskiej kolumnie. */}
+      {/* Dniówka i stawka za km obok siebie — parametry rozliczeniowe
+          firmy, przeniesione tu z zakładki HR (dotyczą konfiguracji firmy,
+          nie samych pracowników — Zespół w HR tylko z nich korzysta przy
+          liczeniu kolumny "Dniówka"). */}
       <View style={{ flexDirection: "row", gap: 10 }} className="mb-3">
         <Pressable
           onPress={() => {
@@ -344,7 +296,7 @@ export function AdminTeamSection() {
           builds-screen.tsx) — ten sam wzorzec co Stawka za km wyżej. Puste
           pole = zabezpieczenie wyłączone (updateCloseBuildPin zapisuje
           wtedy null, patrz lib/data/settings.ts). */}
-      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-3">
+      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-4">
         <Pressable
           onPress={() => setCloseBuildPinOpen(!closeBuildPinOpen)}
           style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
@@ -412,17 +364,109 @@ export function AdminTeamSection() {
         )}
       </View>
 
+      <AccountSettingsSection />
+      <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
+        <Button
+          label="Wyloguj"
+          secondary
+          onPress={() =>
+            confirmAction(
+              "Wylogować się?",
+              "Będzie trzeba zalogować się ponownie.",
+              "Wyloguj",
+              () => {
+                signOut();
+              },
+            )
+          }
+        />
+      </View>
+    </>
+  );
+}
+
+const EMPTY_NEW_EMPLOYEE: NewEmployeeInput = {
+  name: "",
+  role: "Pracownik",
+  hourlyRate: "",
+  costRate: "",
+};
+
+const TEAM_COL_NUMERIC = { flex: 1, textAlign: "right" as const };
+const TEAM_TABLE_HEADER_STYLE = {
+  color: COLORS.muted,
+  fontSize: 10,
+  fontWeight: "700" as const,
+  flex: 2,
+};
+const TEAM_CELL_STYLE = { color: COLORS.foreground, fontSize: 12, fontWeight: "700" as const };
+
+export function AdminTeamSection() {
+  const {
+    workdayHours,
+    employees,
+    saveEmployee,
+    updateEmployeeRate,
+    updateEmployeeCostRate,
+    setEmployeeActive,
+  } = useAppData();
+
+  const [newEmployee, setNewEmployee] = useState<NewEmployeeInput>(EMPTY_NEW_EMPLOYEE);
+  const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
+  const [editingRateId, setEditingRateId] = useState<string | null>(null);
+  const [rateInput, setRateInput] = useState("");
+  const [costRateInput, setCostRateInput] = useState("");
+  // Archiwizacja — ten sam wzorzec co showArchivedMaterials w
+  // warehouse-screen.tsx: pracownik nie jest usuwany (ma historię
+  // raportów/urlopów/wpisów czasu), tylko chowany z domyślnej listy.
+  const [showArchived, setShowArchived] = useState(false);
+  const visibleEmployees = employees.filter((e) => showArchived || e.active);
+
+  return (
+    <>
       {/* Zespół — nagłówek z licznikiem i przyciskiem dodawania, lista jako
-          jeden kontener z wierszami zamiast osobnej karty na osobę. */}
+          jeden kontener z wierszami zamiast osobnej karty na osobę.
+          Dniówka/stawka za km/PIN zamknięcia budowy — patrz zakładka
+          Admin → Ustawienia (AdminSettingsSection): to konfiguracja
+          firmy, nie samych pracowników. */}
       <View className="flex-row justify-between items-center mb-3">
         <Text className="text-base font-bold text-foreground">
-          Zespół ({employees.length})
+          Zespół ({visibleEmployees.filter((e) => e.active).length})
         </Text>
-        <Pressable onPress={() => setAddEmployeeOpen(!addEmployeeOpen)}>
-          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-            {addEmployeeOpen ? "Anuluj" : "+ Dodaj pracownika"}
-          </Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+          <Pressable
+            onPress={() => setShowArchived(!showArchived)}
+            hitSlop={8}
+            style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+          >
+            <View
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: showArchived ? COLORS.primary : COLORS.border,
+                backgroundColor: showArchived ? COLORS.primary : "transparent",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {showArchived && (
+                <Text style={{ color: COLORS.background, fontSize: 10, fontWeight: "800" }}>
+                  ✓
+                </Text>
+              )}
+            </View>
+            <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "600" }}>
+              Archiwum
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => setAddEmployeeOpen(!addEmployeeOpen)}>
+            <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+              {addEmployeeOpen ? "Anuluj" : "+ Dodaj pracownika"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {addEmployeeOpen && (
@@ -502,14 +546,14 @@ export function AdminTeamSection() {
         </View>
       )}
 
-      {employees.length === 0 && (
+      {visibleEmployees.length === 0 && (
         <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
           <Text className="text-sm text-muted">
-            Brak dodanych pracowników.
+            {showArchived ? "Brak zarchiwizowanych pracowników." : "Brak dodanych pracowników."}
           </Text>
         </View>
       )}
-      {employees.length > 0 && (
+      {visibleEmployees.length > 0 && (
         <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
           {/* Nagłówek tabeli — jeden użytkownik (właściciel), który zna
               swoich ludzi, korzysta na porównaniu stawek w pionie, czego
@@ -530,7 +574,7 @@ export function AdminTeamSection() {
             <Text style={[TEAM_TABLE_HEADER_STYLE, TEAM_COL_NUMERIC]}>KOSZT BUDOWY</Text>
             <View style={{ width: 28 }} />
           </View>
-          {employees.map((employee, i) => {
+          {visibleEmployees.map((employee, i) => {
             const editing = editingRateId === employee.id;
             // Heurystyka: brak spacji w imieniu = najpewniej wpisano samo
             // imię bez nazwiska — sygnał do uzupełnienia kartoteki, nie
@@ -542,6 +586,7 @@ export function AdminTeamSection() {
                 style={{
                   borderTopWidth: i > 0 ? 1 : 0,
                   borderTopColor: COLORS.border,
+                  opacity: employee.active ? 1 : 0.5,
                 }}
               >
                 <Pressable
@@ -576,6 +621,7 @@ export function AdminTeamSection() {
                     </View>
                     <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 1 }}>
                       {employee.role}
+                      {!employee.active ? " · zarchiwizowany" : ""}
                     </Text>
                   </View>
                   <Text style={[TEAM_CELL_STYLE, TEAM_COL_NUMERIC]} numberOfLines={1}>
@@ -651,6 +697,35 @@ export function AdminTeamSection() {
                         </Text>
                       </Pressable>
                     </View>
+                    <Pressable
+                      onPress={() =>
+                        employee.active
+                          ? confirmAction(
+                              "Zarchiwizować pracownika?",
+                              `${employee.name} zniknie z domyślnej listy Zespołu. Historia (raporty, godziny, urlopy) zostaje, a pracownika można później przywrócić z widoku "Archiwum".`,
+                              "Archiwizuj",
+                              () => setEmployeeActive(employee.id, false),
+                            )
+                          : setEmployeeActive(employee.id, true)
+                      }
+                      style={{
+                        marginTop: 12,
+                        paddingTop: 12,
+                        borderTopWidth: 1,
+                        borderTopColor: COLORS.border,
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: employee.active ? COLORS.warning : COLORS.primary,
+                          fontWeight: "700",
+                          fontSize: 13,
+                        }}
+                      >
+                        {employee.active ? "Archiwizuj pracownika" : "Przywróć pracownika"}
+                      </Text>
+                    </Pressable>
                   </View>
                 )}
               </View>
@@ -777,15 +852,17 @@ export function AdminLeaveSection() {
                       marginTop: 6,
                     }}
                   >
-                    <View
-                      style={{
-                        width: `${Math.max(4, usedFraction * 100)}%`,
-                        height: "100%",
-                        backgroundColor:
-                          usedFraction >= 1 ? COLORS.warning : COLORS.primary,
-                        borderRadius: 3,
-                      }}
-                    />
+                    {usedFraction > 0 && (
+                      <View
+                        style={{
+                          width: `${usedFraction * 100}%`,
+                          height: "100%",
+                          backgroundColor:
+                            usedFraction >= 1 ? COLORS.warning : COLORS.primary,
+                          borderRadius: 3,
+                        }}
+                      />
+                    )}
                   </View>
                   <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 4 }}>
                     {used}/{limit} wykorzystane

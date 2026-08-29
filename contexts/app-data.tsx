@@ -28,6 +28,7 @@ import {
 import {
   createEmployee,
   listEmployees,
+  setEmployeeActive as setEmployeeActiveRemote,
   updateEmployeeCostRate as updateEmployeeCostRateRemote,
   updateEmployeeRate as updateEmployeeRateRemote,
 } from "@/lib/data/employees";
@@ -748,6 +749,7 @@ function useAppDataState(
         hourlyRate: Number(e.hourlyRate),
         costRate: Number(e.costRate) || 0,
         leaveDaysPerYear: Number(e.leaveDaysPerYear) || 26,
+        active: e.active ?? true,
       })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -990,6 +992,10 @@ function useAppDataState(
     mutationFn: (vars: { employeeId: number; costRate: number }) =>
       updateEmployeeCostRateRemote(vars.employeeId, vars.costRate),
   });
+  const setEmployeeActiveMutation = useMutation({
+    mutationFn: (vars: { employeeId: number; active: boolean }) =>
+      setEmployeeActiveRemote(vars.employeeId, vars.active),
+  });
   const updateEmployeeLeaveDaysMutation = useMutation({
     mutationFn: (vars: { employeeId: number; leaveDaysPerYear: number }) =>
       updateEmployeeLeaveDaysRemote(vars.employeeId, vars.leaveDaysPerYear),
@@ -1157,6 +1163,7 @@ function useAppDataState(
             hourlyRate: e.hourlyRate || 0,
             costRate: e.costRate || 0,
             leaveDaysPerYear: e.leaveDaysPerYear || 26,
+            active: e.active ?? true,
           })),
         );
         setTimeEntries(d.timeEntries || initialTimeEntries);
@@ -1975,6 +1982,21 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać stawki kosztowej.");
     }
   };
+  // Archiwizacja/przywrócenie pracownika — ten sam mechanizm co
+  // setMaterialActive (panel administratora, sekcja Zespół).
+  const setEmployeeActive = async (employeeId: string, active: boolean) => {
+    const numericId = Number(employeeId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await setEmployeeActiveMutation.mutateAsync({ employeeId: numericId, active });
+      await invalidate("employees");
+    } catch (error) {
+      reportMutationError(
+        error,
+        active ? "Nie udało się przywrócić pracownika." : "Nie udało się zarchiwizować pracownika.",
+      );
+    }
+  };
   // Pula dni urlopowych na rok (panel administratora, sekcja HR).
   const updateEmployeeLeaveDays = async (employeeId: string, days: number) => {
     const numericId = Number(employeeId);
@@ -2563,6 +2585,7 @@ function useAppDataState(
     saveEmployee,
     updateEmployeeRate,
     updateEmployeeCostRate,
+    setEmployeeActive,
     myEmployeeId,
     leaveRequests,
     updateEmployeeLeaveDays,

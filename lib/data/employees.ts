@@ -22,6 +22,9 @@ export type EmployeeRow = {
   // Pula dni urlopowych na rok — NIE ukryta jak stawki, widoczna dla
   // każdego (pracownik musi widzieć swoją). Patrz 049_urlopy.sql.
   leaveDaysPerYear: number;
+  // Archiwizacja (jak materiały) — ten sam pracownik, nie usunięty, tylko
+  // ukryty z domyślnych list. Patrz 051_archiwizacja_pracownikow.sql.
+  active: boolean;
 };
 
 export async function listEmployees(): Promise<EmployeeRow[]> {
@@ -59,6 +62,14 @@ export async function updateEmployeeCostRate(employeeId: number, costRate: numbe
   const { error } = await supabase
     .from("employees")
     .update({ costRate, updatedAt: new Date().toISOString() })
+    .eq("id", employeeId);
+  if (error) throw new Error(error.message);
+}
+
+export async function setEmployeeActive(employeeId: number, active: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("employees")
+    .update({ active, updatedAt: new Date().toISOString() })
     .eq("id", employeeId);
   if (error) throw new Error(error.message);
 }

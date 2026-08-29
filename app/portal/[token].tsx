@@ -164,8 +164,11 @@ export default function PublicBuildPortal() {
       try {
         const result = await fetchPublicBuild(token, pin);
         setView(result);
-      } catch {
-        setError("Nie udało się wczytać danych budowy. Spróbuj ponownie później.");
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[portal] get_public_build failed:", err);
+        const message = err instanceof Error ? err.message : "Nieznany błąd.";
+        setError(`Nie udało się wczytać danych budowy: ${message}`);
       } finally {
         setLoading(false);
       }

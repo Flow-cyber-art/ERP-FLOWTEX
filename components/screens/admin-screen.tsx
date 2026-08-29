@@ -141,23 +141,18 @@ function AdminSettingsSection() {
           Powrót: zakładka "Admin" w widoku Brygadzisty pokazuje
           Ustawienia z przyciskiem "Wróć do widoku Admina" (patrz
           settings-screen.tsx + realRole w app-data.tsx). */}
-      <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
-        <Text className="text-xs text-muted uppercase">Widok</Text>
-        <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
-          Jesteś na budowie i chcesz od razu wypełnić raport? Przełącz się na
-          widok Brygadzisty — bez zakładania osobnego konta. Wrócisz z
-          zakładki „Admin” w tamtym widoku.
-        </Text>
-        <View style={{ marginTop: 12 }}>
-          <Button
-            label="Przełącz na widok Brygadzisty"
-            secondary
-            onPress={() => {
-              setDevRole("Brygadzista");
-              setTab("savedReports");
-            }}
-          />
-        </View>
+      <View
+        className="bg-surface border border-border rounded-2xl p-4 mb-4"
+        style={{ alignItems: "center" }}
+      >
+        <Button
+          label="Zmień na widok Brygadzisty"
+          secondary
+          onPress={() => {
+            setDevRole("Brygadzista");
+            setTab("savedReports");
+          }}
+        />
       </View>
 
       {/* Dniówka i stawka za km obok siebie — parametry rozliczeniowe

@@ -327,6 +327,17 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const formatPLN = (amount: number) =>
   `${amount.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
 
+// Polska odmiana liczebników: 1 → forma pojedyncza, 2-4 (poza 12-14) →
+// forma "kilka", pozostałe (w tym 0, 5+, 12-14) → forma dopełniaczowa.
+// Bez tego "0 osoby"/"5 materiały" wygląda jak literówka na każdym ekranie.
+const pluralPL = (n: number, one: string, few: string, many: string) => {
+  if (n === 1) return one;
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return few;
+  return many;
+};
+
 const addDaysISO = (dateStr: string, days: number) => {
   if (!dateStr || !Number.isFinite(days)) return "";
   const d = new Date(dateStr + "T00:00:00");
@@ -1294,11 +1305,14 @@ const ReportCard = ({
           >
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>
               {report.people.length}{" "}
-              {report.people.length === 1 ? "osoba" : "osoby"} ·{" "}
+              {pluralPL(report.people.length, "osoba", "osoby", "osób")} ·{" "}
               {Object.keys(report.materialValues).length}{" "}
-              {Object.keys(report.materialValues).length === 1
-                ? "materiał"
-                : "materiały"}
+              {pluralPL(
+                Object.keys(report.materialValues).length,
+                "materiał",
+                "materiały",
+                "materiałów",
+              )}
             </Text>
             <StatusBadge
               status={approved ? "ok" : "warning"}
@@ -1515,7 +1529,7 @@ const ReportCard = ({
 
           <DetailSection
             label="Zespół"
-            count={`${report.people.length} ${report.people.length === 1 ? "osoba" : "osoby"} · ${totalHours.toFixed(2)} godz.`}
+            count={`${report.people.length} ${pluralPL(report.people.length, "osoba", "osoby", "osób")} · ${totalHours.toFixed(2)} godz.`}
           >
             {report.people.length === 0 ? (
               <Text className="text-sm text-muted py-1">
@@ -1614,6 +1628,7 @@ export {
   addDaysISO,
   todayLabelPL,
   formatPLN,
+  pluralPL,
   Button,
   Field,
   QuantityStepper,

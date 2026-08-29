@@ -8,6 +8,7 @@ import {
   StatusBadge,
   ScreenHeader,
   SearchablePicker,
+  pluralPL,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
@@ -316,9 +317,9 @@ export function SavedReportsScreen() {
                 }}
               >
                 <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                  {peopleCount} {peopleCount === 1 ? "osoba" : "osoby"} ·{" "}
+                  {peopleCount} {pluralPL(peopleCount, "osoba", "osoby", "osób")} ·{" "}
                   {materialsCount}{" "}
-                  {materialsCount === 1 ? "materiał" : "materiały"}
+                  {pluralPL(materialsCount, "materiał", "materiały", "materiałów")}
                 </Text>
                 <StatusBadge
                   status={approved ? "ok" : "warning"}

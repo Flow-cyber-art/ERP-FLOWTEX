@@ -9,6 +9,8 @@ import {
   setPublicAccessEnabled,
   setPublicPortalPin,
   setShowContractValueToClient,
+  setShowNotesToClient,
+  setShowPhotosToClient,
   type PublicPortalSettings,
 } from "@/lib/data/public-portal";
 
@@ -75,6 +77,30 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
       refresh();
     } catch {
       notify("Błąd", "Nie udało się zmienić widoczności wartości kontraktu.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const togglePhotos = async () => {
+    setBusy(true);
+    try {
+      await setShowPhotosToClient(buildId, !settings.showPhotosToClient);
+      refresh();
+    } catch {
+      notify("Błąd", "Nie udało się zmienić udostępniania zdjęć.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleNotes = async () => {
+    setBusy(true);
+    try {
+      await setShowNotesToClient(buildId, !settings.showNotesToClient);
+      refresh();
+    } catch {
+      notify("Błąd", "Nie udało się zmienić udostępniania notatek.");
     } finally {
       setBusy(false);
     }
@@ -247,6 +273,34 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
                 secondary={!settings.showContractValueToClient}
                 disabled={busy}
                 onPress={toggleContractValue}
+              />
+            </View>
+          </View>
+
+          <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 14 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ color: COLORS.foreground, fontWeight: "600", flex: 1, marginRight: 8 }}>
+                Udostępnij zdjęcia klientowi
+              </Text>
+              <Button
+                label={settings.showPhotosToClient ? "Tak" : "Nie"}
+                secondary={!settings.showPhotosToClient}
+                disabled={busy}
+                onPress={togglePhotos}
+              />
+            </View>
+          </View>
+
+          <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 14 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ color: COLORS.foreground, fontWeight: "600", flex: 1, marginRight: 8 }}>
+                Udostępnij notatki klientowi
+              </Text>
+              <Button
+                label={settings.showNotesToClient ? "Tak" : "Nie"}
+                secondary={!settings.showNotesToClient}
+                disabled={busy}
+                onPress={toggleNotes}
               />
             </View>
           </View>

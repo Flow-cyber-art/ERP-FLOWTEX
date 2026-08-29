@@ -2,13 +2,16 @@ import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Linking,
+  Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 
-import { Button, COLORS, Field, formatPLN } from "@/components/report-ui";
+import { Button, Field, formatPLN } from "@/components/report-ui";
 import {
   fetchPublicBuild,
   type PublicBuildView,
@@ -19,14 +22,43 @@ import {
  * budowy (skan kodu QR / link). Celowo bez importu z contexts/app-data.tsx
  * (tam żyją wewnętrzne query z pełnymi danymi) — cała whitelista pól jest
  * narzucona po stronie bazy przez RPC `get_public_build`
- * (supabase/sql/052_portal_klienta.sql), front tylko renderuje to, co
- * przyjdzie.
+ * (supabase/sql/059_portal_klienta_zdjecia_i_notatki.sql), front tylko
+ * renderuje to, co przyjdzie.
+ *
+ * Paleta i układ celowo NIE dzielone z resztą apki (report-ui.tsx) — to
+ * osobna, publiczna wizytówka dla klienta, z własną, ciemną identyfikacją
+ * (na wzór dostarczonego mockupu), niezależna od wewnętrznego motywu
+ * panelu administratora/brygadzisty.
  */
 
-const STATUS_COLOR: Record<NonNullable<PublicBuildView["statusColor"]>, string> = {
-  green: COLORS.success,
-  yellow: COLORS.warning,
-  red: COLORS.danger,
+const PC = {
+  bg: "#0C0D0F",
+  bg2: "#111316",
+  surface: "#16191D",
+  surface2: "#1C2026",
+  line: "rgba(255,255,255,0.07)",
+  lineStrong: "rgba(255,255,255,0.12)",
+  txt: "#F4F3F1",
+  txt2: "#A7AEB6",
+  txt3: "#6E757D",
+  accent: "#D08B41",
+  accent2: "#F0B571",
+  accentSoft: "rgba(208,139,65,0.12)",
+  ok: "#3FB27F",
+  okSoft: "rgba(63,178,127,0.12)",
+  warn: "#E0A45C",
+  warnSoft: "rgba(224,164,92,0.12)",
+  danger: "#E0574D",
+  dangerSoft: "rgba(224,87,77,0.12)",
+};
+
+const STATUS_TONE: Record<
+  NonNullable<PublicBuildView["statusColor"]>,
+  { color: string; bg: string; label: string }
+> = {
+  green: { color: PC.ok, bg: PC.okSoft, label: "Realizacja na czasie" },
+  yellow: { color: PC.warn, bg: PC.warnSoft, label: "Lekkie opóźnienie" },
+  red: { color: PC.danger, bg: PC.dangerSoft, label: "Opóźnienie" },
 };
 
 const DISPLAY_STATUS_LABEL: Record<PublicBuildView["displayStatus"], string> = {
@@ -42,113 +74,465 @@ const formatDatePL = (iso: string | null) => {
   return d.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
-function HeroGauge({ view }: { view: PublicBuildView }) {
-  const color = view.statusColor ? STATUS_COLOR[view.statusColor] : COLORS.border;
+const formatDateShortPL = (iso: string) => {
+  const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit" });
+};
+
+// Miniaturka Google Drive z samego driveFileId — folder budowy ma
+// "anyone with the link: reader" ustawione przy tworzeniu (patrz
+// supabase/functions/drive-photos/index.ts), więc ten link działa bez
+// logowania.
+const driveThumbUrl = (fileId: string) =>
+  `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+
+function Card({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: object;
+}) {
+  return (
+    <View
+      style={[
+        {
+          backgroundColor: PC.surface,
+          borderWidth: 1,
+          borderColor: PC.line,
+          borderRadius: 20,
+          marginBottom: 14,
+          overflow: "hidden",
+        },
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+function CardHeader({ title, right }: { title: string; right?: string }) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: PC.line,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 11,
+          letterSpacing: 1.4,
+          textTransform: "uppercase",
+          color: PC.txt3,
+          fontWeight: "700",
+        }}
+      >
+        {title}
+      </Text>
+      {right && (
+        <Text
+          style={{
+            fontSize: 11,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: PC.txt3,
+            fontWeight: "700",
+          }}
+        >
+          {right}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const GAUGE_SIZE = 216;
+const GAUGE_STROKE = 14;
+const GAUGE_RADIUS = (GAUGE_SIZE - GAUGE_STROKE) / 2;
+const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_RADIUS;
+
+function Gauge({ view }: { view: PublicBuildView }) {
+  const tone = view.statusColor ? STATUS_TONE[view.statusColor] : null;
+  const percent = Math.max(0, Math.min(100, view.progressPercent));
+  const offset = GAUGE_CIRCUMFERENCE * (1 - percent / 100);
+
+  const currentStageIndex = view.stages.findIndex((s) => s.percent < 100);
+  const currentStage =
+    currentStageIndex >= 0 ? view.stages[currentStageIndex] : view.stages[view.stages.length - 1];
+
   const subtitle =
     view.displayStatus === "nierozpoczeta"
       ? "Budowa jeszcze się nie rozpoczęła"
       : view.displayStatus === "zamknieta"
         ? "Budowa zakończona"
         : "Postęp budowy";
+
   return (
-    <View style={{ alignItems: "center", marginTop: 12, marginBottom: 8 }}>
-      <View
-        style={{
-          alignSelf: "center",
-          backgroundColor: COLORS.background,
-          borderWidth: 1,
-          borderColor: color,
-          borderRadius: 999,
-          paddingHorizontal: 12,
-          paddingVertical: 4,
-          marginBottom: 12,
-        }}
-      >
-        <Text style={{ color, fontSize: 12, fontWeight: "700" }}>
-          {DISPLAY_STATUS_LABEL[view.displayStatus]}
-        </Text>
+    <View style={{ alignItems: "center", paddingVertical: 30, paddingHorizontal: 22 }}>
+      {tone && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+            backgroundColor: tone.bg,
+            borderRadius: 999,
+            paddingHorizontal: 13,
+            paddingVertical: 6,
+            borderWidth: 1,
+            borderColor: tone.color,
+            marginBottom: 18,
+          }}
+        >
+          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tone.color }} />
+          <Text style={{ color: tone.color, fontSize: 12, fontWeight: "700" }}>{tone.label}</Text>
+        </View>
+      )}
+
+      <View style={{ width: GAUGE_SIZE, height: GAUGE_SIZE }}>
+        <Svg width={GAUGE_SIZE} height={GAUGE_SIZE} style={{ transform: [{ rotate: "-90deg" }] }}>
+          <Defs>
+            <LinearGradient id="gaugeGradient" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0%" stopColor={PC.accent2} />
+              <Stop offset="100%" stopColor={PC.accent} />
+            </LinearGradient>
+          </Defs>
+          <Circle
+            cx={GAUGE_SIZE / 2}
+            cy={GAUGE_SIZE / 2}
+            r={GAUGE_RADIUS}
+            stroke="rgba(255,255,255,0.06)"
+            strokeWidth={GAUGE_STROKE}
+            fill="none"
+          />
+          <Circle
+            cx={GAUGE_SIZE / 2}
+            cy={GAUGE_SIZE / 2}
+            r={GAUGE_RADIUS}
+            stroke="url(#gaugeGradient)"
+            strokeWidth={GAUGE_STROKE}
+            strokeLinecap="round"
+            strokeDasharray={GAUGE_CIRCUMFERENCE}
+            strokeDashoffset={offset}
+            fill="none"
+          />
+        </Svg>
+        <View
+          style={{
+            position: "absolute",
+            inset: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: PC.txt, fontSize: 46, fontWeight: "800", letterSpacing: -1 }}>
+            {Math.round(percent)}%
+          </Text>
+          <Text style={{ color: PC.txt3, fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
+            POSTĘPU
+          </Text>
+        </View>
       </View>
-      <View
-        style={{
-          width: 176,
-          height: 176,
-          borderRadius: 88,
-          borderWidth: 10,
-          borderColor: color,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: COLORS.surface,
-        }}
-      >
-        <Text style={{ color: COLORS.foreground, fontSize: 40, fontWeight: "800" }}>
-          {Math.round(view.progressPercent)}%
-        </Text>
-        <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>postępu</Text>
+
+      <View style={{ alignItems: "center", marginTop: 16 }}>
+        {currentStage ? (
+          <>
+            <Text style={{ color: PC.txt3, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase" }}>
+              Aktualnie trwa
+            </Text>
+            <Text style={{ color: PC.txt, fontSize: 19, fontWeight: "700", marginTop: 6 }}>
+              {currentStage.name}
+            </Text>
+            <Text style={{ color: PC.accent2, fontSize: 13, marginTop: 4, fontWeight: "600" }}>
+              {Math.round(currentStage.percent)}% tego etapu
+            </Text>
+          </>
+        ) : (
+          <Text style={{ color: PC.txt, fontSize: 15, fontWeight: "700" }}>{subtitle}</Text>
+        )}
       </View>
-      <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 16, marginTop: 14 }}>
-        {subtitle}
-      </Text>
     </View>
   );
 }
 
-function StagesProgress({ stages }: { stages: PublicBuildView["stages"] }) {
+function StagesStepper({ stages }: { stages: PublicBuildView["stages"] }) {
   if (!stages.length) return null;
+  const currentIndex = stages.findIndex((s) => s.percent < 100);
   return (
-    <View style={{ marginTop: 8 }}>
-      {stages.map((s, i) => (
-        <View key={s.name + i} style={{ marginBottom: i === stages.length - 1 ? 0 : 14 }}>
-          <View
+    <View style={{ padding: 20 }}>
+      {stages.map((s, i) => {
+        const done = s.percent >= 100;
+        const isCurrent = i === currentIndex;
+        const isLast = i === stages.length - 1;
+        return (
+          <View key={s.name + i} style={{ flexDirection: "row", gap: 14 }}>
+            <View style={{ alignItems: "center", width: 26 }}>
+              <View
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 13,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: done ? PC.accent : PC.bg2,
+                  borderWidth: done ? 0 : 2,
+                  borderColor: isCurrent ? PC.accent : PC.lineStrong,
+                }}
+              >
+                <Text
+                  style={{
+                    color: done ? "#1A1206" : isCurrent ? PC.accent2 : PC.txt3,
+                    fontSize: 11,
+                    fontWeight: "800",
+                  }}
+                >
+                  {done ? "✓" : i + 1}
+                </Text>
+              </View>
+              {!isLast && (
+                <View
+                  style={{
+                    width: 2,
+                    flex: 1,
+                    minHeight: 24,
+                    backgroundColor: done ? PC.accent : PC.lineStrong,
+                    marginTop: 2,
+                  }}
+                />
+              )}
+            </View>
+            <View style={{ flex: 1, paddingBottom: isLast ? 0 : 20, minWidth: 0 }}>
+              <Text
+                style={{
+                  fontWeight: "600",
+                  fontSize: 15,
+                  color: done || isCurrent ? PC.txt : PC.txt3,
+                }}
+              >
+                {s.name}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  marginTop: 3,
+                  color: isCurrent ? PC.accent2 : PC.txt3,
+                }}
+              >
+                {done ? "Ukończono" : isCurrent ? `W trakcie · ${Math.round(s.percent)}%` : "Zaplanowane"}
+              </Text>
+              {isCurrent && (
+                <View
+                  style={{
+                    height: 5,
+                    borderRadius: 99,
+                    backgroundColor: "rgba(255,255,255,0.07)",
+                    marginTop: 9,
+                    maxWidth: 220,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      width: `${Math.max(0, Math.min(100, s.percent))}%`,
+                      height: "100%",
+                      borderRadius: 99,
+                      backgroundColor: PC.accent,
+                    }}
+                  />
+                </View>
+              )}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function PhotosCard({ view }: { view: PublicBuildView }) {
+  if (view.photos.length === 0) return null;
+  const shown = view.photos.slice(0, 6);
+  return (
+    <Card>
+      <CardHeader title="Zdjęcia z budowy" right={`${shown.length} z ${view.photos.length}`} />
+      <View style={{ padding: 20 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+          {shown.map((p) => (
+            <View
+              key={p.id}
+              style={{
+                width: "31%",
+                aspectRatio: 4 / 3,
+                borderRadius: 14,
+                overflow: "hidden",
+                borderWidth: 1,
+                borderColor: PC.line,
+                backgroundColor: PC.surface2,
+              }}
+            >
+              <Image
+                source={{ uri: driveThumbUrl(p.id) }}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode="cover"
+              />
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 8,
+                  bottom: 7,
+                  fontSize: 10,
+                  fontWeight: "700",
+                  color: "#fff",
+                  backgroundColor: "rgba(0,0,0,0.6)",
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 5,
+                }}
+              >
+                {formatDateShortPL(p.createdAt)}
+              </Text>
+            </View>
+          ))}
+        </View>
+        {view.photosUrl && (
+          <Pressable
+            onPress={() => Linking.openURL(view.photosUrl!)}
             style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 6,
+              marginTop: 14,
+              borderWidth: 1,
+              borderColor: PC.line,
+              borderRadius: 10,
+              paddingVertical: 11,
+              alignItems: "center",
             }}
           >
-            <Text style={{ color: COLORS.foreground, fontWeight: "600", flex: 1, marginRight: 8 }}>
-              {s.name}
+            <Text style={{ color: PC.accent2, fontSize: 13, fontWeight: "600" }}>
+              Zobacz wszystkie zdjęcia
             </Text>
-            <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "700" }}>
-              {Math.round(s.percent)}%
-            </Text>
-          </View>
+          </Pressable>
+        )}
+      </View>
+    </Card>
+  );
+}
+
+function NotesCard({ notes }: { notes: PublicBuildView["notes"] }) {
+  if (notes.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader title="Ostatnie aktualizacje" />
+      <View style={{ paddingHorizontal: 20, paddingVertical: 6 }}>
+        {notes.map((n, i) => (
           <View
+            key={n.date + i}
             style={{
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: COLORS.background,
-              overflow: "hidden",
+              flexDirection: "row",
+              gap: 12,
+              alignItems: "flex-start",
+              paddingVertical: 13,
+              borderBottomWidth: i === notes.length - 1 ? 0 : 1,
+              borderBottomColor: PC.line,
             }}
           >
             <View
               style={{
-                width: `${Math.min(100, Math.max(0, s.percent))}%`,
-                height: "100%",
+                width: 8,
+                height: 8,
                 borderRadius: 4,
-                backgroundColor: s.percent >= 100 ? COLORS.success : COLORS.primary,
+                marginTop: 6,
+                backgroundColor: i === 0 ? PC.accent : PC.lineStrong,
               }}
             />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ color: PC.txt3, fontSize: 12 }}>{formatDatePL(n.date)}</Text>
+              <Text
+                style={{
+                  color: i === 0 ? PC.txt : PC.txt2,
+                  fontSize: 14,
+                  marginTop: 3,
+                }}
+              >
+                {n.note}
+              </Text>
+            </View>
           </View>
-        </View>
-      ))}
-    </View>
+        ))}
+      </View>
+    </Card>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
+function TechCard({ view }: { view: PublicBuildView }) {
+  if (!view.technologyName && view.materials.length === 0) return null;
   return (
-    <View
-      style={{
-        backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 14,
-      }}
-    >
-      {children}
-    </View>
+    <Card>
+      <CardHeader title="Zastosowana technologia" />
+      <View style={{ padding: 20 }}>
+        {view.technologyName && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              padding: 14,
+              borderRadius: 14,
+              backgroundColor: PC.surface2,
+              borderWidth: 1,
+              borderColor: PC.line,
+              marginBottom: view.materials.length > 0 ? 16 : 0,
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 11,
+                backgroundColor: PC.accentSoft,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: PC.accent2, fontSize: 18 }}>⬢</Text>
+            </View>
+            <Text style={{ color: PC.txt, fontWeight: "600", fontSize: 15, flex: 1 }}>
+              {view.technologyName}
+            </Text>
+          </View>
+        )}
+        {view.materials.length > 0 && (
+          <View>
+            <Text
+              style={{
+                color: PC.txt3,
+                fontSize: 11,
+                letterSpacing: 1,
+                textTransform: "uppercase",
+                marginBottom: 8,
+                fontWeight: "700",
+              }}
+            >
+              Materiały na budowie
+            </Text>
+            {view.materials.map((name, i) => (
+              <Text
+                key={name + i}
+                style={{ color: PC.txt2, fontSize: 13.5, marginTop: i === 0 ? 0 : 5 }}
+              >
+                • {name}
+              </Text>
+            ))}
+          </View>
+        )}
+      </View>
+    </Card>
   );
 }
 
@@ -170,7 +554,6 @@ export default function PublicBuildPortal() {
         const result = await fetchPublicBuild(token, pin);
         setView(result);
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error("[portal] get_public_build failed:", err);
         const message = err instanceof Error ? err.message : "Nieznany błąd.";
         setError(`Nie udało się wczytać danych budowy: ${message}`);
@@ -205,27 +588,27 @@ export default function PublicBuildPortal() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: COLORS.background, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={COLORS.primary} />
+      <View style={{ flex: 1, backgroundColor: PC.bg, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={PC.accent} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={{ flex: 1, backgroundColor: COLORS.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <Text style={{ color: COLORS.danger, textAlign: "center" }}>{error}</Text>
+      <View style={{ flex: 1, backgroundColor: PC.bg, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <Text style={{ color: PC.danger, textAlign: "center" }}>{error}</Text>
       </View>
     );
   }
 
   if (!view) {
     return (
-      <View style={{ flex: 1, backgroundColor: COLORS.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <Text style={{ color: COLORS.foreground, fontSize: 18, fontWeight: "700", textAlign: "center" }}>
+      <View style={{ flex: 1, backgroundColor: PC.bg, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <Text style={{ color: PC.txt, fontSize: 18, fontWeight: "700", textAlign: "center" }}>
           Strona nie została znaleziona
         </Text>
-        <Text style={{ color: COLORS.muted, marginTop: 8, textAlign: "center" }}>
+        <Text style={{ color: PC.txt3, marginTop: 8, textAlign: "center" }}>
           Link może być nieaktualny lub podgląd tej budowy nie jest już udostępniony.
         </Text>
       </View>
@@ -234,13 +617,13 @@ export default function PublicBuildPortal() {
 
   if (view.requiresPin) {
     return (
-      <View style={{ flex: 1, backgroundColor: COLORS.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <Text style={{ color: COLORS.foreground, fontSize: 20, fontWeight: "800", textAlign: "center", marginBottom: 4 }}>
+      <View style={{ flex: 1, backgroundColor: PC.bg, alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <Text style={{ color: PC.txt, fontSize: 20, fontWeight: "800", textAlign: "center", marginBottom: 4 }}>
           {view.name}
         </Text>
-        <Text style={{ color: COLORS.muted, marginBottom: 20 }}>{view.number}</Text>
+        <Text style={{ color: PC.txt3, marginBottom: 20 }}>{view.number}</Text>
         <View style={{ width: "100%", maxWidth: 320 }}>
-          <Text style={{ color: COLORS.foreground, marginBottom: 8, textAlign: "center" }}>
+          <Text style={{ color: PC.txt, marginBottom: 8, textAlign: "center" }}>
             Wprowadź kod PIN, żeby zobaczyć postęp budowy
           </Text>
           <Field
@@ -251,7 +634,7 @@ export default function PublicBuildPortal() {
             secureTextEntry
           />
           {pinError && (
-            <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8, textAlign: "center" }}>{pinError}</Text>
+            <Text style={{ color: PC.danger, fontSize: 12, marginTop: 8, textAlign: "center" }}>{pinError}</Text>
           )}
           <View style={{ marginTop: 14 }}>
             <Button label={pinBusy ? "Sprawdzanie…" : "Zatwierdź"} onPress={submitPin} disabled={pinBusy} fullWidth />
@@ -262,62 +645,170 @@ export default function PublicBuildPortal() {
   }
 
   const plannedEnd = formatDatePL(view.plannedEndDate);
+  const startDate = formatDatePL(view.startDate);
   const lastUpdate = formatDatePL(view.lastUpdateDate);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: COLORS.background }} contentContainerStyle={{ padding: 18, paddingTop: 40 }}>
-      <Text style={{ color: COLORS.foreground, fontSize: 22, fontWeight: "800" }}>{view.name}</Text>
-      <Text style={{ color: COLORS.muted, marginTop: 2 }}>{view.number}</Text>
-      {view.address && <Text style={{ color: COLORS.muted, marginTop: 6 }}>{view.address}</Text>}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 10 }}>
-        {view.areaM2 && (
-          <Text style={{ color: COLORS.muted, fontSize: 13 }}>Metraż: {view.areaM2} m²</Text>
-        )}
-        {plannedEnd && (
-          <Text style={{ color: COLORS.muted, fontSize: 13 }}>Planowane zakończenie: {plannedEnd}</Text>
-        )}
+    <ScrollView style={{ flex: 1, backgroundColor: PC.bg }} contentContainerStyle={{ padding: 18, paddingTop: 40, paddingBottom: 48 }}>
+      {/* Pasek marki — uproszczony (bez position:sticky, niekrytyczne na
+          jednorazowym podglądzie z linku/QR). */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 28,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 8,
+              backgroundColor: PC.accent2,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: "#1A1206", fontSize: 13, fontWeight: "800" }}>F</Text>
+          </View>
+          <Text style={{ color: PC.txt, fontWeight: "800", fontSize: 13, letterSpacing: 2 }}>
+            FLOWTEX
+          </Text>
+        </View>
+        <Text style={{ color: PC.txt3, fontSize: 11 }}>🔒 Podgląd dla zleceniodawcy</Text>
       </View>
 
-      <Card>
-        <HeroGauge view={view} />
-        <StagesProgress stages={view.stages} />
-      </Card>
-
-      <Card>
-        <Text style={{ color: COLORS.foreground, fontWeight: "700", marginBottom: 4 }}>Ostatnia aktualizacja</Text>
-        <Text style={{ color: COLORS.muted }}>{lastUpdate ?? "Brak jeszcze raportów z tej budowy."}</Text>
-      </Card>
-
-      {view.materials.length > 0 && (
-        <Card>
-          <Text style={{ color: COLORS.foreground, fontWeight: "700", marginBottom: 10 }}>
-            Materiały na budowie
-          </Text>
-          {view.materials.map((name, i) => (
-            <Text key={name + i} style={{ color: COLORS.muted, marginTop: i === 0 ? 0 : 4 }}>
-              • {name}
-            </Text>
-          ))}
-        </Card>
-      )}
-
-      {view.photosUrl && (
-        <Card>
-          <Text style={{ color: COLORS.foreground, fontWeight: "700", marginBottom: 10 }}>Zdjęcia z postępu</Text>
-          <Button label="Zobacz zdjęcia" onPress={() => Linking.openURL(view.photosUrl!)} fullWidth />
-        </Card>
-      )}
-
-      {view.contractValue != null && (
-        <Card>
-          <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>Wartość kontraktu</Text>
-          <Text style={{ color: COLORS.muted, marginTop: 4 }}>{formatPLN(Number(view.contractValue))}</Text>
-        </Card>
-      )}
-
-      <Text style={{ color: COLORS.muted, fontSize: 11, textAlign: "center", marginTop: 8, marginBottom: 24 }}>
-        Flowtex — podgląd postępu budowy
+      {/* Nagłówek budowy */}
+      <Text
+        style={{
+          color: PC.accent2,
+          fontSize: 11,
+          letterSpacing: 2,
+          textTransform: "uppercase",
+          fontWeight: "700",
+          marginBottom: 10,
+        }}
+      >
+        — Postęp realizacji
       </Text>
+      <Text style={{ color: PC.txt, fontSize: 34, fontWeight: "800", letterSpacing: -0.5 }}>
+        {view.name}
+      </Text>
+      <Text style={{ color: PC.txt3, fontSize: 14, marginTop: 6 }}>
+        Zlecenie {view.number}
+        {view.address ? `  ·  ${view.address}` : ""}
+      </Text>
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
+        {view.areaM2 && (
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>
+              Powierzchnia <Text style={styles.pillStrong}>{view.areaM2} m²</Text>
+            </Text>
+          </View>
+        )}
+        {startDate && (
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>
+              Start <Text style={styles.pillStrong}>{startDate}</Text>
+            </Text>
+          </View>
+        )}
+        {plannedEnd && (
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>
+              Zakończenie <Text style={styles.pillStrong}>{plannedEnd}</Text>
+            </Text>
+          </View>
+        )}
+        <View style={styles.pill}>
+          <Text style={styles.pillText}>
+            Status <Text style={styles.pillStrong}>{DISPLAY_STATUS_LABEL[view.displayStatus]}</Text>
+          </Text>
+        </View>
+      </View>
+
+      <View style={{ marginTop: 26 }}>
+        <Card>
+          <Gauge view={view} />
+          {view.stages.length > 0 && (
+            <>
+              <View style={{ borderTopWidth: 1, borderTopColor: PC.line }} />
+              <StagesStepper stages={view.stages} />
+            </>
+          )}
+        </Card>
+
+        <PhotosCard view={view} />
+        <NotesCard notes={view.notes} />
+        <TechCard view={view} />
+
+        {view.contractValue != null && (
+          <Card>
+            <CardHeader title="Wartość kontraktu" />
+            <View style={{ padding: 20 }}>
+              <Text style={{ color: PC.txt, fontSize: 20, fontWeight: "800" }}>
+                {formatPLN(Number(view.contractValue))}
+              </Text>
+            </View>
+          </Card>
+        )}
+
+        <View
+          style={{
+            marginTop: 4,
+            padding: 20,
+            borderRadius: 20,
+            backgroundColor: PC.accentSoft,
+            borderWidth: 1,
+            borderColor: "rgba(208,139,65,0.22)",
+          }}
+        >
+          <Text style={{ color: PC.txt, fontWeight: "700", fontSize: 15, marginBottom: 4 }}>
+            Masz pytania do realizacji?
+          </Text>
+          <Text style={{ color: PC.txt2, fontSize: 13.5 }}>
+            Skontaktuj się z opiekunem projektu po stronie Flowtex.
+          </Text>
+        </View>
+
+        <View
+          style={{
+            marginTop: 22,
+            paddingTop: 18,
+            borderTopWidth: 1,
+            borderTopColor: PC.line,
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <Text style={{ color: PC.txt3, fontSize: 11 }}>
+            {lastUpdate ? `Aktualizacja danych: ${lastUpdate}` : "Brak jeszcze raportów z tej budowy."}
+          </Text>
+          <Text style={{ color: PC.txt3, fontSize: 11 }}>
+            Widok generowany automatycznie z systemu ERP Flowtex
+          </Text>
+        </View>
+      </View>
     </ScrollView>
   );
 }
+
+const styles = {
+  pill: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: PC.surface,
+    borderWidth: 1,
+    borderColor: PC.line,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  pillText: { color: PC.txt2, fontSize: 12.5 },
+  pillStrong: { color: PC.txt, fontWeight: "700" as const },
+};

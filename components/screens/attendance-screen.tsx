@@ -1,15 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, View, Pressable } from "react-native";
-import { COLORS, IconBadge } from "@/components/report-ui";
+import { COLORS, IconBadge, formatPLN } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 
 /**
  * Zestawienie obecności: ile dni roboczych/godzin i ile dni urlopu miał
  * każdy pracownik w wybranym okresie (tydzień/miesiąc/rok) — właściciel
  * potrzebuje tego niezależnie od "Rozliczenia godzin" (hr-screen.tsx),
- * które nie zna urlopów. Kalendarz-timeline na dole (tylko w widoku
- * Miesiąc) to celowo prosty zalążek przyszłego modułu planowania —
- * pokazuje per dzień: obecność/urlop/brak, nic więcej na razie.
+ * które nie zna urlopów. Kalendarz-timeline na dole to celowo prosty
+ * zalążek przyszłego modułu planowania — pokazuje per dzień:
+ * obecność/urlop/brak, nic więcej na razie. Niezależny od przełącznika
+ * okresu wyżej — jeden ciągły pasek dni, żeby dało się przewijać palcem
+ * płynnie z miesiąca na miesiąc, bez skoków.
  */
 
 type PeriodMode = "week" | "month" | "year";
@@ -48,9 +50,10 @@ function countBusinessDaysInRange(from: string, to: string): number {
 }
 
 export function AttendanceSection() {
-  const { employees, timeEntries, leaveRequests } = useAppData();
+  const { employees, timeEntries, leaveRequests, workdayHours } = useAppData();
   const [mode, setMode] = useState<PeriodMode>("month");
   const [offset, setOffset] = useState(0);
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
   const today = toISO(new Date());
 
   const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
@@ -181,40 +184,105 @@ export function AttendanceSection() {
           <Text className="text-sm text-muted mt-3 text-center">Brak pracowników.</Text>
         </View>
       ) : (
-        rows.map((row) => (
-          <View
-            key={row.employee.id}
-            className="bg-surface border border-border rounded-2xl p-4 mb-3"
-            style={{ flexDirection: "row", alignItems: "center" }}
-          >
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <Text className="text-base font-bold text-foreground" numberOfLines={1}>
-                {row.employee.name}
-              </Text>
-              <Text className="text-xs text-muted mt-1">
-                {row.hours.toFixed(1)} godz. łącznie
-              </Text>
+        rows.map((row) => {
+          const expanded = expandedEmployeeId === row.employee.id;
+          // Dniówka: godziny z Ustawień × stawka godzinowa — płaci się ją w
+          // całości za każdy dzień z choćby jednym wpisem, niezależnie od
+          // tego, ile faktycznie godzin tego dnia przepracowano (6 czy 10).
+          // Do rozliczenia KOSZTU budowy liczą się realne godziny (patrz
+          // settlement-screen.tsx) — to tutaj jest wyłącznie "ile do ręki".
+          const dayRate = workdayHours * (row.employee.hourlyRate || 0);
+          const payout = row.workedDays * dayRate;
+          return (
+            <View
+              key={row.employee.id}
+              className="bg-surface border border-border rounded-2xl mb-3 overflow-hidden"
+            >
+              <Pressable
+                onPress={() => setExpandedEmployeeId(expanded ? null : row.employee.id)}
+                style={{ flexDirection: "row", alignItems: "center", padding: 16 }}
+              >
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text className="text-base font-bold text-foreground" numberOfLines={1}>
+                    {row.employee.name}
+                  </Text>
+                  <Text className="text-xs text-muted mt-1">
+                    {row.hours.toFixed(1)} godz. łącznie
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end", marginRight: 18 }}>
+                  <Text className="text-xs text-muted uppercase">Robocze</Text>
+                  <Text className="text-lg font-bold text-foreground mt-0.5">
+                    {row.workedDays}
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end", marginRight: 10 }}>
+                  <Text className="text-xs text-muted uppercase">Urlop</Text>
+                  <Text style={{ color: COLORS.primary }} className="text-lg font-bold mt-0.5">
+                    {row.leaveDays}
+                  </Text>
+                </View>
+                <Text style={{ color: COLORS.primary, fontSize: 16 }}>
+                  {expanded ? "▲" : "▼"}
+                </Text>
+              </Pressable>
+              {expanded && (
+                <View
+                  style={{
+                    borderTopWidth: 1,
+                    borderTopColor: COLORS.border,
+                    padding: 16,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Text className="text-sm text-muted">
+                      Dniówka ({workdayHours} godz. × {formatPLN(row.employee.hourlyRate || 0)})
+                    </Text>
+                    <Text className="text-sm font-bold text-foreground">
+                      {formatPLN(dayRate)}
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      marginBottom: 10,
+                    }}
+                  >
+                    <Text className="text-sm text-muted">
+                      {row.workedDays} {row.workedDays === 1 ? "dniówka" : "dniówek"} w tym
+                      okresie
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      paddingTop: 10,
+                      borderTopWidth: 1,
+                      borderTopColor: COLORS.border,
+                    }}
+                  >
+                    <Text className="text-base font-bold text-foreground">Do wypłaty</Text>
+                    <Text style={{ color: COLORS.primary }} className="text-lg font-bold">
+                      {formatPLN(payout)}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
-            <View style={{ alignItems: "flex-end", marginRight: 18 }}>
-              <Text className="text-xs text-muted uppercase">Robocze</Text>
-              <Text className="text-lg font-bold text-foreground mt-0.5">
-                {row.workedDays}
-              </Text>
-            </View>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text className="text-xs text-muted uppercase">Urlop</Text>
-              <Text style={{ color: COLORS.primary }} className="text-lg font-bold mt-0.5">
-                {row.leaveDays}
-              </Text>
-            </View>
-          </View>
-        ))
+          );
+        })
       )}
 
-      {mode === "month" && rows.length > 0 && (
+      {rows.length > 0 && (
         <MonthTimeline
-          rangeStart={rangeStart}
-          rangeEnd={rangeEnd}
           today={today}
           rows={rows}
           timeEntries={timeEntries}
@@ -225,21 +293,25 @@ export function AttendanceSection() {
   );
 }
 
-// Kalendarz-timeline: dla każdego pracownika pasek dni miesiąca z kolorem
+// Kalendarz-timeline: dla każdego pracownika ciągły pasek dni z kolorem
 // (zielony = obecność, niebieski = urlop zatwierdzony, bursztynowy =
-// urlop oczekujący, czerwony = brak w dniu roboczym z przeszłości, szary
-// = weekend/przyszłość). To jest CAŁA logika na razie — bez edycji,
-// przeciągania, przypisywania do budów; to przyjdzie z modułem planowania.
+// urlop oczekujący, czerwony = brak w dniu roboczym z przeszłości, puste
+// = weekend/przyszłość). Celowo NIEZALEŻNY od przełącznika okresu wyżej —
+// jeden ciągły ScrollView (±45 dni od dziś), żeby przewijanie palcem
+// przechodziło między miesiącami płynnie, bez skoku na "‹ ›". To jest
+// CAŁA logika na razie — bez edycji, przeciągania, przypisywania do
+// budów; to przyjdzie z modułem planowania.
+const TIMELINE_DAYS_BEFORE = 45;
+const TIMELINE_DAYS_AFTER = 45;
+const TIMELINE_CELL_WIDTH = 22;
+const TIMELINE_NAME_WIDTH = 110;
+
 function MonthTimeline({
-  rangeStart,
-  rangeEnd,
   today,
   rows,
   timeEntries,
   leaveRequests,
 }: {
-  rangeStart: string;
-  rangeEnd: string;
   today: string;
   rows: { employee: { id: string; name: string } }[];
   timeEntries: { employeeId: string; date: string }[];
@@ -251,12 +323,38 @@ function MonthTimeline({
   }[];
 }) {
   const days = useMemo(() => {
+    const start = addDays(today, -TIMELINE_DAYS_BEFORE);
+    const end = addDays(today, TIMELINE_DAYS_AFTER);
     const list: string[] = [];
-    for (let d = parseISO(rangeStart); d <= parseISO(rangeEnd); d.setDate(d.getDate() + 1)) {
+    for (let d = parseISO(start); d <= parseISO(end); d.setDate(d.getDate() + 1)) {
       list.push(toISO(d));
     }
     return list;
-  }, [rangeStart, rangeEnd]);
+  }, [today]);
+
+  // Miesiąc pokazany tylko przy jego pierwszym dniu w widocznym zakresie
+  // (albo przy samym pierwszym dniu paska, gdy okno zaczyna się w środku
+  // miesiąca) — orientacja podczas przewijania bez zaśmiecania każdej
+  // kolumny.
+  const monthLabels = useMemo(
+    () =>
+      days
+        .map((date, i) => ({ date, i, isFirst: parseISO(date).getDate() === 1 || i === 0 }))
+        .filter((d) => d.isFirst),
+    [days],
+  );
+
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    const todayIndex = days.indexOf(today);
+    if (todayIndex >= 0) {
+      const x = Math.max(0, (todayIndex - 3) * TIMELINE_CELL_WIDTH);
+      // Bez animacji — to pozycjonowanie startowe, nie reakcja na akcję
+      // użytkownika.
+      requestAnimationFrame(() => scrollRef.current?.scrollTo({ x, animated: false }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
 
   const cellColor = (employeeId: string, date: string) => {
     const d = parseISO(date);
@@ -278,18 +376,47 @@ function MonthTimeline({
 
   return (
     <View className="mb-5">
-      <Text className="text-lg font-bold text-foreground mb-1">Kalendarz miesiąca</Text>
+      <Text className="text-lg font-bold text-foreground mb-1">Kalendarz</Text>
       <Text className="text-xs text-muted mb-3">
-        Zielony = obecność · niebieski = urlop zatwierdzony · bursztynowy = urlop oczekujący ·
-        czerwony = brak
+        Przesuń palcem, żeby zobaczyć inne dni. Zielony = obecność · niebieski = urlop
+        zatwierdzony · bursztynowy = urlop oczekujący · czerwony = brak
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator>
+      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator>
         <View>
+          <View style={{ flexDirection: "row", marginLeft: TIMELINE_NAME_WIDTH }}>
+            <View style={{ width: days.length * TIMELINE_CELL_WIDTH, height: 16 }}>
+              {monthLabels.map(({ date, i }) => (
+                <Text
+                  key={date}
+                  style={{
+                    position: "absolute",
+                    left: i * TIMELINE_CELL_WIDTH,
+                    color: COLORS.foreground,
+                    fontSize: 10,
+                    fontWeight: "800",
+                    textTransform: "capitalize",
+                  }}
+                  numberOfLines={1}
+                >
+                  {monthLabelPL(date).split(" ")[0]}
+                </Text>
+              ))}
+            </View>
+          </View>
           <View style={{ flexDirection: "row", marginBottom: 4 }}>
-            <View style={{ width: 110 }} />
+            <View style={{ width: TIMELINE_NAME_WIDTH }} />
             {days.map((date) => (
-              <View key={date} style={{ width: 22, alignItems: "center" }}>
-                <Text style={{ color: COLORS.muted, fontSize: 9 }}>
+              <View
+                key={date}
+                style={{ width: TIMELINE_CELL_WIDTH, alignItems: "center" }}
+              >
+                <Text
+                  style={{
+                    color: date === today ? COLORS.primary : COLORS.muted,
+                    fontSize: 9,
+                    fontWeight: date === today ? "800" : "400",
+                  }}
+                >
                   {date.slice(8, 10)}
                 </Text>
               </View>
@@ -301,13 +428,21 @@ function MonthTimeline({
               style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}
             >
               <Text
-                style={{ width: 110, color: COLORS.foreground, fontSize: 12, fontWeight: "700" }}
+                style={{
+                  width: TIMELINE_NAME_WIDTH,
+                  color: COLORS.foreground,
+                  fontSize: 12,
+                  fontWeight: "700",
+                }}
                 numberOfLines={1}
               >
                 {employee.name}
               </Text>
               {days.map((date) => (
-                <View key={date} style={{ width: 22, alignItems: "center" }}>
+                <View
+                  key={date}
+                  style={{ width: TIMELINE_CELL_WIDTH, alignItems: "center" }}
+                >
                   <View
                     style={{
                       width: 16,

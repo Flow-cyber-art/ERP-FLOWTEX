@@ -477,7 +477,7 @@ export function BuildsScreen() {
                   .filter((m) => m.teamId === Number(newBuild.teamId))
                   .reduce((sum, m) => {
                     const employee = employees.find((e) => e.id === String(m.employeeId));
-                    return sum + (employee?.hourlyRate || 0);
+                    return sum + (employee?.costRate || 0);
                   }, 0) *
                   workdayHours *
                   Number(newBuild.durationDays),
@@ -2299,11 +2299,13 @@ export function BuildsScreen() {
               const buildTimeEntries = timeEntries.filter(
                 (t) => t.buildId === b.id,
               );
-              // Stawka ZAMROŻONA na wpisie (t.hourlyRate), nie aktualna —
+              // Stawka ZAMROŻONA na wpisie (t.costRate), nie aktualna —
               // patrz supabase/sql/055_stawka_zamrozona_w_godzinach.sql.
+              // Koszt budowy liczymy ze stawki KOSZTOWEJ (koszt pracodawcy),
+              // nie ze stawki godzinowej (ta jest tylko do wypłaty).
               const laborCostActual = buildTimeEntries.reduce((sum, t) => {
                 const employee = employees.find((e) => e.id === t.employeeId);
-                const rate = t.hourlyRate ?? employee?.hourlyRate ?? 0;
+                const rate = t.costRate ?? employee?.costRate ?? 0;
                 return sum + t.hours * rate;
               }, 0);
               // Planowany koszt robocizny — patrz settlement-screen.tsx
@@ -2316,7 +2318,7 @@ export function BuildsScreen() {
                       const employee = employees.find(
                         (e) => e.id === String(m.employeeId),
                       );
-                      return sum + (employee?.hourlyRate || 0);
+                      return sum + (employee?.costRate || 0);
                     }, 0) *
                   (b.plannedHoursPerDay || 0) *
                   (b.durationDays || 0)

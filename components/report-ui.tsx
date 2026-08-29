@@ -1033,10 +1033,10 @@ const WizardStepper = ({
   steps: { n: number; label: string }[];
   current: number;
 }) => (
-  <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 20 }}>
+  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
     {steps.flatMap((s, i) => {
       const circle = (
-        <View key={`c${s.n}`} style={{ alignItems: "center", width: 76 }}>
+        <View key={`c${s.n}`} style={{ alignItems: "center" }}>
           <View
             style={{
               width: 32,
@@ -1062,17 +1062,6 @@ const WizardStepper = ({
               </Text>
             )}
           </View>
-          <Text
-            style={{
-              color: current === s.n ? COLORS.primary : COLORS.muted,
-              fontSize: 11,
-              marginTop: 6,
-              fontWeight: current === s.n ? "700" : "500",
-              textAlign: "center",
-            }}
-          >
-            {s.label}
-          </Text>
         </View>
       );
       if (i === steps.length - 1) return [circle];
@@ -1083,7 +1072,7 @@ const WizardStepper = ({
             flex: 1,
             height: 1,
             backgroundColor: current > s.n ? COLORS.primary : COLORS.border,
-            marginTop: 16,
+            marginHorizontal: 2,
           }}
         />
       );

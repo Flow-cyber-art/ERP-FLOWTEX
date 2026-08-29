@@ -133,6 +133,12 @@ export function BuildsScreen() {
   // Łączna liczba zdjęć w folderze, do nagłówka "ZDJĘCIA (n)" — zgłaszana
   // przez BuildPhotosSection (onCountChange), które i tak już ją pobiera.
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
+  // Portal klienta (QR/PIN/link) — konfiguracja ustawiana raz na budowę,
+  // domyślnie zwinięta, żeby nie zajmowała miejsca przy każdym wejściu
+  // (ten sam wzorzec zwijania co przy edycji technologii/zdjęć wyżej).
+  const [expandedPortalBuildId, setExpandedPortalBuildId] = useState<
+    string | null
+  >(null);
   // Przypisanie/zmiana technologii (Faza 2) — jeden picker na raz, ten
   // sam wzorzec co edycja linku do zdjęć powyżej.
   const [techEditBuildId, setTechEditBuildId] = useState<string | null>(null);
@@ -1613,9 +1619,39 @@ export function BuildsScreen() {
             </View>
           </View>
 
-          <DetailSection label="Portal klienta">
-            <BuildPortalSection buildId={Number(b.id)} />
-          </DetailSection>
+          <View
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTopWidth: 1,
+              borderTopColor: COLORS.border,
+            }}
+          >
+            <Pressable
+              onPress={() =>
+                setExpandedPortalBuildId(
+                  expandedPortalBuildId === b.id ? null : b.id,
+                )
+              }
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                PORTAL KLIENTA
+              </Text>
+              <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
+                {expandedPortalBuildId === b.id ? "⌄" : "›"}
+              </Text>
+            </Pressable>
+            {expandedPortalBuildId === b.id && (
+              <View style={{ marginTop: 10 }}>
+                <BuildPortalSection buildId={Number(b.id)} />
+              </View>
+            )}
+          </View>
 
           {isClosed && b.settlement ? (
             <DetailSection

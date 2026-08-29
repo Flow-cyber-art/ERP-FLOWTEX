@@ -355,12 +355,16 @@ function Gauge({ view }: { view: PublicBuildView }) {
 
 function StagesStepper({ stages }: { stages: PublicBuildView["stages"] }) {
   if (!stages.length) return null;
-  const currentIndex = stages.findIndex((s) => s.percent < 100);
   return (
     <View style={{ padding: 20 }}>
       {stages.map((s, i) => {
         const done = s.percent >= 100;
-        const isCurrent = i === currentIndex;
+        // Etapy technologii nie muszą iść po kolei — materiał na kolejny
+        // etap potrafi zejść, zanim poprzedni jest skończony. Każdy etap
+        // pokazuje więc WŁASNY procent zamiast tylko "pierwszego
+        // nieukończonego" (dawne `isCurrent`/`currentIndex`), które
+        // sztywno traktowało wszystkie kolejne jako "Zaplanowane" 0%.
+        const isCurrent = !done && s.percent > 0;
         const isLast = i === stages.length - 1;
         return (
           <View key={s.name + i} style={{ flexDirection: "row", gap: 14 }}>

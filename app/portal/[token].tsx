@@ -9,7 +9,16 @@ import {
   Text,
   View,
 } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
+import Svg, {
+  Circle,
+  Defs,
+  Ellipse,
+  LinearGradient,
+  Path,
+  RadialGradient,
+  Rect,
+  Stop,
+} from "react-native-svg";
 
 import { Button, Field, formatPLN } from "@/components/report-ui";
 import {
@@ -66,6 +75,42 @@ const DISPLAY_STATUS_LABEL: Record<PublicBuildView["displayStatus"], string> = {
   aktywna: "W trakcie",
   zamknieta: "Zakończona",
 };
+
+// Ikonki "faktów" w nagłówku — te same kształty (uproszczone do stroke
+// path) co w dostarczonym mockupie HTML (ikony inline SVG obok każdego
+// "fact"), nie generyczna biblioteka ikon, żeby zachować identyczny rysunek.
+function FactIcon({ kind }: { kind: "area" | "calendar" | "clock" | "check" }) {
+  const common = { stroke: PC.accent, strokeWidth: 1.6, fill: "none" as const };
+  if (kind === "area") {
+    return (
+      <Svg width={15} height={15} viewBox="0 0 24 24">
+        <Path d="M3 3h18v18H3z" {...common} />
+        <Path d="M3 9h18M9 3v18" {...common} />
+      </Svg>
+    );
+  }
+  if (kind === "calendar") {
+    return (
+      <Svg width={15} height={15} viewBox="0 0 24 24">
+        <Rect x={3} y={5} width={18} height={16} rx={2} {...common} />
+        <Path d="M16 3v4M8 3v4M3 11h18" {...common} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+  if (kind === "clock") {
+    return (
+      <Svg width={15} height={15} viewBox="0 0 24 24">
+        <Path d="M12 8v4l3 2" {...common} strokeLinecap="round" strokeLinejoin="round" />
+        <Circle cx={12} cy={12} r={9} {...common} />
+      </Svg>
+    );
+  }
+  return (
+    <Svg width={15} height={15} viewBox="0 0 24 24">
+      <Path d="M20 6 9 17l-5-5" {...common} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 const formatDatePL = (iso: string | null) => {
   if (!iso) return null;
@@ -198,6 +243,31 @@ function Gauge({ view }: { view: PublicBuildView }) {
       )}
 
       <View style={{ width: GAUGE_SIZE, height: GAUGE_SIZE }}>
+        {/* Poświata za gaugem — radial-gradient blob z mockupu (::before),
+            trochę szerszy i wyższy niż sam pierścień. */}
+        <Svg
+          width={GAUGE_SIZE * 1.6}
+          height={GAUGE_SIZE * 1.3}
+          style={{
+            position: "absolute",
+            left: -GAUGE_SIZE * 0.3,
+            top: -GAUGE_SIZE * 0.15,
+          }}
+        >
+          <Defs>
+            <RadialGradient id="gaugeGlow" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor={PC.accent} stopOpacity={0.35} />
+              <Stop offset="100%" stopColor={PC.accent} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Ellipse
+            cx={(GAUGE_SIZE * 1.6) / 2}
+            cy={(GAUGE_SIZE * 1.3) / 2}
+            rx={GAUGE_SIZE * 0.8}
+            ry={GAUGE_SIZE * 0.6}
+            fill="url(#gaugeGlow)"
+          />
+        </Svg>
         <Svg width={GAUGE_SIZE} height={GAUGE_SIZE} style={{ transform: [{ rotate: "-90deg" }] }}>
           <Defs>
             <LinearGradient id="gaugeGradient" x1="0" y1="0" x2="1" y2="1">
@@ -233,12 +303,31 @@ function Gauge({ view }: { view: PublicBuildView }) {
             justifyContent: "center",
           }}
         >
-          <Text style={{ color: PC.txt, fontSize: 46, fontWeight: "800", letterSpacing: -1 }}>
-            {Math.round(percent)}%
-          </Text>
-          <Text style={{ color: PC.txt3, fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
-            POSTĘPU
-          </Text>
+          {view.stages.length > 0 ? (
+            <>
+              <Text style={{ color: PC.txt, fontSize: 46, fontWeight: "800", letterSpacing: -1 }}>
+                {currentStageIndex >= 0 ? currentStageIndex + 1 : view.stages.length}
+                <Text style={{ fontSize: 20, color: PC.txt3, fontWeight: "600" }}>
+                  /{view.stages.length}
+                </Text>
+              </Text>
+              <Text style={{ color: PC.txt3, fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
+                ETAP
+              </Text>
+              <Text style={{ color: PC.accent2, fontSize: 12, marginTop: 4, fontWeight: "600" }}>
+                {Math.round(percent)}% całości zlecenia
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={{ color: PC.txt, fontSize: 46, fontWeight: "800", letterSpacing: -1 }}>
+                {Math.round(percent)}%
+              </Text>
+              <Text style={{ color: PC.txt3, fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
+                POSTĘPU
+              </Text>
+            </>
+          )}
         </View>
       </View>
 
@@ -704,6 +793,7 @@ export default function PublicBuildPortal() {
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
         {view.areaM2 && (
           <View style={styles.pill}>
+            <FactIcon kind="area" />
             <Text style={styles.pillText}>
               Powierzchnia <Text style={styles.pillStrong}>{view.areaM2} m²</Text>
             </Text>
@@ -711,6 +801,7 @@ export default function PublicBuildPortal() {
         )}
         {startDate && (
           <View style={styles.pill}>
+            <FactIcon kind="calendar" />
             <Text style={styles.pillText}>
               Start <Text style={styles.pillStrong}>{startDate}</Text>
             </Text>
@@ -718,12 +809,14 @@ export default function PublicBuildPortal() {
         )}
         {plannedEnd && (
           <View style={styles.pill}>
+            <FactIcon kind="clock" />
             <Text style={styles.pillText}>
               Zakończenie <Text style={styles.pillStrong}>{plannedEnd}</Text>
             </Text>
           </View>
         )}
         <View style={styles.pill}>
+          <FactIcon kind="check" />
           <Text style={styles.pillText}>
             Status <Text style={styles.pillStrong}>{DISPLAY_STATUS_LABEL[view.displayStatus]}</Text>
           </Text>
@@ -802,6 +895,7 @@ const styles = {
   pill: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
+    gap: 8,
     backgroundColor: PC.surface,
     borderWidth: 1,
     borderColor: PC.line,

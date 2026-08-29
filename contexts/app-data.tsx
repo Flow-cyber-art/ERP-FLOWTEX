@@ -1498,7 +1498,10 @@ function useAppDataState(
     }
     await createIt();
   };
-  const saveBuild = async (newBuild: NewBuildInput, onSaved: () => void) => {
+  const saveBuild = async (
+    newBuild: NewBuildInput,
+    onSaved: (buildId: string) => void,
+  ) => {
     const duration = Number(newBuild.durationDays);
     const missing: string[] = [];
     if (!newBuild.number) missing.push("Numer budowy");
@@ -1526,7 +1529,7 @@ function useAppDataState(
         contractValue: newBuild.contractValue ? Number(newBuild.contractValue) : undefined,
       });
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
-      onSaved();
+      onSaved(String(build.id));
       // Katalog na zdjęcia (Google Drive) NIE jest tworzony tu automatycznie
       // — Admin robi to świadomie przyciskiem "Stwórz katalog na zdjęcia"
       // na karcie budowy (builds-screen.tsx), przez Supabase Edge Function

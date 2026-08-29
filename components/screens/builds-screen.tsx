@@ -15,6 +15,7 @@ import {
   ReportCard,
   ScreenHeader,
   StatusBadge,
+  WizardStepper,
 } from "@/components/report-ui";
 import { useAppData, type NewBuildInput } from "@/contexts/app-data";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
@@ -98,6 +99,35 @@ export function BuildsScreen() {
 
   const [showBuild, setShowBuild] = useState(false);
   const [newBuild, setNewBuild] = useState<NewBuildInput>(createEmptyNewBuild);
+  // Wizard zakładania budowy — 5 kroków wzorowanych na raporcie dziennym
+  // brygadzisty (WizardStepper, ten sam wygląd co ReportStepper). Kroki
+  // 2-5 dotyczą już KONKRETNEJ, utworzonej budowy (wizardBuildId), więc
+  // istnieją dopiero po zapisaniu kroku 1 — każdy kolejny krok da się
+  // pominąć ("Pomiń"), bo to wszystko rzeczy, które i tak idą też
+  // zrobić później z poziomu zwykłej karty budowy.
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [wizardBuildId, setWizardBuildId] = useState<string | null>(null);
+  const [wizardTechId, setWizardTechId] = useState<number | null>(null);
+  const [wizardAreaInput, setWizardAreaInput] = useState("");
+  const [wizardAssigning, setWizardAssigning] = useState(false);
+  const [wizardOrderGenerating, setWizardOrderGenerating] = useState(false);
+  const [wizardOrderGenerated, setWizardOrderGenerated] = useState(false);
+  const WIZARD_STEPS = [
+    { n: 1, label: "Budowa" },
+    { n: 2, label: "Technologia" },
+    { n: 3, label: "Zamówienie" },
+    { n: 4, label: "Zdjęcia" },
+    { n: 5, label: "Portal" },
+  ];
+  const closeWizard = () => {
+    setShowBuild(false);
+    setNewBuild(createEmptyNewBuild());
+    setWizardStep(1);
+    setWizardBuildId(null);
+    setWizardTechId(null);
+    setWizardAreaInput("");
+    setWizardOrderGenerated(false);
+  };
 
   const isArchiveView = buildsView === "archive";
 
@@ -236,7 +266,17 @@ export function BuildsScreen() {
       title="Budowy"
       action={
         !isArchiveView ? (
-          <Button label="+ Nowa" onPress={() => setShowBuild(!showBuild)} />
+          <Button
+            label="+ Nowa"
+            onPress={() => {
+              if (showBuild) {
+                closeWizard();
+              } else {
+                setWizardStep(1);
+                setShowBuild(true);
+              }
+            }}
+          />
         ) : undefined
       }
     />
@@ -274,6 +314,9 @@ export function BuildsScreen() {
     </View>
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+        <WizardStepper steps={WIZARD_STEPS} current={wizardStep} />
+        {wizardStep === 1 && (
+        <>
         <Field
           placeholder="Numer budowy"
           value={newBuild.number}
@@ -429,18 +472,205 @@ export function BuildsScreen() {
         )}
         <View style={{ marginTop: 12 }}>
           <Button
-            label="Zapisz budowę"
+            label="Zapisz i dalej"
             onPress={() =>
               saveBuild(
                 { ...newBuild, plannedHoursPerDay: String(workdayHours) },
-                () => {
+                (createdId) => {
                   setNewBuild(createEmptyNewBuild());
-                  setShowBuild(false);
+                  setWizardBuildId(createdId);
+                  setWizardStep(2);
                 },
               )
             }
           />
         </View>
+        </>
+        )}
+
+        {wizardStep === 2 && wizardBuildId && (
+          <>
+            <Text className="text-xs text-muted uppercase mb-2">
+              Technologia
+            </Text>
+            {technologies.length === 0 ? (
+              <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                Brak technologii — dodaj ją najpierw w zakładce Technologie, albo pomiń ten krok
+                i przypisz ją później z poziomu karty budowy.
+              </Text>
+            ) : (
+              <>
+                <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                  {technologies.map((t) => (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => setWizardTechId(t.id)}
+                      style={{
+                        backgroundColor:
+                          wizardTechId === t.id ? COLORS.primary : COLORS.background,
+                        borderRadius: 8,
+                        paddingHorizontal: 9,
+                        paddingVertical: 7,
+                        borderWidth: 1,
+                        borderColor: wizardTechId === t.id ? COLORS.primary : COLORS.border,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color:
+                            wizardTechId === t.id ? COLORS.background : COLORS.foreground,
+                          fontWeight: "700",
+                          fontSize: 12,
+                        }}
+                      >
+                        {t.name} · v{t.version}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text className="text-xs text-muted uppercase mb-2 mt-3">
+                  Powierzchnia (m²)
+                </Text>
+                <Field
+                  placeholder="np. 300"
+                  value={wizardAreaInput}
+                  onChangeText={setWizardAreaInput}
+                  keyboardType="decimal-pad"
+                />
+              </>
+            )}
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+              <View style={{ flex: 1 }}>
+                <Button label="Pomiń" secondary onPress={() => setWizardStep(3)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label={wizardAssigning ? "Przypisywanie…" : "Przypisz i dalej"}
+                  disabled={!wizardTechId || !wizardAreaInput || wizardAssigning}
+                  onPress={async () => {
+                    if (!wizardTechId || !wizardAreaInput) return;
+                    setWizardAssigning(true);
+                    try {
+                      await assignBuildTechnology(
+                        wizardBuildId,
+                        wizardTechId,
+                        Number(wizardAreaInput),
+                      );
+                      setWizardStep(3);
+                    } finally {
+                      setWizardAssigning(false);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+          </>
+        )}
+
+        {wizardStep === 3 && wizardBuildId && (
+          <>
+            {(() => {
+              const hasPlan = buildMaterialPlans.some(
+                (p) => p.buildId === Number(wizardBuildId),
+              );
+              return hasPlan ? (
+                <Text style={{ color: COLORS.muted, fontSize: 13 }}>
+                  Budowa ma plan materiałowy — możesz od razu wygenerować z niego zamówienie
+                  (ilość do zamówienia dobierze się sama).
+                </Text>
+              ) : (
+                <Text style={{ color: COLORS.muted, fontSize: 13 }}>
+                  Brak planu materiałowego (nie przypisano jeszcze technologii) — nie ma z czego
+                  wygenerować zamówienia. Pomiń ten krok, zamówienie da się dodać później.
+                </Text>
+              );
+            })()}
+            {wizardOrderGenerated && (
+              <Text style={{ color: COLORS.success, fontSize: 12, marginTop: 8 }}>
+                Zamówienie wygenerowane — szczegóły znajdziesz w zakładce Zamówienia.
+              </Text>
+            )}
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+              <View style={{ flex: 1 }}>
+                <Button label="Pomiń" secondary onPress={() => setWizardStep(4)} />
+              </View>
+              {buildMaterialPlans.some((p) => p.buildId === Number(wizardBuildId)) && (
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label={wizardOrderGenerating ? "Generuję…" : "Wygeneruj i dalej"}
+                    disabled={wizardOrderGenerating}
+                    onPress={async () => {
+                      setWizardOrderGenerating(true);
+                      try {
+                        await generateOrderFromPlan(wizardBuildId);
+                        setWizardOrderGenerated(true);
+                        setWizardStep(4);
+                      } finally {
+                        setWizardOrderGenerating(false);
+                      }
+                    }}
+                  />
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
+        {wizardStep === 4 && wizardBuildId && (
+          <>
+            <Text style={{ color: COLORS.muted, fontSize: 13 }}>
+              Katalog na Google Drive, do którego brygadzista będzie wrzucał zdjęcia z postępu
+              prac.
+            </Text>
+            {driveFolderError && (
+              <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
+                {driveFolderError}
+              </Text>
+            )}
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+              <View style={{ flex: 1 }}>
+                <Button label="Pomiń" secondary onPress={() => setWizardStep(5)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label={
+                    creatingDriveFolderId === wizardBuildId
+                      ? "Tworzenie…"
+                      : "Stwórz katalog i dalej"
+                  }
+                  disabled={creatingDriveFolderId === wizardBuildId}
+                  onPress={async () => {
+                    setDriveFolderError(null);
+                    setCreatingDriveFolderId(wizardBuildId);
+                    try {
+                      await createBuildDriveFolder(Number(wizardBuildId));
+                      setWizardStep(5);
+                    } catch (err) {
+                      setDriveFolderError(
+                        err instanceof Error ? err.message : "Nie udało się stworzyć katalogu.",
+                      );
+                    } finally {
+                      setCreatingDriveFolderId(null);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+          </>
+        )}
+
+        {wizardStep === 5 && wizardBuildId && (
+          <>
+            <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 10 }}>
+              Domyślnie portal jest wyłączony — włącz go tylko jeśli chcesz od razu przekazać
+              klientowi link/QR.
+            </Text>
+            <BuildPortalSection buildId={Number(wizardBuildId)} />
+            <View style={{ marginTop: 16 }}>
+              <Button label="Zakończ" onPress={closeWizard} />
+            </View>
+          </>
+        )}
       </View>
     )}
     {isArchiveView && visibleBuilds.length > 0 && (

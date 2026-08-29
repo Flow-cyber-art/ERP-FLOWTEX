@@ -1021,6 +1021,77 @@ const ReportStepper = ({ step }: { step: 1 | 2 | 3 }) => (
   </View>
 );
 
+// Wersja ogólna ReportStepper wyżej (ten sam wygląd: numerowane kółka
+// połączone linią, wypełnione/odhaczone po przejściu) — parametryzowana
+// listą kroków zamiast na sztywno REPORT_STEPS, do wielokrotnego użytku
+// w innych wieloetapowych formularzach (np. wizard zakładania budowy w
+// builds-screen.tsx).
+const WizardStepper = ({
+  steps,
+  current,
+}: {
+  steps: { n: number; label: string }[];
+  current: number;
+}) => (
+  <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 20 }}>
+    {steps.flatMap((s, i) => {
+      const circle = (
+        <View key={`c${s.n}`} style={{ alignItems: "center", width: 76 }}>
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: current === s.n ? COLORS.primary : "transparent",
+              borderWidth: current === s.n ? 0 : 1,
+              borderColor: current > s.n ? COLORS.primary : COLORS.border,
+            }}
+          >
+            {current > s.n ? (
+              <MaterialIcons name="check" size={16} color={COLORS.primary} />
+            ) : (
+              <Text
+                style={{
+                  color: current === s.n ? COLORS.background : COLORS.muted,
+                  fontWeight: "800",
+                }}
+              >
+                {s.n}
+              </Text>
+            )}
+          </View>
+          <Text
+            style={{
+              color: current === s.n ? COLORS.primary : COLORS.muted,
+              fontSize: 11,
+              marginTop: 6,
+              fontWeight: current === s.n ? "700" : "500",
+              textAlign: "center",
+            }}
+          >
+            {s.label}
+          </Text>
+        </View>
+      );
+      if (i === steps.length - 1) return [circle];
+      const line = (
+        <View
+          key={`l${s.n}`}
+          style={{
+            flex: 1,
+            height: 1,
+            backgroundColor: current > s.n ? COLORS.primary : COLORS.border,
+            marginTop: 16,
+          }}
+        />
+      );
+      return [circle, line];
+    })}
+  </View>
+);
+
 // One consistent way to signal state (dot + label) instead of ad-hoc mixes of
 // emoji and colored text that varied from screen to screen.
 const StatusBadge = ({
@@ -1649,6 +1720,7 @@ export {
   TimeOptionsList,
   IconBadge,
   ReportStepper,
+  WizardStepper,
   ReportCard,
   StatusBadge,
   initialMaterials,

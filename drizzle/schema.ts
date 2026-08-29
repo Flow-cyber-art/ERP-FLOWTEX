@@ -412,6 +412,12 @@ export const timeEntries = pgTable("time_entries", {
   hours: decimal("hours", { precision: 5, scale: 2 }).notNull(),
   start: time("start"),
   end: time("end"),
+  // Stawka pracownika ZAMROŻONA w momencie zapisu godzin (submit_daily_report)
+  // — patrz supabase/sql/055_stawka_zamrozona_w_godzinach.sql. Koszt
+  // robocizny liczy się od tej wartości, nie od aktualnej employees.hourlyRate,
+  // żeby zmiana stawki nie przeliczała już zaraportowanych godzin wstecz.
+  hourlyRate: decimal("hourlyRate", { precision: 10, scale: 2 }),
+  costRate: decimal("costRate", { precision: 10, scale: 2 }),
 });
 
 export const materialOrders = pgTable("material_orders", {

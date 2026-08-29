@@ -30,6 +30,7 @@ import {
   listEmployees,
   setEmployeeActive as setEmployeeActiveRemote,
   updateEmployeeCostRate as updateEmployeeCostRateRemote,
+  updateEmployeeName as updateEmployeeNameRemote,
   updateEmployeeRate as updateEmployeeRateRemote,
 } from "@/lib/data/employees";
 import {
@@ -781,6 +782,8 @@ function useAppDataState(
         hours: Number(t.hours),
         start: t.start ?? undefined,
         end: t.end ?? undefined,
+        hourlyRate: t.hourlyRate != null ? Number(t.hourlyRate) : null,
+        costRate: t.costRate != null ? Number(t.costRate) : null,
       })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -984,6 +987,10 @@ function useAppDataState(
       reopenBuildStageRemote(vars.buildId, vars.stageName),
   });
   const createEmployeeMutation = useMutation({ mutationFn: createEmployee });
+  const updateEmployeeNameMutation = useMutation({
+    mutationFn: (vars: { employeeId: number; name: string }) =>
+      updateEmployeeNameRemote(vars.employeeId, vars.name),
+  });
   const updateEmployeeRateMutation = useMutation({
     mutationFn: (vars: { employeeId: number; hourlyRate: number }) =>
       updateEmployeeRateRemote(vars.employeeId, vars.hourlyRate),
@@ -1953,6 +1960,23 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się usunąć pracownika z brygady.");
     }
   };
+  // Edycja imienia i nazwiska pracownika (panel administratora, HR ->
+  // Zespół) — to Admin ustala tożsamość pracownika, nie sam pracownik
+  // przez samoobsługę (patrz account-settings-section.tsx, gdzie
+  // samoobsługowa "Nazwa wyświetlana" została usunięta).
+  const updateEmployeeName = async (employeeId: string, name: string) => {
+    const numericId = Number(employeeId);
+    if (Number.isNaN(numericId) || !name.trim()) return;
+    try {
+      await updateEmployeeNameMutation.mutateAsync({
+        employeeId: numericId,
+        name: name.trim(),
+      });
+      await invalidate("employees");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać imienia i nazwiska.");
+    }
+  };
   // Edycja stawki godzinowej istniejącego pracownika (panel administratora).
   const updateEmployeeRate = async (employeeId: string, rate: number) => {
     const numericId = Number(employeeId);
@@ -2583,6 +2607,7 @@ function useAppDataState(
     saveWorkdayHours,
     saveDailyReport,
     saveEmployee,
+    updateEmployeeName,
     updateEmployeeRate,
     updateEmployeeCostRate,
     setEmployeeActive,

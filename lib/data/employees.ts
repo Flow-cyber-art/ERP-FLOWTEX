@@ -50,6 +50,14 @@ export async function createEmployee(input: CreateEmployeeInput): Promise<void> 
   if (error) throw new Error(error.message);
 }
 
+export async function updateEmployeeName(employeeId: number, name: string): Promise<void> {
+  const { error } = await supabase
+    .from("employees")
+    .update({ name, updatedAt: new Date().toISOString() })
+    .eq("id", employeeId);
+  if (error) throw new Error(error.message);
+}
+
 export async function updateEmployeeRate(employeeId: number, hourlyRate: number): Promise<void> {
   const { error } = await supabase
     .from("employees")

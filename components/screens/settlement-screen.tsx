@@ -189,9 +189,14 @@ export function SettlementScreen() {
     (sum, r) => sum + r.extraCosts.reduce((s, c) => s + c.amount, 0),
     0,
   );
+  // Stawka ZAMROŻONA na wpisie godzin (t.hourlyRate) w momencie
+  // raportowania — nie aktualna employee.hourlyRate, patrz
+  // supabase/sql/055_stawka_zamrozona_w_godzinach.sql. Fallback na
+  // aktualną stawkę tylko dla wpisów sprzed tej migracji.
   const laborCost = buildTimeEntries.reduce((sum, t) => {
     const employee = employees.find((e) => e.id === t.employeeId);
-    return sum + t.hours * (employee?.hourlyRate || 0);
+    const rate = t.hourlyRate ?? employee?.hourlyRate ?? 0;
+    return sum + t.hours * rate;
   }, 0);
   // Planowany koszt robocizny (patrz supabase/sql/040_planowany_koszt_
   // robocizny.sql) — suma stawek godzinowych CZŁONKÓW brygady

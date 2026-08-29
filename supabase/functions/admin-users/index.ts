@@ -187,6 +187,47 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  if (action === "setEmail") {
+    const userId = String(body.userId ?? "");
+    const email = String(body.email ?? "").trim();
+    if (!userId || !email) return json({ error: "Wymagany userId i email." }, 400);
+    // Ta sama ochrona co setPassword wyżej — email głównego konta
+    // administratora nie da się zmienić stąd, tylko przez samoobsługę
+    // (Supabase nie udostępnia zmiany własnego emaila przez tę funkcję,
+    // ale ochrona zostaje symetryczna z resztą wrażliwych operacji).
+    if (await isProtectedAdmin(admin, userId)) {
+      return json(
+        { error: "Email głównego konta administratora nie można zmienić stąd." },
+        400,
+      );
+    }
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      email,
+      email_confirm: true,
+    });
+    if (error) return json({ error: error.message }, 400);
+    return json({ ok: true });
+  }
+
+  if (action === "setDisplayName") {
+    // Nazwa wyświetlana konta logowania — ustawiana WYŁĄCZNIE przez
+    // Admina (patrz components/screens/admin-screen.tsx, karta
+    // pracownika w Zespole), synchronizowana z employees.name. Osobne
+    // konto NIE edytuje już tego pola samo sobie (dawne
+    // updateMyDisplayName w Ustawieniach zostało usunięte z UI) — to pole
+    // trafia m.in. do etykiety osoby wgrywającej zdjęcia (drive-photos).
+    const userId = String(body.userId ?? "");
+    const displayName = String(body.displayName ?? "").trim();
+    if (!userId || !displayName) {
+      return json({ error: "Wymagany userId i nazwa." }, 400);
+    }
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      user_metadata: { full_name: displayName },
+    });
+    if (error) return json({ error: error.message }, 400);
+    return json({ ok: true });
+  }
+
   if (action === "setRole") {
     const userId = String(body.userId ?? "");
     const role = body.role;

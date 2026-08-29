@@ -87,15 +87,15 @@ export function onAuthStateChange(callback: (session: Session | null) => void) {
 
 export type MyAccount = {
   email: string | null;
-  displayName: string;
 };
 
 /**
  * Konto aktualnie zalogowanego użytkownika (Ustawienia — samoobsługa,
- * inna ścieżka niż `getMyProfile`/rola). Nazwa wyświetlana trzyma się w
- * `user_metadata.full_name` Supabase Auth — celowo NIE w `profiles`, bo
- * to zwykły self-service (każda rola edytuje TYLKO swoje konto), a nie
- * coś, czym zarządza Admin przez RLS jak resztą `profiles`.
+ * inna ścieżka niż `getMyProfile`/rola). Nazwa wyświetlana
+ * (`user_metadata.full_name`) NIE jest już tu edytowalna — ustawia ją
+ * Admin przy edycji pracownika (admin-screen.tsx/AdminTeamSection,
+ * `setAdminUserDisplayName` w lib/data/admin-users.ts), zsynchronizowana
+ * z kartoteką HR zamiast dowolnej samoobsługowej wartości.
  */
 export async function getMyAccount(): Promise<MyAccount | null> {
   const {
@@ -104,14 +104,7 @@ export async function getMyAccount(): Promise<MyAccount | null> {
   if (!user) return null;
   return {
     email: user.email ?? null,
-    displayName:
-      typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "",
   };
-}
-
-export async function updateMyDisplayName(displayName: string): Promise<void> {
-  const { error } = await supabase.auth.updateUser({ data: { full_name: displayName } });
-  if (error) throw new Error(error.message);
 }
 
 export async function updateMyPassword(password: string): Promise<void> {

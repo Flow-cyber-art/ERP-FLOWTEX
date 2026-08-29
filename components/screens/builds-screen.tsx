@@ -1822,9 +1822,12 @@ export function BuildsScreen() {
               const buildTimeEntries = timeEntries.filter(
                 (t) => t.buildId === b.id,
               );
+              // Stawka ZAMROŻONA na wpisie (t.hourlyRate), nie aktualna —
+              // patrz supabase/sql/055_stawka_zamrozona_w_godzinach.sql.
               const laborCostActual = buildTimeEntries.reduce((sum, t) => {
                 const employee = employees.find((e) => e.id === t.employeeId);
-                return sum + t.hours * (employee?.hourlyRate || 0);
+                const rate = t.hourlyRate ?? employee?.hourlyRate ?? 0;
+                return sum + t.hours * rate;
               }, 0);
               // Planowany koszt robocizny — patrz settlement-screen.tsx
               // (ten sam wzorzec, ta sama logika, tu tylko podgląd na

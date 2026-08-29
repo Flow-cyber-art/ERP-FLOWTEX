@@ -6,9 +6,11 @@ import { AdminLeaveSection, AdminTeamSection } from "@/components/screens/admin-
 
 /**
  * "HR" — osobna zakładka nawigacji, wydzielona z panelu Admina: wszystko
- * związane z pracownikiem w jednym miejscu, oddzielone od konfiguracji
- * firmy (Ustawienia/Konta logowania), która zostaje w zakładce "Admin"
- * (admin-screen.tsx). Trzy sekcje — Zespół / Rozliczenie / Urlopy —
+ * związane z pracownikiem w jednym miejscu (włącznie z kontem logowania —
+ * email/hasło edytowane bezpośrednio przy karcie pracownika w Zespole,
+ * patrz AdminTeamSection), oddzielone od konfiguracji firmy (Ustawienia),
+ * która zostaje w zakładce "Admin" (admin-screen.tsx). Trzy sekcje —
+ * Zespół / Rozliczenie / Urlopy —
  * dawne osobne "Rozliczenie godzin" i "Obecności" pokazywały w większości
  * te same dane w dwóch miejscach, więc scalone w jedną "Rozliczenie"
  * (patrz payroll-screen.tsx).

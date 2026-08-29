@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { Button, COLORS, Field, notify } from "@/components/report-ui";
-import {
-  getMyAccount,
-  updateMyDisplayName,
-  updateMyPassword,
-} from "@/lib/data/auth";
+import { getMyAccount, updateMyPassword } from "@/lib/data/auth";
 
-// Samoobsługa własnego konta — nazwa wyświetlana i hasło. Współdzielona
-// przez settings-screen.tsx (Brygadzista/Pracownik) i AdminSettingsSection
-// w admin-screen.tsx, żeby nie duplikować tego samego formularza dwa
-// razy. Dotyczy WYŁĄCZNIE konta aktualnie zalogowanego — zarządzanie
-// hasłami/rolami INNYCH kont to osobna, admin-only ścieżka
-// (lib/data/admin-users.ts, sekcja "Konta logowania").
+// Samoobsługa własnego konta — tylko hasło. Współdzielona przez
+// settings-screen.tsx (Brygadzista/Pracownik) i AdminSettingsSection w
+// admin-screen.tsx, żeby nie duplikować tego samego formularza dwa razy.
+// Dotyczy WYŁĄCZNIE konta aktualnie zalogowanego — zarządzanie
+// hasłami/emailami/imieniem INNYCH kont to osobna, admin-only ścieżka
+// (lib/data/admin-users.ts, karta pracownika w Zespole,
+// admin-screen.tsx/AdminTeamSection).
+//
+// "Nazwa wyświetlana" NIE jest już tu edytowalna — to Admin ustala imię i
+// nazwisko pracownika (kartoteka w Zespole), zsynchronizowane z kontem
+// logowania przez setAdminUserDisplayName. Pozwolenie każdemu na
+// dowolną zmianę własnej nazwy rozjeżdżało ją z kartoteką HR.
 export function AccountSettingsSection() {
   const [email, setEmail] = useState<string | null>(null);
-  const [nameInput, setNameInput] = useState("");
-  const [nameSaving, setNameSaving] = useState(false);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,24 +26,8 @@ export function AccountSettingsSection() {
     getMyAccount().then((account) => {
       if (!account) return;
       setEmail(account.email);
-      setNameInput(account.displayName);
     });
   }, []);
-
-  const saveName = async () => {
-    setNameSaving(true);
-    try {
-      await updateMyDisplayName(nameInput.trim());
-      notify("Zapisano", "Nazwa wyświetlana została zaktualizowana.");
-    } catch (error) {
-      notify(
-        "Nie udało się zapisać",
-        error instanceof Error ? error.message : "Spróbuj ponownie.",
-      );
-    } finally {
-      setNameSaving(false);
-    }
-  };
 
   const savePassword = async () => {
     if (newPassword.length < 10) {
@@ -75,24 +59,8 @@ export function AccountSettingsSection() {
       <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 4 }}>
         Moje konto{email ? ` · ${email}` : ""}
       </Text>
-      <Text className="text-xs text-muted uppercase mt-3 mb-2">
-        Nazwa wyświetlana
-      </Text>
-      <Field
-        placeholder="np. Jan Kowalski"
-        value={nameInput}
-        onChangeText={setNameInput}
-      />
-      <View style={{ marginTop: 10 }}>
-        <Button
-          label={nameSaving ? "Zapisywanie…" : "Zapisz nazwę"}
-          secondary
-          disabled={nameSaving}
-          onPress={saveName}
-        />
-      </View>
 
-      <Text className="text-xs text-muted uppercase mt-5 mb-2">
+      <Text className="text-xs text-muted uppercase mt-3 mb-2">
         Zmień hasło
       </Text>
       <Field

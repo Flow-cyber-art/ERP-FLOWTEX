@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import {
   COLORS,
   Button,
@@ -26,76 +26,27 @@ import {
   deleteAdminUser,
   isProtectedAdminEmail,
   listAdminUsers,
+  setAdminUserDisplayName,
+  setAdminUserEmail,
   setAdminUserPassword,
-  setAdminUserRole,
 } from "@/lib/data/admin-users";
 
-// Panel administracyjny i konta logowania — konfiguracja firmy, nie
-// codzienna praca na budowie. Wszystko związane z pracownikiem (Zespół,
-// stawki, Rozliczenie godzin, Obecności, Urlopy) mieszka teraz w osobnej
-// zakładce nawigacji "HR" (patrz components/screens/hr-panel-screen.tsx,
-// app/(tabs)/index.tsx) — AdminTeamSection/AdminLeaveSection zostają
-// zdefiniowane w tym pliku (i eksportowane), żeby uniknąć przenoszenia
-// dużych bloków kodu, ale renderuje je już tylko HrPanelScreen.
-type AdminTab = "accounts" | "settings";
-
+// Panel administracyjny — konfiguracja firmy, nie codzienna praca na
+// budowie. Wszystko związane z pracownikiem (Zespół, stawki, konto
+// logowania, Rozliczenie godzin, Obecności, Urlopy) mieszka teraz w
+// osobnej zakładce nawigacji "HR" (patrz
+// components/screens/hr-panel-screen.tsx, app/(tabs)/index.tsx) —
+// AdminTeamSection/AdminLeaveSection zostają zdefiniowane w tym pliku (i
+// eksportowane), żeby uniknąć przenoszenia dużych bloków kodu, ale
+// renderuje je już tylko HrPanelScreen.
+//
+// Dawna osobna zakładka "Konta logowania" (email/hasło/rola OSOBNO od
+// karty pracownika) została zlikwidowana — konto logowania jest teraz
+// częścią karty pracownika w Zespole (AdminTeamSection), obok stawki:
+// jeden pracownik, jedno miejsce edycji. Ta zakładka Admina ma już tylko
+// Ustawienia firmy, więc pasek zakładek też znika.
 export function AdminScreen() {
-  // "Ustawienia" pierwsza — najczęstszy powód wejścia w tę zakładkę jest
-  // teraz szybkie przełączenie widoku Admin/Brygadzista (patrz
-  // AdminSettingsSection niżej), nie zarządzanie kontami, więc nie ma
-  // sensu robić na to dodatkowego kliknięcia za każdym razem.
-  const [section, setSection] = useState<AdminTab>("settings");
-
-  return (
-    <>
-      {/* Bez ScreenHeader tutaj — jego tytuł tylko powtarzał to, co już
-          mówi podświetlony przycisk poniżej, i zabierał miejsce bez
-          potrzeby. Przyciski same pełnią rolę i nawigacji, i wskaźnika
-          aktualnej sekcji. */}
-      <View className="bg-surface border border-border rounded-2xl p-2 mb-5">
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            gap: 6,
-            justifyContent: "center",
-          }}
-        >
-          {(
-            [
-              ["settings", "Ustawienia"],
-              ["accounts", "Konta logowania"],
-            ] as const
-          ).map(([value, label]) => (
-            <Pressable
-              key={value}
-              onPress={() => setSection(value)}
-              style={{
-                borderRadius: 10,
-                paddingVertical: 10,
-                paddingHorizontal: 16,
-                alignItems: "center",
-                backgroundColor:
-                  section === value ? COLORS.primary : "transparent",
-              }}
-            >
-              <Text
-                style={{
-                  color: section === value ? COLORS.background : COLORS.muted,
-                  fontWeight: "700",
-                  fontSize: 13,
-                }}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      {section === "accounts" ? <AdminAccountsSection /> : <AdminSettingsSection />}
-    </>
-  );
+  return <AdminSettingsSection />;
 }
 
 // Sekcja na przyszłe ustawienia aplikacji. Stawka za km (Faza 7)
@@ -402,6 +353,7 @@ export function AdminTeamSection() {
     workdayHours,
     employees,
     saveEmployee,
+    updateEmployeeName,
     updateEmployeeRate,
     updateEmployeeCostRate,
     setEmployeeActive,
@@ -410,6 +362,7 @@ export function AdminTeamSection() {
   const [newEmployee, setNewEmployee] = useState<NewEmployeeInput>(EMPTY_NEW_EMPLOYEE);
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [editingRateId, setEditingRateId] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState("");
   const [rateInput, setRateInput] = useState("");
   const [costRateInput, setCostRateInput] = useState("");
   // Archiwizacja — ten sam wzorzec co showArchivedMaterials w
@@ -417,6 +370,29 @@ export function AdminTeamSection() {
   // raportów/urlopów/wpisów czasu), tylko chowany z domyślnej listy.
   const [showArchived, setShowArchived] = useState(false);
   const visibleEmployees = employees.filter((e) => showArchived || e.active);
+
+  // Konto logowania — dawniej osobna zakładka "Konta logowania"
+  // (AdminAccountsSection, usunięta), teraz część karty pracownika: jeden
+  // pracownik = jedno miejsce edycji (imię, stawka, email, hasło).
+  // employeeId (number) w AdminUser wiąże konto z konkretnym wierszem
+  // employees — jeden pracownik ma co najwyżej jedno konto.
+  const [accounts, setAccounts] = useState<AdminUser[] | null>(null);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountEmailInput, setAccountEmailInput] = useState("");
+  const [accountPasswordInput, setAccountPasswordInput] = useState("");
+  const [accountEditingPassword, setAccountEditingPassword] = useState(false);
+
+  const reloadAccounts = () => {
+    setAccountsError(null);
+    listAdminUsers()
+      .then(setAccounts)
+      .catch((err) => setAccountsError(err instanceof Error ? err.message : "Błąd."));
+  };
+  useEffect(reloadAccounts, []);
+
+  const accountFor = (employeeId: string) =>
+    accounts?.find((u) => u.employeeId === Number(employeeId)) ?? null;
 
   return (
     <>
@@ -591,8 +567,12 @@ export function AdminTeamSection() {
                       setEditingRateId(null);
                     } else {
                       setEditingRateId(employee.id);
+                      setNameInput(employee.name);
                       setRateInput(String(employee.hourlyRate || ""));
                       setCostRateInput(String(employee.costRate || ""));
+                      setAccountEmailInput(accountFor(employee.id)?.email ?? "");
+                      setAccountPasswordInput("");
+                      setAccountEditingPassword(false);
                     }
                   }}
                   style={{
@@ -641,6 +621,17 @@ export function AdminTeamSection() {
                     }}
                   >
                     <Text className="text-xs text-muted uppercase mb-2">
+                      Imię i nazwisko
+                    </Text>
+                    <Field
+                      placeholder="Imię i nazwisko"
+                      value={nameInput}
+                      onChangeText={setNameInput}
+                    />
+                    <Text
+                      className="text-xs text-muted uppercase mb-2"
+                      style={{ marginTop: 10 }}
+                    >
                       Stawka godzinowa (PLN/h) — wypłata
                     </Text>
                     <QuantityStepper value={rateInput} onChangeText={setRateInput} />
@@ -674,6 +665,18 @@ export function AdminTeamSection() {
                       </Pressable>
                       <Pressable
                         onPress={() => {
+                          const trimmedName = nameInput.trim();
+                          if (trimmedName && trimmedName !== employee.name) {
+                            updateEmployeeName(employee.id, trimmedName);
+                            const account = accountFor(employee.id);
+                            if (account) {
+                              setAdminUserDisplayName(account.id, trimmedName).catch(() => {
+                                // Samo imię w kartotece i tak się zapisało —
+                                // brak synchronizacji z nazwą konta logowania
+                                // (np. chwilowy błąd sieci) nie blokuje reszty.
+                              });
+                            }
+                          }
                           updateEmployeeRate(employee.id, Number(rateInput) || 0);
                           updateEmployeeCostRate(employee.id, Number(costRateInput) || 0);
                           setEditingRateId(null);
@@ -693,6 +696,215 @@ export function AdminTeamSection() {
                         </Text>
                       </Pressable>
                     </View>
+
+                    {/* Konto logowania — dawna osobna zakładka "Konta
+                        logowania" (email/hasło/rola OSOBNO od karty
+                        pracownika) zostaje zlikwidowana: jeden pracownik,
+                        jedno miejsce edycji. Rola konta = employee.role
+                        (Pracownik/Brygadzista) automatycznie — podniesienie
+                        do Admina nie ma tu odpowiednika w kartotece
+                        pracownika, więc zostaje poza tym widokiem. */}
+                    {(() => {
+                      const account = accountFor(employee.id);
+                      const protectedAccount = isProtectedAdminEmail(account?.email);
+                      return (
+                        <View
+                          style={{
+                            marginTop: 12,
+                            paddingTop: 12,
+                            borderTopWidth: 1,
+                            borderTopColor: COLORS.border,
+                          }}
+                        >
+                          <Text className="text-xs text-muted uppercase mb-2">
+                            Konto logowania
+                          </Text>
+                          {protectedAccount ? (
+                            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                              {account!.email} · konto główne administratora — email i hasło
+                              zmienia się wyłącznie przez samoobsługę.
+                            </Text>
+                          ) : account ? (
+                            <>
+                              <Field
+                                placeholder="Email logowania"
+                                value={accountEmailInput}
+                                onChangeText={setAccountEmailInput}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                              />
+                              <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Button
+                                    label="Zapisz email"
+                                    secondary
+                                    disabled={accountBusy}
+                                    onPress={async () => {
+                                      const email = accountEmailInput.trim();
+                                      if (!email) return;
+                                      setAccountBusy(true);
+                                      setAccountsError(null);
+                                      try {
+                                        await setAdminUserEmail(account.id, email);
+                                        reloadAccounts();
+                                      } catch (err) {
+                                        setAccountsError(
+                                          err instanceof Error ? err.message : "Błąd.",
+                                        );
+                                      } finally {
+                                        setAccountBusy(false);
+                                      }
+                                    }}
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Button
+                                    label={accountEditingPassword ? "Anuluj" : "Zmień hasło"}
+                                    secondary
+                                    onPress={() => {
+                                      setAccountEditingPassword(!accountEditingPassword);
+                                      setAccountPasswordInput("");
+                                    }}
+                                  />
+                                </View>
+                              </View>
+                              {accountEditingPassword && (
+                                <View style={{ marginTop: 8 }}>
+                                  <Field
+                                    placeholder="Nowe hasło (min. 10 znaków)"
+                                    value={accountPasswordInput}
+                                    onChangeText={setAccountPasswordInput}
+                                    autoCapitalize="none"
+                                    secureTextEntry
+                                  />
+                                  <View style={{ marginTop: 8 }}>
+                                    <Button
+                                      label={accountBusy ? "Zapisywanie…" : "Zapisz hasło"}
+                                      disabled={accountBusy}
+                                      onPress={async () => {
+                                        if (accountPasswordInput.length < 10) {
+                                          setAccountsError(
+                                            "Hasło musi mieć co najmniej 10 znaków.",
+                                          );
+                                          return;
+                                        }
+                                        setAccountBusy(true);
+                                        setAccountsError(null);
+                                        try {
+                                          await setAdminUserPassword(
+                                            account.id,
+                                            accountPasswordInput,
+                                          );
+                                          setAccountEditingPassword(false);
+                                          setAccountPasswordInput("");
+                                        } catch (err) {
+                                          setAccountsError(
+                                            err instanceof Error ? err.message : "Błąd.",
+                                          );
+                                        } finally {
+                                          setAccountBusy(false);
+                                        }
+                                      }}
+                                    />
+                                  </View>
+                                </View>
+                              )}
+                              <View style={{ marginTop: 10 }}>
+                                <Pressable
+                                  onPress={() =>
+                                    confirmAction(
+                                      "Usuń konto logowania",
+                                      `${employee.name} straci dostęp do logowania. Kartoteka pracownika (stawka, historia) zostaje bez zmian.`,
+                                      "Usuń konto",
+                                      async () => {
+                                        try {
+                                          await deleteAdminUser(account.id);
+                                          reloadAccounts();
+                                        } catch (err) {
+                                          setAccountsError(
+                                            err instanceof Error ? err.message : "Błąd.",
+                                          );
+                                        }
+                                      },
+                                    )
+                                  }
+                                >
+                                  <Text
+                                    style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}
+                                  >
+                                    Usuń konto logowania
+                                  </Text>
+                                </Pressable>
+                              </View>
+                            </>
+                          ) : (
+                            <>
+                              <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 8 }}>
+                                Ten pracownik nie ma jeszcze konta logowania.
+                              </Text>
+                              <Field
+                                placeholder="Email logowania"
+                                value={accountEmailInput}
+                                onChangeText={setAccountEmailInput}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                              />
+                              <View style={{ marginTop: 8 }}>
+                                <Field
+                                  placeholder="Hasło (min. 10 znaków)"
+                                  value={accountPasswordInput}
+                                  onChangeText={setAccountPasswordInput}
+                                  autoCapitalize="none"
+                                  secureTextEntry
+                                />
+                              </View>
+                              <View style={{ marginTop: 8 }}>
+                                <Button
+                                  label={accountBusy ? "Tworzenie…" : "Utwórz konto logowania"}
+                                  disabled={accountBusy}
+                                  onPress={async () => {
+                                    const email = accountEmailInput.trim();
+                                    if (!email || accountPasswordInput.length < 10) {
+                                      setAccountsError(
+                                        "Email i hasło (min. 10 znaków) są wymagane.",
+                                      );
+                                      return;
+                                    }
+                                    setAccountBusy(true);
+                                    setAccountsError(null);
+                                    try {
+                                      const created = await createAdminUser(
+                                        email,
+                                        accountPasswordInput,
+                                        employee.role as AppRole,
+                                        employee.id,
+                                      );
+                                      await setAdminUserDisplayName(created.id, employee.name).catch(
+                                        () => {},
+                                      );
+                                      setAccountPasswordInput("");
+                                      reloadAccounts();
+                                    } catch (err) {
+                                      setAccountsError(
+                                        err instanceof Error ? err.message : "Błąd.",
+                                      );
+                                    } finally {
+                                      setAccountBusy(false);
+                                    }
+                                  }}
+                                />
+                              </View>
+                            </>
+                          )}
+                          {accountsError && (
+                            <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
+                              {accountsError}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })()}
+
                     <Pressable
                       onPress={() =>
                         employee.active
@@ -1191,481 +1403,6 @@ function AdminTeamsSubsection() {
               </View>
             );
           })}
-        </View>
-      )}
-    </>
-  );
-}
-
-const ROLE_OPTIONS: AppRole[] = ["Admin", "Brygadzista", "Pracownik"];
-
-// Konta logowania (Supabase Auth) — osobno od "Zespołu": pracownik to
-// wpis w tabeli employees (stawka, dniówka), konto logowania to osobny
-// byt w auth.users + profiles (e-mail, hasło, rola dostępu). Jeden
-// pracownik może, ale nie musi mieć konta logowania (patrz employeeId
-// jako opcjonalne powiązanie). Zarządzanie idzie przez Edge Function
-// admin-users (patrz supabase/functions/admin-users) — tylko tam wolno
-// dotykać auth.users (tworzenie, reset hasła, usuwanie), bo wymaga to
-// klucza service_role, którego apka kliencka nigdy nie ma.
-function AdminAccountsSection() {
-  const { employees } = useAppData();
-  const [users, setUsers] = useState<AdminUser[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const [addOpen, setAddOpen] = useState(false);
-  const [newAccount, setNewAccount] = useState({
-    email: "",
-    password: "",
-    role: "Pracownik" as AppRole,
-    employeeId: "" as string,
-  });
-
-  const [passwordEditId, setPasswordEditId] = useState<string | null>(null);
-  const [passwordInput, setPasswordInput] = useState("");
-
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editRole, setEditRole] = useState<AppRole>("Pracownik");
-  const [editEmployeeId, setEditEmployeeId] = useState("");
-
-  const reload = () => {
-    setLoadError(null);
-    listAdminUsers()
-      .then(setUsers)
-      .catch((err) => setLoadError(err instanceof Error ? err.message : "Błąd."));
-  };
-
-  useEffect(reload, []);
-
-  const employeeName = (employeeId: number | null) =>
-    employeeId != null
-      ? employees.find((e) => e.id === String(employeeId))?.name ?? `#${employeeId}`
-      : null;
-
-  return (
-    <>
-      <View className="flex-row justify-between items-center mb-3">
-        <Text className="text-base font-bold text-foreground">
-          Konta logowania {users ? `(${users.length})` : ""}
-        </Text>
-        <Pressable onPress={() => setAddOpen(!addOpen)}>
-          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-            {addOpen ? "Anuluj" : "+ Dodaj konto"}
-          </Text>
-        </Pressable>
-      </View>
-
-      {addOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
-          <Text className="text-xs text-muted uppercase mb-2">Email</Text>
-          <Field
-            placeholder="jan.kowalski@flowtex.pl"
-            value={newAccount.email}
-            onChangeText={(value: string) =>
-              setNewAccount({ ...newAccount, email: value })
-            }
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <Text className="text-xs text-muted uppercase mb-2 mt-3">
-            Hasło (min. 10 znaków)
-          </Text>
-          <Field
-            placeholder="••••••••"
-            value={newAccount.password}
-            onChangeText={(value: string) =>
-              setNewAccount({ ...newAccount, password: value })
-            }
-            autoCapitalize="none"
-            secureTextEntry
-          />
-          <Text className="text-xs text-muted uppercase mb-2 mt-3">Rola</Text>
-          <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-            {ROLE_OPTIONS.map((role) => (
-              <Pressable
-                key={role}
-                onPress={() => setNewAccount({ ...newAccount, role })}
-                style={{
-                  backgroundColor:
-                    newAccount.role === role ? COLORS.primary : COLORS.background,
-                  borderRadius: 10,
-                  paddingHorizontal: 10,
-                  paddingVertical: 8,
-                  borderWidth: 1,
-                  borderColor:
-                    newAccount.role === role ? COLORS.primary : COLORS.border,
-                }}
-              >
-                <Text
-                  style={{
-                    color:
-                      newAccount.role === role ? COLORS.background : COLORS.foreground,
-                    fontWeight: "700",
-                  }}
-                >
-                  {role}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {employees.length > 0 && (
-            <>
-              <Text className="text-xs text-muted uppercase mb-2 mt-3">
-                Powiązany pracownik (opcjonalnie)
-              </Text>
-              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                <Pressable
-                  onPress={() => setNewAccount({ ...newAccount, employeeId: "" })}
-                  style={{
-                    backgroundColor:
-                      newAccount.employeeId === "" ? COLORS.primary : COLORS.background,
-                    borderRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                    borderWidth: 1,
-                    borderColor:
-                      newAccount.employeeId === "" ? COLORS.primary : COLORS.border,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color:
-                        newAccount.employeeId === ""
-                          ? COLORS.background
-                          : COLORS.foreground,
-                      fontWeight: "700",
-                    }}
-                  >
-                    Brak
-                  </Text>
-                </Pressable>
-                {employees.map((e) => (
-                  <Pressable
-                    key={e.id}
-                    onPress={() => setNewAccount({ ...newAccount, employeeId: e.id })}
-                    style={{
-                      backgroundColor:
-                        newAccount.employeeId === e.id
-                          ? COLORS.primary
-                          : COLORS.background,
-                      borderRadius: 10,
-                      paddingHorizontal: 10,
-                      paddingVertical: 8,
-                      borderWidth: 1,
-                      borderColor:
-                        newAccount.employeeId === e.id ? COLORS.primary : COLORS.border,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color:
-                          newAccount.employeeId === e.id
-                            ? COLORS.background
-                            : COLORS.foreground,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {e.name}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          )}
-          {loadError && (
-            <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 10 }}>
-              {loadError}
-            </Text>
-          )}
-          <View style={{ marginTop: 12 }}>
-            {busy ? (
-              <ActivityIndicator color={COLORS.primary} />
-            ) : (
-              <Button
-                label="Utwórz konto"
-                onPress={async () => {
-                  setBusy(true);
-                  setLoadError(null);
-                  try {
-                    await createAdminUser(
-                      newAccount.email.trim(),
-                      newAccount.password,
-                      newAccount.role,
-                      newAccount.employeeId || null,
-                    );
-                    setNewAccount({ email: "", password: "", role: "Pracownik", employeeId: "" });
-                    setAddOpen(false);
-                    reload();
-                  } catch (err) {
-                    setLoadError(err instanceof Error ? err.message : "Błąd.");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              />
-            )}
-          </View>
-        </View>
-      )}
-
-      {!addOpen && loadError && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
-          <Text style={{ color: COLORS.danger, fontSize: 12 }}>{loadError}</Text>
-        </View>
-      )}
-
-      {users === null && !loadError && (
-        <View className="items-center py-6">
-          <ActivityIndicator color={COLORS.primary} />
-        </View>
-      )}
-
-      {users?.length === 0 && (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
-          <Text className="text-sm text-muted">Brak kont logowania.</Text>
-        </View>
-      )}
-
-      {users && users.length > 0 && (
-        <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
-          {users.map((u, i) => (
-            <View
-              key={u.id}
-              style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: COLORS.border }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                }}
-              >
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
-                    {u.email ?? "(brak emaila)"}
-                  </Text>
-                  <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                    {u.role}
-                    {employeeName(u.employeeId) ? ` · ${employeeName(u.employeeId)}` : ""}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => {
-                    setEditId(editId === u.id ? null : u.id);
-                    setEditRole(u.role);
-                    setEditEmployeeId(u.employeeId != null ? String(u.employeeId) : "");
-                    setPasswordEditId(null);
-                  }}
-                  style={{ marginRight: 14 }}
-                >
-                  <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
-                    Edytuj
-                  </Text>
-                </Pressable>
-                {!isProtectedAdminEmail(u.email) && (
-                  <Pressable
-                    onPress={() => {
-                      setPasswordEditId(passwordEditId === u.id ? null : u.id);
-                      setPasswordInput("");
-                      setEditId(null);
-                    }}
-                    style={{ marginRight: 14 }}
-                  >
-                    <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
-                      Zmień hasło
-                    </Text>
-                  </Pressable>
-                )}
-                {isProtectedAdminEmail(u.email) ? (
-                  <Text style={{ color: COLORS.muted, fontSize: 11, fontStyle: "italic" }}>
-                    Konto główne
-                  </Text>
-                ) : (
-                  <Pressable
-                    onPress={() =>
-                      confirmAction(
-                        "Usuń konto",
-                        `Usunąć konto ${u.email ?? u.id}? Tej operacji nie można cofnąć.`,
-                        "Usuń",
-                        async () => {
-                          try {
-                            await deleteAdminUser(u.id);
-                            reload();
-                          } catch (err) {
-                            setLoadError(err instanceof Error ? err.message : "Błąd.");
-                          }
-                        },
-                      )
-                    }
-                  >
-                    <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
-                      Usuń
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-              {editId === u.id && (
-                <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-                  {isProtectedAdminEmail(u.email) && (
-                    <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}>
-                      To konto główne administratora — rola Admin jest chroniona i nie da się jej
-                      tu odebrać.
-                    </Text>
-                  )}
-                  <Text className="text-xs text-muted uppercase mb-2">Rola</Text>
-                  <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                    {ROLE_OPTIONS.map((role) => {
-                      const disabled = isProtectedAdminEmail(u.email) && role !== "Admin";
-                      return (
-                        <Pressable
-                          key={role}
-                          disabled={disabled}
-                          onPress={() => setEditRole(role)}
-                          style={{
-                            backgroundColor: editRole === role ? COLORS.primary : COLORS.background,
-                            borderRadius: 10,
-                            paddingHorizontal: 10,
-                            paddingVertical: 8,
-                            borderWidth: 1,
-                            borderColor: editRole === role ? COLORS.primary : COLORS.border,
-                            opacity: disabled ? 0.4 : 1,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: editRole === role ? COLORS.background : COLORS.foreground,
-                              fontWeight: "700",
-                            }}
-                          >
-                            {role}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  {employees.length > 0 && (
-                    <>
-                      <Text className="text-xs text-muted uppercase mb-2 mt-3">
-                        Powiązany pracownik
-                      </Text>
-                      <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                        <Pressable
-                          onPress={() => setEditEmployeeId("")}
-                          style={{
-                            backgroundColor:
-                              editEmployeeId === "" ? COLORS.primary : COLORS.background,
-                            borderRadius: 10,
-                            paddingHorizontal: 10,
-                            paddingVertical: 8,
-                            borderWidth: 1,
-                            borderColor: editEmployeeId === "" ? COLORS.primary : COLORS.border,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: editEmployeeId === "" ? COLORS.background : COLORS.foreground,
-                              fontWeight: "700",
-                            }}
-                          >
-                            Brak
-                          </Text>
-                        </Pressable>
-                        {employees.map((e) => (
-                          <Pressable
-                            key={e.id}
-                            onPress={() => setEditEmployeeId(e.id)}
-                            style={{
-                              backgroundColor:
-                                editEmployeeId === e.id ? COLORS.primary : COLORS.background,
-                              borderRadius: 10,
-                              paddingHorizontal: 10,
-                              paddingVertical: 8,
-                              borderWidth: 1,
-                              borderColor:
-                                editEmployeeId === e.id ? COLORS.primary : COLORS.border,
-                            }}
-                          >
-                            <Text
-                              style={{
-                                color:
-                                  editEmployeeId === e.id ? COLORS.background : COLORS.foreground,
-                                fontWeight: "700",
-                              }}
-                            >
-                              {e.name}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </>
-                  )}
-                  <View style={{ marginTop: 12 }}>
-                    <Pressable
-                      onPress={async () => {
-                        try {
-                          await setAdminUserRole(u.id, editRole, editEmployeeId || null);
-                          setEditId(null);
-                          reload();
-                        } catch (err) {
-                          setLoadError(err instanceof Error ? err.message : "Błąd.");
-                        }
-                      }}
-                      style={{
-                        backgroundColor: COLORS.primary,
-                        borderRadius: 10,
-                        paddingVertical: 10,
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text style={{ color: COLORS.background, fontWeight: "700" }}>
-                        Zapisz
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-              {passwordEditId === u.id && (
-                <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-                  <Text className="text-xs text-muted uppercase mb-2">
-                    Nowe hasło (min. 10 znaków)
-                  </Text>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <View style={{ flex: 1 }}>
-                      <Field
-                        placeholder="••••••••"
-                        value={passwordInput}
-                        onChangeText={setPasswordInput}
-                        autoCapitalize="none"
-                        secureTextEntry
-                      />
-                    </View>
-                    <Pressable
-                      onPress={async () => {
-                        if (passwordInput.length < 10) return;
-                        try {
-                          await setAdminUserPassword(u.id, passwordInput);
-                          setPasswordEditId(null);
-                        } catch (err) {
-                          setLoadError(err instanceof Error ? err.message : "Błąd.");
-                        }
-                      }}
-                      style={{
-                        backgroundColor: COLORS.primary,
-                        borderRadius: 10,
-                        paddingHorizontal: 16,
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text style={{ color: COLORS.background, fontWeight: "700" }}>
-                        Zapisz
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-            </View>
-          ))}
         </View>
       )}
     </>

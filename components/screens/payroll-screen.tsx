@@ -159,8 +159,19 @@ export function PayrollSection() {
         // tego, ile faktycznie godzin tego dnia przepracowano. Do kosztu
         // budowy liczą się realne godziny (patrz settlement-screen.tsx) —
         // to tutaj jest wyłącznie "ile do ręki".
+        //
+        // Stawka per dzień bierze się z ZAMROŻONEJ wartości na wpisie
+        // godzin tego dnia (time_entries.hourlyRate), nie z aktualnej
+        // employee.hourlyRate — inaczej podniesienie stawki dziś
+        // przeliczałoby też już przepracowane, nierozliczone dni sprzed
+        // zmiany. `dayRate` (do samej kolumny podglądowej "STAWKA") zostaje
+        // aktualną stawką — to tylko informacyjny punkt odniesienia.
         const dayRate = workdayHours * (employee.hourlyRate || 0);
-        const payout = dates.length * dayRate;
+        const payout = dates.reduce((sum, date) => {
+          const dayEntry = entries.find((e) => e.date === date);
+          const rate = dayEntry?.hourlyRate ?? employee.hourlyRate ?? 0;
+          return sum + workdayHours * rate;
+        }, 0);
 
         return {
           employee,

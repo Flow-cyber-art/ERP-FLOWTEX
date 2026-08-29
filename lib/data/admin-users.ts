@@ -56,6 +56,16 @@ export const createAdminUser = (
 export const setAdminUserPassword = (userId: string, password: string) =>
   invoke<{ ok: true }>("setPassword", { userId, password });
 
+export const setAdminUserEmail = (userId: string, email: string) =>
+  invoke<{ ok: true }>("setEmail", { userId, email });
+
+// Nazwa wyświetlana konta — patrz komentarz przy akcji "setDisplayName"
+// w supabase/functions/admin-users/index.ts: Admin ustawia ją stąd (przy
+// zapisie imienia i nazwiska pracownika w Zespole), konto nie edytuje
+// jej już samo w Ustawieniach.
+export const setAdminUserDisplayName = (userId: string, displayName: string) =>
+  invoke<{ ok: true }>("setDisplayName", { userId, displayName });
+
 export const setAdminUserRole = (
   userId: string,
   role: AppRole,

@@ -187,6 +187,10 @@ type TimeEntry = {
   hours: number;
   start?: string;
   end?: string;
+  // Stawka ZAMROŻONA w momencie zapisu godzin, `null` dla nie-Admina —
+  // patrz supabase/sql/055_stawka_zamrozona_w_godzinach.sql.
+  hourlyRate?: number | null;
+  costRate?: number | null;
 };
 
 type MaterialOrder = {

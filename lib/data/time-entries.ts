@@ -22,13 +22,21 @@ export type TimeEntryRow = {
   hours: string;
   start: string | null;
   end: string | null;
+  // `null` dla każdego, kto nie jest Adminem — ta sama ochrona jak
+  // employees.hourlyRate (044_ukryj_stawki_pracownikow.sql), patrz
+  // supabase/sql/055_stawka_zamrozona_w_godzinach.sql. Stawka
+  // ZAMROŻONA w momencie zapisu godzin, nie aktualna stawka pracownika.
+  hourlyRate: string | null;
+  costRate: string | null;
 };
 
+// RPC (get_time_entries), nie bezpośredni select — kolumny hourlyRate/
+// costRate mają REVOKE SELECT dla `authenticated`, więc surowy
+// `.from("time_entries").select(...)` z tymi polami zawsze zwróciłby
+// błąd "permission denied for column"; funkcja SECURITY DEFINER sama
+// decyduje, czy wywołujący (Admin) ma prawo zobaczyć realną wartość.
 export async function listTimeEntries(): Promise<TimeEntryRow[]> {
-  const { data, error } = await supabase
-    .from("time_entries")
-    .select('id, date, "buildId", "employeeId", hours, start, "end"')
-    .order("date", { ascending: false });
+  const { data, error } = await supabase.rpc("get_time_entries");
   if (error) throw new Error(error.message);
   return (data ?? []) as TimeEntryRow[];
 }

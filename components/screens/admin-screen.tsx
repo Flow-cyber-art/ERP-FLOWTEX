@@ -161,6 +161,15 @@ const EMPTY_NEW_EMPLOYEE: NewEmployeeInput = {
   costRate: "",
 };
 
+const TEAM_COL_NUMERIC = { flex: 1, textAlign: "right" as const };
+const TEAM_TABLE_HEADER_STYLE = {
+  color: COLORS.muted,
+  fontSize: 10,
+  fontWeight: "700" as const,
+  flex: 2,
+};
+const TEAM_CELL_STYLE = { color: COLORS.foreground, fontSize: 12, fontWeight: "700" as const };
+
 export function AdminTeamSection() {
   const {
     workdayHours,
@@ -198,139 +207,138 @@ export function AdminTeamSection() {
 
   return (
     <>
-      {/* Dniówka — jedna zwarta linia zamiast pełnej karty; edycja tylko na żądanie */}
-      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-3">
+      {/* Dniówka i stawka za km obok siebie — dwa krótkie parametry
+          rozliczeniowe firmy, jeden rząd zamiast dwóch pełnych wierszy.
+          Rozwinięcie (edycja) którejkolwiek pokazuje się pod całym
+          rzędem, nie w połówce kolumny — za mało miejsca na stepper +
+          przyciski obok siebie w wąskiej kolumnie. */}
+      <View style={{ flexDirection: "row", gap: 10 }} className="mb-3">
         <Pressable
-          onPress={() => setWorkdayOpen(!workdayOpen)}
-          style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
+          onPress={() => {
+            setWorkdayOpen(!workdayOpen);
+            setKmRateOpen(false);
+          }}
+          className="bg-surface border border-border rounded-2xl overflow-hidden"
+          style={{ flex: 1, flexDirection: "row", alignItems: "center", padding: 14 }}
         >
           <IconBadge name="schedule" size={18} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ color: COLORS.muted, fontSize: 11 }}>DNIÓWKA</Text>
+          <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 10 }}>DNIÓWKA</Text>
             <Text
               style={{
                 color: COLORS.foreground,
                 fontWeight: "700",
-                fontSize: 15,
+                fontSize: 14,
                 marginTop: 2,
               }}
+              numberOfLines={1}
             >
               {workdayHours} h / dzień
             </Text>
           </View>
-          <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+          <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
             {workdayOpen ? "Zwiń" : "Zmień"}
           </Text>
         </Pressable>
-        {workdayOpen && (
-          <View
-            style={{
-              borderTopWidth: 1,
-              borderTopColor: COLORS.border,
-              padding: 14,
-            }}
-          >
-            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-              <QuantityStepper
-                value={workdayHoursInput}
-                onChangeText={setWorkdayHoursInput}
-              />
-              <Text style={{ color: COLORS.muted }}>h / dzień</Text>
-            </View>
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="Anuluj"
-                  secondary
-                  onPress={() => {
-                    setWorkdayHoursInput(String(workdayHours));
-                    setWorkdayOpen(false);
-                  }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="Zapisz"
-                  onPress={() => {
-                    saveWorkdayHours();
-                    setWorkdayOpen(false);
-                  }}
-                />
-              </View>
-            </View>
-          </View>
-        )}
-      </View>
-
-      {/* Stawka za km (Faza 7) — ten sam wzorzec co Dniówka wyżej:
-          zwarta linia, edycja (stepper +/- 0,50 zł) tylko na żądanie.
-          Zapis idzie od razu do bazy (updateKmRate, RLS: tylko Admin),
-          w odróżnieniu od dniówki, która zostaje czysto lokalna. */}
-      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-3">
         <Pressable
-          onPress={() => setKmRateOpen(!kmRateOpen)}
-          style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
+          onPress={() => {
+            setKmRateOpen(!kmRateOpen);
+            setWorkdayOpen(false);
+          }}
+          className="bg-surface border border-border rounded-2xl overflow-hidden"
+          style={{ flex: 1, flexDirection: "row", alignItems: "center", padding: 14 }}
         >
           <IconBadge name="directions-car" size={18} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ color: COLORS.muted, fontSize: 11 }}>STAWKA ZA KM</Text>
+          <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 10 }}>STAWKA ZA KM</Text>
             <Text
               style={{
                 color: COLORS.foreground,
                 fontWeight: "700",
-                fontSize: 15,
+                fontSize: 14,
                 marginTop: 2,
               }}
+              numberOfLines={1}
             >
-              {kmRate.toFixed(2)} zł / km
+              {kmRate.toFixed(2)} zł/km
             </Text>
           </View>
-          <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+          <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
             {kmRateOpen ? "Zwiń" : "Zmień"}
           </Text>
         </Pressable>
-        {kmRateOpen && (
-          <View
-            style={{
-              borderTopWidth: 1,
-              borderTopColor: COLORS.border,
-              padding: 14,
-            }}
-          >
-            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-              <QuantityStepper
-                value={kmRateInput}
-                onChangeText={setKmRateInput}
-                step={0.5}
+      </View>
+
+      {workdayOpen && (
+        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+          <Text className="text-xs text-muted uppercase mb-2">Dniówka (godz./dzień)</Text>
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <QuantityStepper
+              value={workdayHoursInput}
+              onChangeText={setWorkdayHoursInput}
+            />
+            <Text style={{ color: COLORS.muted }}>h / dzień</Text>
+          </View>
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Anuluj"
+                secondary
+                onPress={() => {
+                  setWorkdayHoursInput(String(workdayHours));
+                  setWorkdayOpen(false);
+                }}
               />
-              <Text style={{ color: COLORS.muted }}>zł / km</Text>
             </View>
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="Anuluj"
-                  secondary
-                  onPress={() => {
-                    setKmRateInput(kmRate ? String(kmRate) : "");
-                    setKmRateOpen(false);
-                  }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  label="Zapisz"
-                  onPress={async () => {
-                    const value = Number(kmRateInput.replace(",", "."));
-                    if (Number.isNaN(value) || value < 0) return;
-                    await updateKmRate(value);
-                    setKmRateOpen(false);
-                  }}
-                />
-              </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Zapisz"
+                onPress={() => {
+                  saveWorkdayHours();
+                  setWorkdayOpen(false);
+                }}
+              />
             </View>
           </View>
-        )}
-      </View>
+        </View>
+      )}
+
+      {kmRateOpen && (
+        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+          <Text className="text-xs text-muted uppercase mb-2">Stawka za km</Text>
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <QuantityStepper
+              value={kmRateInput}
+              onChangeText={setKmRateInput}
+              step={0.5}
+            />
+            <Text style={{ color: COLORS.muted }}>zł / km</Text>
+          </View>
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Anuluj"
+                secondary
+                onPress={() => {
+                  setKmRateInput(kmRate ? String(kmRate) : "");
+                  setKmRateOpen(false);
+                }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Zapisz"
+                onPress={async () => {
+                  const value = Number(kmRateInput.replace(",", "."));
+                  if (Number.isNaN(value) || value < 0) return;
+                  await updateKmRate(value);
+                  setKmRateOpen(false);
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* PIN zabezpieczający "Zamknij (i rozlicz) budowę" (patrz
           builds-screen.tsx) — ten sam wzorzec co Stawka za km wyżej. Puste
@@ -501,119 +509,155 @@ export function AdminTeamSection() {
           </Text>
         </View>
       )}
-      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
-        {employees.map((employee, i) => (
+      {employees.length > 0 && (
+        <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+          {/* Nagłówek tabeli — jeden użytkownik (właściciel), który zna
+              swoich ludzi, korzysta na porównaniu stawek w pionie, czego
+              karty nie dają. */}
           <View
-            key={employee.id}
             style={{
-              borderTopWidth: i > 0 ? 1 : 0,
-              borderTopColor: COLORS.border,
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.border,
             }}
           >
-            <Pressable
-              onPress={() => {
-                if (editingRateId === employee.id) {
-                  setEditingRateId(null);
-                } else {
-                  setEditingRateId(employee.id);
-                  setRateInput(String(employee.hourlyRate || ""));
-                  setCostRateInput(String(employee.costRate || ""));
-                }
-              }}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-              }}
-            >
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text
-                  className="text-sm font-bold text-foreground"
-                  numberOfLines={1}
-                >
-                  {employee.name}
-                </Text>
-                <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                  {formatPLN(employee.hourlyRate || 0)}/h wypłata ·{" "}
-                  {formatPLN(employee.costRate || 0)}/h koszt budowy
-                </Text>
-              </View>
-              <Text
-                style={{
-                  color: COLORS.muted,
-                  fontSize: 12,
-                  fontWeight: "700",
-                }}
-              >
-                {employee.role}
-              </Text>
-            </Pressable>
-            {editingRateId === employee.id && (
-              <View
-                style={{
-                  paddingHorizontal: 14,
-                  paddingBottom: 14,
-                }}
-              >
-                <Text className="text-xs text-muted uppercase mb-2">
-                  Stawka godzinowa (PLN/h) — wypłata
-                </Text>
-                <QuantityStepper value={rateInput} onChangeText={setRateInput} />
-                <Text
-                  className="text-xs text-muted uppercase mb-2"
-                  style={{ marginTop: 10 }}
-                >
-                  Stawka kosztowa (PLN/h) — koszt budowy
-                </Text>
-                <QuantityStepper
-                  value={costRateInput}
-                  onChangeText={setCostRateInput}
-                />
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-                  <Pressable
-                    onPress={() => setEditingRateId(null)}
-                    style={{
-                      flex: 1,
-                      borderRadius: 10,
-                      paddingHorizontal: 16,
-                      paddingVertical: 12,
-                      justifyContent: "center",
-                      alignItems: "center",
-                      borderWidth: 1,
-                      borderColor: COLORS.border,
-                    }}
-                  >
-                    <Text style={{ color: COLORS.muted, fontWeight: "700" }}>
-                      Anuluj
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      updateEmployeeRate(employee.id, Number(rateInput) || 0);
-                      updateEmployeeCostRate(employee.id, Number(costRateInput) || 0);
-                      setEditingRateId(null);
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: COLORS.primary,
-                      borderRadius: 10,
-                      paddingHorizontal: 16,
-                      paddingVertical: 12,
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: COLORS.background, fontWeight: "700" }}>
-                      Zapisz
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
+            <Text style={TEAM_TABLE_HEADER_STYLE}>PRACOWNIK</Text>
+            <Text style={[TEAM_TABLE_HEADER_STYLE, TEAM_COL_NUMERIC]}>DNIÓWKA</Text>
+            <Text style={[TEAM_TABLE_HEADER_STYLE, TEAM_COL_NUMERIC]}>STAWKA</Text>
+            <Text style={[TEAM_TABLE_HEADER_STYLE, TEAM_COL_NUMERIC]}>KOSZT BUDOWY</Text>
+            <View style={{ width: 28 }} />
           </View>
-        ))}
-      </View>
+          {employees.map((employee, i) => {
+            const editing = editingRateId === employee.id;
+            // Heurystyka: brak spacji w imieniu = najpewniej wpisano samo
+            // imię bez nazwiska — sygnał do uzupełnienia kartoteki, nie
+            // twarda walidacja (może się mylić przy pseudonimach).
+            const missingLastName = !employee.name.trim().includes(" ");
+            return (
+              <View
+                key={employee.id}
+                style={{
+                  borderTopWidth: i > 0 ? 1 : 0,
+                  borderTopColor: COLORS.border,
+                }}
+              >
+                <Pressable
+                  onPress={() => {
+                    if (editing) {
+                      setEditingRateId(null);
+                    } else {
+                      setEditingRateId(employee.id);
+                      setRateInput(String(employee.hourlyRate || ""));
+                      setCostRateInput(String(employee.costRate || ""));
+                    }
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    minHeight: 44,
+                  }}
+                >
+                  <View style={{ flex: 2, minWidth: 0, paddingRight: 6 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <Text
+                        className="text-sm font-bold text-foreground"
+                        numberOfLines={1}
+                      >
+                        {employee.name}
+                      </Text>
+                      {missingLastName && (
+                        <Text style={{ color: COLORS.warning, fontSize: 12 }}>⚠</Text>
+                      )}
+                    </View>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 1 }}>
+                      {employee.role}
+                    </Text>
+                  </View>
+                  <Text style={[TEAM_CELL_STYLE, TEAM_COL_NUMERIC]} numberOfLines={1}>
+                    {formatPLN(workdayHours * (employee.hourlyRate || 0))}
+                  </Text>
+                  <Text style={[TEAM_CELL_STYLE, TEAM_COL_NUMERIC]} numberOfLines={1}>
+                    {formatPLN(employee.hourlyRate || 0)}/h
+                  </Text>
+                  <Text style={[TEAM_CELL_STYLE, TEAM_COL_NUMERIC]} numberOfLines={1}>
+                    {employee.costRate ? `${formatPLN(employee.costRate)}/h` : "—"}
+                  </Text>
+                  <Text style={{ width: 28, textAlign: "right", color: COLORS.muted, fontSize: 16 }}>
+                    ⋯
+                  </Text>
+                </Pressable>
+                {editing && (
+                  <View
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingBottom: 14,
+                    }}
+                  >
+                    <Text className="text-xs text-muted uppercase mb-2">
+                      Stawka godzinowa (PLN/h) — wypłata
+                    </Text>
+                    <QuantityStepper value={rateInput} onChangeText={setRateInput} />
+                    <Text
+                      className="text-xs text-muted uppercase mb-2"
+                      style={{ marginTop: 10 }}
+                    >
+                      Stawka kosztowa (PLN/h) — koszt budowy
+                    </Text>
+                    <QuantityStepper
+                      value={costRateInput}
+                      onChangeText={setCostRateInput}
+                    />
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                      <Pressable
+                        onPress={() => setEditingRateId(null)}
+                        style={{
+                          flex: 1,
+                          borderRadius: 10,
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          justifyContent: "center",
+                          alignItems: "center",
+                          borderWidth: 1,
+                          borderColor: COLORS.border,
+                        }}
+                      >
+                        <Text style={{ color: COLORS.muted, fontWeight: "700" }}>
+                          Anuluj
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          updateEmployeeRate(employee.id, Number(rateInput) || 0);
+                          updateEmployeeCostRate(employee.id, Number(costRateInput) || 0);
+                          setEditingRateId(null);
+                        }}
+                        style={{
+                          flex: 1,
+                          backgroundColor: COLORS.primary,
+                          borderRadius: 10,
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text style={{ color: COLORS.background, fontWeight: "700" }}>
+                          Zapisz
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       <AdminTeamsSubsection />
     </>

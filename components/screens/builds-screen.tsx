@@ -19,6 +19,7 @@ import {
 import { useAppData, type NewBuildInput } from "@/contexts/app-data";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 import { BuildPhotosSection } from "@/components/build-photos-section";
+import { BuildPortalSection } from "@/components/build-portal-section";
 import { todayISO } from "@/components/report-ui";
 
 // Wartość kontraktu bywa 6-7 cyfrowa (setki tysięcy) — bez separatora
@@ -1616,6 +1617,10 @@ export function BuildsScreen() {
               />
             </View>
           </View>
+
+          <DetailSection label="Portal klienta">
+            <BuildPortalSection buildId={Number(b.id)} />
+          </DetailSection>
 
           {isClosed && b.settlement ? (
             <DetailSection

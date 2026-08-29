@@ -23,10 +23,16 @@ import {
  * przyjdzie.
  */
 
-const STATUS_COLOR: Record<PublicBuildView["statusColor"], string> = {
+const STATUS_COLOR: Record<NonNullable<PublicBuildView["statusColor"]>, string> = {
   green: COLORS.success,
   yellow: COLORS.warning,
   red: COLORS.danger,
+};
+
+const DISPLAY_STATUS_LABEL: Record<PublicBuildView["displayStatus"], string> = {
+  nierozpoczeta: "Nierozpoczęta",
+  aktywna: "W trakcie",
+  zamknieta: "Zakończona",
 };
 
 const formatDatePL = (iso: string | null) => {
@@ -37,9 +43,33 @@ const formatDatePL = (iso: string | null) => {
 };
 
 function HeroGauge({ view }: { view: PublicBuildView }) {
-  const color = STATUS_COLOR[view.statusColor];
+  const color = view.statusColor ? STATUS_COLOR[view.statusColor] : COLORS.border;
+  const subtitle =
+    view.displayStatus === "nierozpoczeta"
+      ? "Budowa jeszcze się nie rozpoczęła"
+      : view.displayStatus === "zamknieta"
+        ? "Budowa zakończona"
+        : view.currentStageName
+          ? `Trwa: ${view.currentStageName}`
+          : "Postęp budowy";
   return (
     <View style={{ alignItems: "center", marginTop: 12, marginBottom: 8 }}>
+      <View
+        style={{
+          alignSelf: "center",
+          backgroundColor: COLORS.background,
+          borderWidth: 1,
+          borderColor: color,
+          borderRadius: 999,
+          paddingHorizontal: 12,
+          paddingVertical: 4,
+          marginBottom: 12,
+        }}
+      >
+        <Text style={{ color, fontSize: 12, fontWeight: "700" }}>
+          {DISPLAY_STATUS_LABEL[view.displayStatus]}
+        </Text>
+      </View>
       <View
         style={{
           width: 176,
@@ -58,7 +88,7 @@ function HeroGauge({ view }: { view: PublicBuildView }) {
         <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>postępu</Text>
       </View>
       <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 16, marginTop: 14 }}>
-        {view.currentStageName ? `Trwa: ${view.currentStageName}` : "Postęp budowy"}
+        {subtitle}
       </Text>
     </View>
   );

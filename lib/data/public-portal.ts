@@ -88,8 +88,9 @@ export type PublicBuildView = {
   startDate: string;
   plannedEndDate: string;
   status: "aktywna" | "zamknięta";
+  displayStatus: "nierozpoczeta" | "aktywna" | "zamknieta";
   progressPercent: number;
-  statusColor: "green" | "yellow" | "red";
+  statusColor: "green" | "yellow" | "red" | null;
   currentStageName: string | null;
   stages: PublicBuildStage[];
   lastUpdateDate: string | null;

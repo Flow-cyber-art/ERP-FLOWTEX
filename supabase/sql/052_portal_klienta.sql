@@ -100,6 +100,7 @@ declare
   v_expected_progress numeric;
   v_delta numeric;
   v_status_color text;
+  v_display_status text;
   v_last_update date;
   v_stages json;
 begin
@@ -182,6 +183,24 @@ begin
     else 'red'
   end;
 
+  -- Etykieta stanu budowy do UI portalu — trzy stany, niezależne od
+  -- 5.3 (kolor gauge'a "na czasie/opóźnienie" ma sens tylko, gdy budowa
+  -- faktycznie trwa):
+  --  - "zamknieta"    -> builds.status = 'zamknięta' (budowa domknięta,
+  --                      ew. PIN-em, patrz "Zamknij i rozlicz budowę"),
+  --  - "nierozpoczeta" -> startDate jeszcze nie nadszedł, postęp = 0,
+  --  - "aktywna"       -> normalny widok z gauge'em i kolorem 5.3.
+  if v_build.status = 'zamknięta' then
+    v_display_status := 'zamknieta';
+  elsif v_build."startDate" > current_date then
+    v_display_status := 'nierozpoczeta';
+    v_progress := 0;
+    v_current_stage := null;
+    v_status_color := null;
+  else
+    v_display_status := 'aktywna';
+  end if;
+
   select max(r.date) into v_last_update
   from reports r
   where r."buildId" = v_build.id and r.status in ('submitted', 'approved');
@@ -194,6 +213,7 @@ begin
     'startDate', v_build."startDate",
     'plannedEndDate', v_build."startDate"::date + (v_build."durationDays" || ' days')::interval,
     'status', v_build.status,
+    'displayStatus', v_display_status,
     'progressPercent', coalesce(v_progress, 0),
     'statusColor', v_status_color,
     'currentStageName', v_current_stage,

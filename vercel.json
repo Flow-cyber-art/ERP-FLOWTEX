@@ -3,5 +3,11 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build:web",
   "outputDirectory": "dist",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/portal/:token",
+      "destination": "/portal/[token].html"
+    }
+  ]
 }

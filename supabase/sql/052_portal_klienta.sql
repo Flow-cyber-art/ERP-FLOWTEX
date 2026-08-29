@@ -9,7 +9,7 @@
 -- przez tę jedną funkcję SECURITY DEFINER.
 -- ============================================================
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto schema extensions;
 
 alter table builds add column if not exists public_token uuid unique default gen_random_uuid();
 alter table builds add column if not exists public_access_enabled boolean not null default false;
@@ -33,7 +33,7 @@ create or replace function regenerate_public_token(p_build_id integer)
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_new_token uuid := gen_random_uuid();
@@ -59,7 +59,7 @@ create or replace function set_public_portal_pin(p_build_id integer, p_pin text)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if app_role() <> 'Admin' then
@@ -87,7 +87,7 @@ create or replace function get_public_build(p_token uuid, p_pin text default nul
 returns json
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_build record;

@@ -139,6 +139,11 @@ export function BuildsScreen() {
   const [expandedPortalBuildId, setExpandedPortalBuildId] = useState<
     string | null
   >(null);
+  // Lista "Materiały dodatkowe" — ten sam wzorzec zwijania co Portal
+  // klienta wyżej, żeby długa lista przypisanych materiałów nie musiała
+  // stać zawsze rozwinięta pod spodem.
+  const [expandedExtraMaterialsBuildId, setExpandedExtraMaterialsBuildId] =
+    useState<string | null>(null);
   // Przypisanie/zmiana technologii (Faza 2) — jeden picker na raz, ten
   // sam wzorzec co edycja linku do zdjęć powyżej.
   const [techEditBuildId, setTechEditBuildId] = useState<string | null>(null);
@@ -1157,10 +1162,24 @@ export function BuildsScreen() {
                       alignItems: "center",
                     }}
                   >
-                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                      MATERIAŁY DODATKOWE
-                      {buildAssignments.length > 0 ? ` (${buildAssignments.length})` : ""}
-                    </Text>
+                    <Pressable
+                      onPress={() =>
+                        setExpandedExtraMaterialsBuildId(
+                          expandedExtraMaterialsBuildId === b.id ? null : b.id,
+                        )
+                      }
+                      style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}
+                    >
+                      <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                        MATERIAŁY DODATKOWE
+                        {buildAssignments.length > 0 ? ` (${buildAssignments.length})` : ""}
+                      </Text>
+                      {buildAssignments.length > 0 && (
+                        <Text style={{ color: COLORS.primary, fontSize: 14, fontWeight: "700" }}>
+                          {expandedExtraMaterialsBuildId === b.id ? "⌄" : "›"}
+                        </Text>
+                      )}
+                    </Pressable>
                     <Pressable
                       onPress={() => {
                         if (isAssigning) {
@@ -1174,6 +1193,7 @@ export function BuildsScreen() {
                         setPlannedAmount("");
                         setDraftAssignments([]);
                         setAssignBuildId(b.id);
+                        setExpandedExtraMaterialsBuildId(b.id);
                       }}
                     >
                       <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
@@ -1408,7 +1428,8 @@ export function BuildsScreen() {
                     </View>
                   )}
 
-                  {buildAssignments.map((a) => {
+                  {expandedExtraMaterialsBuildId === b.id &&
+                    buildAssignments.map((a) => {
                     const material = materials.find((m) => m.id === a.materialId);
                     const key = `${b.id}-${a.materialId}`;
                     const isOpen = expandedAssignmentKey === key;

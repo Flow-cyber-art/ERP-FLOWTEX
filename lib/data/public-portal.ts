@@ -93,6 +93,7 @@ export type PublicBuildView = {
   statusColor: "green" | "yellow" | "red" | null;
   currentStageName: string | null;
   stages: PublicBuildStage[];
+  materials: string[];
   lastUpdateDate: string | null;
   photosUrl: string | null;
   contractValue: string | null;

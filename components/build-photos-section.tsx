@@ -159,9 +159,12 @@ export function BuildPhotosSection({
             className="bg-background border border-border rounded-2xl items-center"
             style={{ paddingVertical: 22 }}
           >
-            <Text style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
-              📁 Otwórz folder zdjęć ↗
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={{ fontSize: 15 }}>📁</Text>
+              <Text style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
+                Otwórz folder zdjęć ↗
+              </Text>
+            </View>
             {newCount > 0 && (
               <Text style={{ color: COLORS.primary, fontSize: 12, marginTop: 4 }}>
                 {newCount} {newCount === 1 ? "nowe zdjęcie" : "nowych zdjęć"}
@@ -173,14 +176,27 @@ export function BuildPhotosSection({
         {!uploading && (
           <>
             <View style={{ marginTop: 12 }}>
-              <Button label="+ Dodaj zdjęcia z galerii" secondary onPress={pickFromLibrary} />
+              <Button
+                label="Dodaj zdjęcia z galerii"
+                icon="🖼️"
+                secondary
+                onPress={pickFromLibrary}
+              />
             </View>
             <Pressable
               onPress={takePhoto}
-              style={{ alignSelf: "flex-end", marginTop: 12, padding: 4 }}
+              style={{
+                alignSelf: "flex-end",
+                marginTop: 12,
+                padding: 4,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+              }}
             >
+              <Text style={{ fontSize: 14 }}>📷</Text>
               <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "700" }}>
-                📷 Zrób zdjęcie
+                Zrób zdjęcie
               </Text>
             </Pressable>
           </>
@@ -204,10 +220,10 @@ export function BuildPhotosSection({
       {uploadingIndicator || (
         <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
           <View style={{ flex: 1 }}>
-            <Button label="📷 Zrób zdjęcie" secondary onPress={takePhoto} />
+            <Button label="Zrób zdjęcie" icon="📷" secondary onPress={takePhoto} />
           </View>
           <View style={{ flex: 1 }}>
-            <Button label="🖼 Dołącz z galerii" secondary onPress={pickFromLibrary} />
+            <Button label="Dołącz z galerii" icon="🖼️" secondary onPress={pickFromLibrary} />
           </View>
         </View>
       )}

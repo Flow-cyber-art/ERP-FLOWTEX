@@ -364,12 +364,18 @@ const Button = ({
   secondary = false,
   fullWidth = false,
   disabled = false,
+  // Emoji renderowane osobno od `label` — na Tekście z ustawionym `color`
+  // (jak niżej) system podmienia glify emoji na jednokolorowe, "wytłuszczone"
+  // wersje zamiast pełnokolorowych; osobny Text bez nadpisanego koloru
+  // zostawia natywne, kolorowe emoji (📷, 🖼 itd.).
+  icon,
 }: {
   label: string;
   onPress: () => void;
   secondary?: boolean;
   fullWidth?: boolean;
   disabled?: boolean;
+  icon?: string;
 }) => (
   <Pressable
     onPress={onPress}
@@ -383,12 +389,15 @@ const Button = ({
       paddingVertical: 12,
       paddingHorizontal: 20,
       minHeight: 44,
+      flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
+      gap: 8,
       alignSelf: fullWidth ? "stretch" : "center",
       opacity: disabled ? 0.5 : pressed ? 0.75 : 1,
     })}
   >
+    {icon && <Text style={{ fontSize: 16 }}>{icon}</Text>}
     <Text
       style={{
         color: secondary ? COLORS.foreground : COLORS.background,

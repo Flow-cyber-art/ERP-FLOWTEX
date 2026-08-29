@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
-import { Image, Platform, Text, View } from "react-native";
+import { Image, Modal, Platform, Pressable, Text, View } from "react-native";
 
 import { Button, COLORS, Field, confirmAction, notify } from "@/components/report-ui";
 import {
@@ -27,6 +27,7 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [pinEditing, setPinEditing] = useState(false);
   const [pinInput, setPinInput] = useState("");
+  const [qrFullscreen, setQrFullscreen] = useState(false);
 
   const refresh = () => {
     setLoading(true);
@@ -142,10 +143,64 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
       {settings.publicAccessEnabled && (
         <View style={{ marginTop: 14 }}>
           {qrDataUrl && (
-            <View style={{ alignItems: "center", marginBottom: 12 }}>
+            <Pressable
+              onPress={() => setQrFullscreen(true)}
+              style={{ alignItems: "center", marginBottom: 12 }}
+            >
               <Image source={{ uri: qrDataUrl }} style={{ width: 180, height: 180, borderRadius: 8 }} />
-            </View>
+              <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>
+                Dotknij, żeby powiększyć
+              </Text>
+            </Pressable>
           )}
+
+          <Modal
+            visible={qrFullscreen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setQrFullscreen(false)}
+          >
+            <Pressable
+              onPress={() => setQrFullscreen(false)}
+              style={{
+                flex: 1,
+                backgroundColor: "rgba(0,0,0,0.9)",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 24,
+              }}
+            >
+              <Pressable
+                onPress={() => setQrFullscreen(false)}
+                hitSlop={16}
+                style={{
+                  position: "absolute",
+                  top: 48,
+                  right: 24,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: "rgba(255,255,255,0.15)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700" }}>✕</Text>
+              </Pressable>
+              {qrDataUrl && (
+                <Image
+                  source={{ uri: qrDataUrl }}
+                  style={{ width: 280, height: 280, borderRadius: 12 }}
+                />
+              )}
+              <Text
+                selectable
+                style={{ color: "#fff", fontSize: 13, textAlign: "center", marginTop: 20 }}
+              >
+                {portalUrl}
+              </Text>
+            </Pressable>
+          </Modal>
           <Text selectable style={{ color: COLORS.muted, fontSize: 12, textAlign: "center" }}>
             {portalUrl}
           </Text>

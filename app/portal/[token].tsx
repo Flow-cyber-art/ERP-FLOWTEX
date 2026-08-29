@@ -283,6 +283,19 @@ export default function PublicBuildPortal() {
         <Text style={{ color: COLORS.muted }}>{lastUpdate ?? "Brak jeszcze raportów z tej budowy."}</Text>
       </Card>
 
+      {view.materials.length > 0 && (
+        <Card>
+          <Text style={{ color: COLORS.foreground, fontWeight: "700", marginBottom: 10 }}>
+            Materiały na budowie
+          </Text>
+          {view.materials.map((name, i) => (
+            <Text key={name + i} style={{ color: COLORS.muted, marginTop: i === 0 ? 0 : 4 }}>
+              • {name}
+            </Text>
+          ))}
+        </Card>
+      )}
+
       {view.photosUrl && (
         <Card>
           <Text style={{ color: COLORS.foreground, fontWeight: "700", marginBottom: 10 }}>Zdjęcia z postępu</Text>

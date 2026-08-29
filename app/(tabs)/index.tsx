@@ -294,12 +294,11 @@ function HomeScreenInner() {
     </Pressable>
     );
   };
-  // "Budowy" i "Archiwum budów" to teraz jedna zakładka z filtrem
-  // wewnątrz ekranu (mały przełącznik "Archiwum" obok wyszukiwarki, ten
-  // sam standard co w Magazynie/Raportach/Rozliczeniu), nie osobna
-  // pozycja nawigacji — wejście zawsze pokazuje aktywne budowy,
-  // buildsView (filtr) zostaje w kontekście tylko dlatego, że steruje
-  // nim ekran builds-screen.tsx, a nie ten pasek.
+  // "Budowy" i "Archiwum budów" to jedna zakładka z filtrem wewnątrz
+  // ekranu (mały przełącznik "Archiwum" obok wyszukiwarki, ten sam
+  // standard co w Magazynie/Raportach/Rozliczeniu) — wejście zawsze
+  // pokazuje aktywne budowy, buildsView (filtr) zostaje w kontekście
+  // tylko dlatego, że steruje nim ekran builds-screen.tsx, a nie ten pasek.
   const buildsButton = routeButton("builds", "⌂", "Budowy", {
     isActive: tab === "builds",
     onPress: () => {
@@ -307,6 +306,29 @@ function HomeScreenInner() {
       setBuildsView("active");
     },
   });
+  // Budowy/Rozliczenie: tak samo jak Magazyn/Technologie i Zamówienia/
+  // Raporty wyżej — mobile ma za mało miejsca w dolnym pasku na dwie
+  // osobne pozycje. Budowy pierwsze (domyślne wejście), powtórne
+  // wciśnięcie przełącza na Rozliczenie. Desktop zostaje przy dwóch
+  // osobnych pozycjach (buildsButton + settlementButton).
+  const isSettlementView = tab === "settlement";
+  const buildsSettlementButton = routeButton(
+    "buildsSettlement",
+    isSettlementView ? "Σ" : "⌂",
+    isSettlementView ? "Rozliczenie" : "Budowy",
+    {
+      isActive: tab === "builds" || tab === "settlement",
+      onPress: () => {
+        if (tab === "builds") {
+          setTab("settlement");
+        } else {
+          setTab("builds");
+          setBuildsView("active");
+        }
+      },
+    },
+  );
+  const settlementButton = routeButton("settlement", "Σ", "Rozliczenie");
   // Admin: od scalenia z HR (patrz admin-screen.tsx) to jedna zakładka
   // z wewnętrznym przełącznikiem "Zespół i dniówka" / "Rozliczenie
   // godzin" — bez osobnej pozycji nawigacji ani przełączania na
@@ -360,7 +382,7 @@ function HomeScreenInner() {
   const visibleRoutes =
     devRole === "Admin"
       ? [
-          buildsButton,
+          ...(isDesktop ? [buildsButton] : [buildsSettlementButton]),
           ...(isDesktop ? [technologiesButton] : []),
           warehouseButton,
           ...(isDesktop
@@ -373,7 +395,7 @@ function HomeScreenInner() {
                 }),
               ]
             : [ordersManagerButton]),
-          routeButton("settlement", "Σ", "Rozliczenie"),
+          ...(isDesktop ? [settlementButton] : []),
           routeButton("hr", "◈", "HR"),
           adminButton,
         ]

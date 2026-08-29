@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Linking,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -451,62 +451,93 @@ function StagesStepper({ stages }: { stages: PublicBuildView["stages"] }) {
   );
 }
 
+// Kafelek miniaturki — współdzielony między podglądem w karcie a pełną
+// galerią w modalu, żeby nie duplikować stylu.
+function PhotoTile({
+  photo,
+  widthPercent = 31,
+}: {
+  photo: PublicBuildView["photos"][number];
+  widthPercent?: number;
+}) {
+  return (
+    <View
+      style={{
+        width: `${widthPercent}%`,
+        aspectRatio: 4 / 3,
+        borderRadius: 14,
+        overflow: "hidden",
+        borderWidth: 1,
+        borderColor: PC.line,
+        backgroundColor: PC.surface2,
+      }}
+    >
+      <Image
+        source={{ uri: driveThumbUrl(photo.id) }}
+        style={{ width: "100%", height: "100%" }}
+        resizeMode="cover"
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 8,
+          bottom: 7,
+          fontSize: 10,
+          fontWeight: "700",
+          color: "#fff",
+          backgroundColor: "rgba(0,0,0,0.6)",
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+          borderRadius: 5,
+        }}
+      >
+        {formatDateShortPL(photo.createdAt)}
+      </Text>
+    </View>
+  );
+}
+
+// Grupuje zdjęcia po dniu (klucz "YYYY-MM-DD" z createdAt), zachowując
+// kolejność malejącą po dacie — zarówno dni, jak i zdjęcia w obrębie dnia
+// przychodzą z backendu już posortowane malejąco (patrz get_public_build).
+function groupPhotosByDay(photos: PublicBuildView["photos"]) {
+  const groups: { day: string; photos: PublicBuildView["photos"] }[] = [];
+  for (const p of photos) {
+    const day = p.createdAt.slice(0, 10);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) {
+      last.photos.push(p);
+    } else {
+      groups.push({ day, photos: [p] });
+    }
+  }
+  return groups;
+}
+
 function PhotosCard({ view }: { view: PublicBuildView }) {
+  const [galleryOpen, setGalleryOpen] = useState(false);
   if (view.photos.length === 0) return null;
-  // Backend zwraca już wyłącznie zdjęcia z najnowszego dnia, w którym
-  // cokolwiek wgrano (patrz get_public_build) — tu tylko dodatkowo tniemy
-  // do 6 w samej siatce, żeby karta nie urosła w nieskończoność w dni z
-  // bardzo dużą liczbą zdjęć.
-  const shown = view.photos.slice(0, 6);
+
+  const byDay = groupPhotosByDay(view.photos);
+  const latestDayPhotos = byDay[0]?.photos ?? [];
+  const shown = latestDayPhotos.slice(0, 6);
   const latestDay = formatDateShortPL(view.photos[0].createdAt);
+
   return (
     <Card>
       <CardHeader
         title="Zdjęcia z budowy"
-        right={`${latestDay} · ${shown.length} z ${view.photos.length}`}
+        right={`${latestDay} · ${shown.length} z ${latestDayPhotos.length}`}
       />
       <View style={{ padding: 20 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
           {shown.map((p) => (
-            <View
-              key={p.id}
-              style={{
-                width: "31%",
-                aspectRatio: 4 / 3,
-                borderRadius: 14,
-                overflow: "hidden",
-                borderWidth: 1,
-                borderColor: PC.line,
-                backgroundColor: PC.surface2,
-              }}
-            >
-              <Image
-                source={{ uri: driveThumbUrl(p.id) }}
-                style={{ width: "100%", height: "100%" }}
-                resizeMode="cover"
-              />
-              <Text
-                style={{
-                  position: "absolute",
-                  left: 8,
-                  bottom: 7,
-                  fontSize: 10,
-                  fontWeight: "700",
-                  color: "#fff",
-                  backgroundColor: "rgba(0,0,0,0.6)",
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 5,
-                }}
-              >
-                {formatDateShortPL(p.createdAt)}
-              </Text>
-            </View>
+            <PhotoTile key={p.id} photo={p} />
           ))}
         </View>
-        {view.photosUrl && (
+        {view.photos.length > shown.length && (
           <Pressable
-            onPress={() => Linking.openURL(view.photosUrl!)}
+            onPress={() => setGalleryOpen(true)}
             style={{
               marginTop: 14,
               borderWidth: 1,
@@ -517,11 +548,78 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
             }}
           >
             <Text style={{ color: PC.accent2, fontSize: 13, fontWeight: "600" }}>
-              Zobacz wszystkie zdjęcia
+              Zobacz wszystkie zdjęcia ({view.photos.length})
             </Text>
           </Pressable>
         )}
       </View>
+
+      <Modal
+        visible={galleryOpen}
+        animationType="slide"
+        onRequestClose={() => setGalleryOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: PC.bg }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 20,
+              paddingTop: 54,
+              paddingBottom: 14,
+              borderBottomWidth: 1,
+              borderBottomColor: PC.line,
+            }}
+          >
+            <Text style={{ color: PC.txt, fontSize: 16, fontWeight: "800" }}>
+              Zdjęcia z budowy ({view.photos.length})
+            </Text>
+            {/* X zamyka galerię i wraca do okna portalu — bez nawigacji na
+                zewnątrz (dawniej: link do folderu na Google Drive). */}
+            <Pressable
+              onPress={() => setGalleryOpen(false)}
+              hitSlop={12}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: PC.surface2,
+                borderWidth: 1,
+                borderColor: PC.line,
+              }}
+            >
+              <Text style={{ color: PC.txt, fontSize: 16, fontWeight: "700" }}>✕</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+            {byDay.map((group) => (
+              <View key={group.day} style={{ marginBottom: 22 }}>
+                <Text
+                  style={{
+                    color: PC.txt3,
+                    fontSize: 11,
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
+                    fontWeight: "700",
+                    marginBottom: 10,
+                  }}
+                >
+                  {formatDatePL(group.day)} · {group.photos.length}{" "}
+                  {group.photos.length === 1 ? "zdjęcie" : "zdjęć"}
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  {group.photos.map((p) => (
+                    <PhotoTile key={p.id} photo={p} />
+                  ))}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
     </Card>
   );
 }

@@ -11,6 +11,7 @@ import {
   Field,
   formatPLN,
   IconBadge,
+  pluralPL,
   QuantityStepper,
   ReportCard,
   ScreenHeader,
@@ -99,25 +100,32 @@ export function BuildsScreen() {
 
   const [showBuild, setShowBuild] = useState(false);
   const [newBuild, setNewBuild] = useState<NewBuildInput>(createEmptyNewBuild);
-  // Wizard zakładania budowy — 5 kroków wzorowanych na raporcie dziennym
+  // Wizard zakładania budowy — 6 kroków wzorowanych na raporcie dziennym
   // brygadzisty (WizardStepper, ten sam wygląd co ReportStepper). Kroki
-  // 2-5 dotyczą już KONKRETNEJ, utworzonej budowy (wizardBuildId), więc
-  // istnieją dopiero po zapisaniu kroku 1 — każdy kolejny krok da się
-  // pominąć ("Pomiń"), bo to wszystko rzeczy, które i tak idą też
-  // zrobić później z poziomu zwykłej karty budowy.
-  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // 2-6 dotyczą już KONKRETNEJ, utworzonej budowy (wizardBuildId), więc
+  // istnieją dopiero po zapisaniu kroku 1. Nawigacja Wstecz/Dalej jak w
+  // raporcie — akcje opcjonalne (zamówienie, katalog na zdjęcia) są
+  // checkboxem obok "Dalej", nie osobnym przyciskiem "Pomiń", bo to
+  // jedno pytanie ("czy chcesz X przy okazji"), nie osobna decyzja o
+  // porzuceniu kroku. "Anuluj" zamyka cały wizard w dowolnym momencie —
+  // budowa, jeśli już powstała (krok 1 zaliczony), zostaje zapisana,
+  // resztę da się dokończyć później ze zwykłej karty budowy.
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const [wizardBuildId, setWizardBuildId] = useState<string | null>(null);
   const [wizardTechId, setWizardTechId] = useState<number | null>(null);
   const [wizardAreaInput, setWizardAreaInput] = useState("");
   const [wizardAssigning, setWizardAssigning] = useState(false);
+  const [wizardGenerateOrder, setWizardGenerateOrder] = useState(true);
   const [wizardOrderGenerating, setWizardOrderGenerating] = useState(false);
   const [wizardOrderGenerated, setWizardOrderGenerated] = useState(false);
+  const [wizardCreateFolder, setWizardCreateFolder] = useState(true);
   const WIZARD_STEPS = [
     { n: 1, label: "Budowa" },
     { n: 2, label: "Technologia" },
-    { n: 3, label: "Zamówienie" },
-    { n: 4, label: "Zdjęcia" },
-    { n: 5, label: "Portal" },
+    { n: 3, label: "Materiały" },
+    { n: 4, label: "Zamówienie" },
+    { n: 5, label: "Zdjęcia" },
+    { n: 6, label: "Portal" },
   ];
   const closeWizard = () => {
     setShowBuild(false);
@@ -127,6 +135,7 @@ export function BuildsScreen() {
     setWizardTechId(null);
     setWizardAreaInput("");
     setWizardOrderGenerated(false);
+    setAssignBuildId(null);
   };
 
   const isArchiveView = buildsView === "archive";
@@ -315,6 +324,12 @@ export function BuildsScreen() {
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
         <WizardStepper steps={WIZARD_STEPS} current={wizardStep} />
+        <Pressable
+          onPress={closeWizard}
+          style={{ alignSelf: "flex-end", marginTop: -10, marginBottom: 10 }}
+        >
+          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>Anuluj</Text>
+        </Pressable>
         {wizardStep === 1 && (
         <>
         <Field
@@ -541,14 +556,20 @@ export function BuildsScreen() {
             )}
             <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
               <View style={{ flex: 1 }}>
-                <Button label="Pomiń" secondary onPress={() => setWizardStep(3)} />
+                <Button label="Wstecz" secondary onPress={() => setWizardStep(1)} />
               </View>
               <View style={{ flex: 1 }}>
                 <Button
-                  label={wizardAssigning ? "Przypisywanie…" : "Przypisz i dalej"}
-                  disabled={!wizardTechId || !wizardAreaInput || wizardAssigning}
+                  label={wizardAssigning ? "Przypisywanie…" : "Dalej"}
+                  disabled={wizardAssigning}
                   onPress={async () => {
-                    if (!wizardTechId || !wizardAreaInput) return;
+                    // Technologia opcjonalna: bez wyboru "Dalej" po prostu
+                    // przechodzi do kolejnego kroku — dopiero wybór
+                    // konkretnej pozycji + m² uruchamia realne przypisanie.
+                    if (!wizardTechId || !wizardAreaInput) {
+                      setWizardStep(3);
+                      return;
+                    }
                     setWizardAssigning(true);
                     try {
                       await assignBuildTechnology(
@@ -569,19 +590,226 @@ export function BuildsScreen() {
 
         {wizardStep === 3 && wizardBuildId && (
           <>
+            <Text className="text-xs text-muted uppercase mb-2">
+              Materiały dodatkowe
+            </Text>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>
+              Materiały z magazynu spoza receptury technologii (np. sprzęt jednorazowy,
+              zamienniki) — opcjonalne, da się dopisać też później z poziomu karty budowy.
+            </Text>
+            {(() => {
+              const buildAssignments = assignments.filter(
+                (a) => a.buildId === wizardBuildId,
+              );
+              const selectedBatch = warehouseBatches.find(
+                (wb) => String(wb.id) === selectedBatchId,
+              );
+              const selectedMaterial = selectedBatch
+                ? materials.find((m) => m.id === String(selectedBatch.materialId))
+                : undefined;
+              return (
+                <View
+                  style={{
+                    backgroundColor: COLORS.background,
+                    borderRadius: 12,
+                    padding: 12,
+                  }}
+                >
+                  <Text className="text-xs text-muted uppercase">Materiał / partia</Text>
+                  <Pressable
+                    onPress={() => {
+                      setSelectedBuildId(wizardBuildId);
+                      setPicker(picker === "material" ? null : "material");
+                    }}
+                    style={{
+                      backgroundColor: COLORS.surface,
+                      borderRadius: 10,
+                      padding: 13,
+                      marginTop: 8,
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <View>
+                      <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+                        {selectedMaterial?.name || "Wybierz partię"}
+                      </Text>
+                      {selectedBatch && (
+                        <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
+                          {selectedBatch.receivedAt} ·{" "}
+                          {formatPLN(Number(selectedBatch.unitPrice))} · dostępne{" "}
+                          {selectedBatch.quantity} {selectedMaterial?.unit}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={{ color: COLORS.primary }}>
+                      {picker === "material" ? "▲" : "▼"}
+                    </Text>
+                  </Pressable>
+                  {picker === "material" && (
+                    <View
+                      style={{
+                        backgroundColor: COLORS.surface,
+                        borderRadius: 10,
+                        padding: 10,
+                        marginTop: 6,
+                      }}
+                    >
+                      <Field
+                        placeholder="Szukaj po nazwie lub indeksie"
+                        value={pickerQuery}
+                        onChangeText={setPickerQuery}
+                      />
+                      <ScrollView style={{ maxHeight: 220 }}>
+                        {warehouseBatches
+                          .map((wb) => ({
+                            batch: wb,
+                            material: materials.find((m) => m.id === String(wb.materialId)),
+                          }))
+                          .filter(({ material }) => material)
+                          .filter(({ material }) =>
+                            `${material!.name} ${material!.index}`
+                              .toLowerCase()
+                              .includes(pickerQuery.toLowerCase()),
+                          )
+                          .sort((x, y) => x.material!.name.localeCompare(y.material!.name))
+                          .map(({ batch, material }) => (
+                            <Pressable
+                              key={batch.id}
+                              onPress={() => {
+                                setSelectedBatchId(String(batch.id));
+                                setPicker(null);
+                              }}
+                              style={{
+                                paddingVertical: 12,
+                                borderBottomWidth: 1,
+                                borderBottomColor: COLORS.border,
+                              }}
+                            >
+                              <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+                                {material!.name}
+                              </Text>
+                              <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }}>
+                                {material!.index} · {batch.receivedAt} ·{" "}
+                                {formatPLN(Number(batch.unitPrice))} · dostępne{" "}
+                                {batch.quantity} {material!.unit}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        {warehouseBatches.length === 0 && (
+                          <Text style={{ color: COLORS.muted, fontSize: 12, padding: 10 }}>
+                            Brak partii w magazynie.
+                          </Text>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+                  <Text className="text-xs text-muted uppercase mt-4">Ilość z tej partii</Text>
+                  <QuantityStepper
+                    style={{ marginTop: 8 }}
+                    value={plannedAmount}
+                    onChangeText={setPlannedAmount}
+                  />
+                  <View style={{ marginTop: 12 }}>
+                    <Button label="+ Dodaj do listy" onPress={addToDraft} />
+                  </View>
+                  {draftAssignments.length > 0 && (
+                    <View
+                      style={{
+                        backgroundColor: COLORS.surface,
+                        borderRadius: 12,
+                        padding: 12,
+                        marginTop: 12,
+                      }}
+                    >
+                      <Text className="text-xs text-muted uppercase">
+                        Materiały oczekujące na zatwierdzenie
+                      </Text>
+                      {draftAssignments.map((draft) => {
+                        const material = materials.find((m) => m.id === draft.materialId);
+                        const batch = warehouseBatches.find(
+                          (wb) => String(wb.id) === draft.batchId,
+                        );
+                        return (
+                          <View
+                            key={draft.batchId}
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              paddingVertical: 8,
+                              borderBottomWidth: 1,
+                              borderBottomColor: COLORS.border,
+                            }}
+                          >
+                            <View>
+                              <Text className="text-xs text-foreground">{material?.name}</Text>
+                              {batch && (
+                                <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                                  {batch.receivedAt} · {formatPLN(Number(batch.unitPrice))}
+                                </Text>
+                              )}
+                            </View>
+                            <Text className="text-xs text-primary font-bold">
+                              {draft.quantity} {material?.unit}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                  {buildAssignments.length > 0 && (
+                    <Text style={{ color: COLORS.success, fontSize: 12, marginTop: 10 }}>
+                      Już przypisano: {buildAssignments.length}{" "}
+                      {pluralPL(buildAssignments.length, "materiał", "materiały", "materiałów")}.
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+              <View style={{ flex: 1 }}>
+                <Button label="Wstecz" secondary onPress={() => setWizardStep(2)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Dalej"
+                  onPress={async () => {
+                    if (draftAssignments.length > 0) {
+                      await commitAssignments();
+                    }
+                    setWizardStep(4);
+                  }}
+                />
+              </View>
+            </View>
+          </>
+        )}
+
+        {wizardStep === 4 && wizardBuildId && (
+          <>
             {(() => {
               const hasPlan = buildMaterialPlans.some(
                 (p) => p.buildId === Number(wizardBuildId),
               );
               return hasPlan ? (
-                <Text style={{ color: COLORS.muted, fontSize: 13 }}>
-                  Budowa ma plan materiałowy — możesz od razu wygenerować z niego zamówienie
-                  (ilość do zamówienia dobierze się sama).
-                </Text>
+                <Pressable
+                  onPress={() => setWizardGenerateOrder(!wizardGenerateOrder)}
+                  style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}
+                >
+                  <MaterialIcons
+                    name={wizardGenerateOrder ? "check-box" : "check-box-outline-blank"}
+                    size={20}
+                    color={wizardGenerateOrder ? COLORS.primary : COLORS.muted}
+                  />
+                  <Text style={{ color: COLORS.foreground, fontSize: 13, flex: 1 }}>
+                    Wygeneruj zamówienie z planu materiałowego technologii (ilość dobierze się
+                    sama, do przejrzenia i zamówienia w zakładce Zamówienia).
+                  </Text>
+                </Pressable>
               ) : (
                 <Text style={{ color: COLORS.muted, fontSize: 13 }}>
                   Brak planu materiałowego (nie przypisano jeszcze technologii) — nie ma z czego
-                  wygenerować zamówienia. Pomiń ten krok, zamówienie da się dodać później.
+                  wygenerować zamówienia. Da się to zrobić później z poziomu karty budowy.
                 </Text>
               );
             })()}
@@ -592,36 +820,50 @@ export function BuildsScreen() {
             )}
             <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
               <View style={{ flex: 1 }}>
-                <Button label="Pomiń" secondary onPress={() => setWizardStep(4)} />
+                <Button label="Wstecz" secondary onPress={() => setWizardStep(3)} />
               </View>
-              {buildMaterialPlans.some((p) => p.buildId === Number(wizardBuildId)) && (
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label={wizardOrderGenerating ? "Generuję…" : "Wygeneruj i dalej"}
-                    disabled={wizardOrderGenerating}
-                    onPress={async () => {
-                      setWizardOrderGenerating(true);
-                      try {
-                        await generateOrderFromPlan(wizardBuildId);
-                        setWizardOrderGenerated(true);
-                        setWizardStep(4);
-                      } finally {
-                        setWizardOrderGenerating(false);
-                      }
-                    }}
-                  />
-                </View>
-              )}
+              <View style={{ flex: 1 }}>
+                <Button
+                  label={wizardOrderGenerating ? "Generuję…" : "Dalej"}
+                  disabled={wizardOrderGenerating}
+                  onPress={async () => {
+                    const hasPlan = buildMaterialPlans.some(
+                      (p) => p.buildId === Number(wizardBuildId),
+                    );
+                    if (!hasPlan || !wizardGenerateOrder) {
+                      setWizardStep(5);
+                      return;
+                    }
+                    setWizardOrderGenerating(true);
+                    try {
+                      await generateOrderFromPlan(wizardBuildId);
+                      setWizardOrderGenerated(true);
+                      setWizardStep(5);
+                    } finally {
+                      setWizardOrderGenerating(false);
+                    }
+                  }}
+                />
+              </View>
             </View>
           </>
         )}
 
-        {wizardStep === 4 && wizardBuildId && (
+        {wizardStep === 5 && wizardBuildId && (
           <>
-            <Text style={{ color: COLORS.muted, fontSize: 13 }}>
-              Katalog na Google Drive, do którego brygadzista będzie wrzucał zdjęcia z postępu
-              prac.
-            </Text>
+            <Pressable
+              onPress={() => setWizardCreateFolder(!wizardCreateFolder)}
+              style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}
+            >
+              <MaterialIcons
+                name={wizardCreateFolder ? "check-box" : "check-box-outline-blank"}
+                size={20}
+                color={wizardCreateFolder ? COLORS.primary : COLORS.muted}
+              />
+              <Text style={{ color: COLORS.foreground, fontSize: 13, flex: 1 }}>
+                Stwórz katalog na Google Drive na zdjęcia z postępu prac.
+              </Text>
+            </Pressable>
             {driveFolderError && (
               <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
                 {driveFolderError}
@@ -629,22 +871,22 @@ export function BuildsScreen() {
             )}
             <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
               <View style={{ flex: 1 }}>
-                <Button label="Pomiń" secondary onPress={() => setWizardStep(5)} />
+                <Button label="Wstecz" secondary onPress={() => setWizardStep(4)} />
               </View>
               <View style={{ flex: 1 }}>
                 <Button
-                  label={
-                    creatingDriveFolderId === wizardBuildId
-                      ? "Tworzenie…"
-                      : "Stwórz katalog i dalej"
-                  }
+                  label={creatingDriveFolderId === wizardBuildId ? "Tworzenie…" : "Dalej"}
                   disabled={creatingDriveFolderId === wizardBuildId}
                   onPress={async () => {
+                    if (!wizardCreateFolder) {
+                      setWizardStep(6);
+                      return;
+                    }
                     setDriveFolderError(null);
                     setCreatingDriveFolderId(wizardBuildId);
                     try {
                       await createBuildDriveFolder(Number(wizardBuildId));
-                      setWizardStep(5);
+                      setWizardStep(6);
                     } catch (err) {
                       setDriveFolderError(
                         err instanceof Error ? err.message : "Nie udało się stworzyć katalogu.",
@@ -659,15 +901,20 @@ export function BuildsScreen() {
           </>
         )}
 
-        {wizardStep === 5 && wizardBuildId && (
+        {wizardStep === 6 && wizardBuildId && (
           <>
             <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 10 }}>
               Domyślnie portal jest wyłączony — włącz go tylko jeśli chcesz od razu przekazać
               klientowi link/QR.
             </Text>
             <BuildPortalSection buildId={Number(wizardBuildId)} />
-            <View style={{ marginTop: 16 }}>
-              <Button label="Zakończ" onPress={closeWizard} />
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 16 }}>
+              <View style={{ flex: 1 }}>
+                <Button label="Wstecz" secondary onPress={() => setWizardStep(5)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button label="Zakończ" onPress={closeWizard} />
+              </View>
             </View>
           </>
         )}

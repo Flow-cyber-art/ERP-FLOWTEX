@@ -570,7 +570,9 @@ export function ReportScreen() {
                         <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
                           {stageName}
                         </Text>
-                        <Text style={{ color: COLORS.primary }}>{isCollapsed ? "▼" : "▲"}</Text>
+                        <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                          {isCollapsed ? "▼" : "▲"}
+                        </Text>
                       </Pressable>
 
                       {!isCollapsed && (
@@ -946,7 +948,7 @@ export function ReportScreen() {
                     (employee) => employee.id === selectedEmployeeId,
                   )?.name || "Wybierz pracownika"}
                 </Text>
-                <Text style={{ color: COLORS.primary, marginLeft: 8 }}>
+                <Text style={{ color: COLORS.primary, marginLeft: 8, fontSize: 16, fontWeight: "700" }}>
                   {employeePickerOpen ? "▲" : "▼"}
                 </Text>
               </Pressable>

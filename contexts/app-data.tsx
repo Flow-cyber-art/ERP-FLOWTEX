@@ -270,7 +270,7 @@ function useAppDataState(
     initialRole === "Pracownik"
       ? "worker"
       : initialRole === "Admin"
-        ? "warehouse"
+        ? "builds"
         : "savedReports",
   );
   // Które zakładki zostały już choć raz odwiedzone w tej sesji — steruje

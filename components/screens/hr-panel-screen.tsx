@@ -10,7 +10,8 @@ import { AdminLeaveSection, AdminTeamSection } from "@/components/screens/admin-
  * email/hasło edytowane bezpośrednio przy karcie pracownika w Zespole,
  * patrz AdminTeamSection), oddzielone od konfiguracji firmy (Ustawienia),
  * która zostaje w zakładce "Admin" (admin-screen.tsx). Trzy sekcje —
- * Zespół / Rozliczenie / Urlopy —
+ * Rozliczenie / Urlopy / Zespół, w tej kolejności (Rozliczenie jest tym,
+ * co HR sprawdza najczęściej, więc jest pierwsze i domyślnie otwarte) —
  * dawne osobne "Rozliczenie godzin" i "Obecności" pokazywały w większości
  * te same dane w dwóch miejscach, więc scalone w jedną "Rozliczenie"
  * (patrz payroll-screen.tsx).
@@ -18,7 +19,7 @@ import { AdminLeaveSection, AdminTeamSection } from "@/components/screens/admin-
 type HrTab = "team" | "payroll" | "leaves";
 
 export function HrPanelScreen() {
-  const [section, setSection] = useState<HrTab>("team");
+  const [section, setSection] = useState<HrTab>("payroll");
 
   return (
     <>
@@ -33,9 +34,9 @@ export function HrPanelScreen() {
         >
           {(
             [
-              ["team", "Zespół"],
               ["payroll", "Rozliczenie"],
               ["leaves", "Urlopy"],
+              ["team", "Zespół"],
             ] as const
           ).map(([value, label]) => (
             <Pressable

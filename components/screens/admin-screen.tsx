@@ -84,89 +84,65 @@ function AdminSettingsSection() {
 
   return (
     <>
-      {/* "Widok Brygadzisty" — Admin bywa na budowie i chce od razu
-          wypełnić raport dzienny bez zakładania osobnego konta
-          brygadzisty. Przełącza tylko lokalny, nietrwały `devRole`
-          (widok UI) — backend i tak autoryzuje Admina do wszystkiego, co
-          może zrobić Brygadzista (submit_daily_report itd.), więc to
-          czysto kosmetyczne uproszczenie ekranu, nie zmiana uprawnień.
-          Powrót: zakładka "Admin" w widoku Brygadzisty pokazuje
-          Ustawienia z przyciskiem "Wróć do widoku Admina" (patrz
-          settings-screen.tsx + realRole w app-data.tsx). */}
-      <View
-        className="bg-surface border border-border rounded-2xl p-4 mb-4"
-        style={{ alignItems: "center" }}
+      {/* Dniówka, stawka za km i PIN zamknięcia budowy — jedna grupa
+          parametrów rozliczeniowych firmy, jeden pod drugim (dawniej
+          dniówka+km obok siebie w rzędzie — na mobile "Widok Brygadzisty"
+          nad nimi wizualnie rozbijał tę grupę na dwie części). */}
+      <Pressable
+        onPress={() => {
+          setWorkdayOpen(!workdayOpen);
+          setKmRateOpen(false);
+        }}
+        className="bg-surface border border-border rounded-2xl overflow-hidden mb-3"
+        style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
       >
-        <Button
-          label="Zmień na widok Brygadzisty"
-          secondary
-          onPress={() => {
-            setDevRole("Brygadzista");
-            setTab("savedReports");
-          }}
-        />
-      </View>
+        <IconBadge name="schedule" size={18} />
+        <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
+          <Text style={{ color: COLORS.muted, fontSize: 11 }}>DNIÓWKA</Text>
+          <Text
+            style={{
+              color: COLORS.foreground,
+              fontWeight: "700",
+              fontSize: 15,
+              marginTop: 2,
+            }}
+            numberOfLines={1}
+          >
+            {workdayHours} h / dzień
+          </Text>
+        </View>
+        <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+          {workdayOpen ? "Zwiń" : "Zmień"}
+        </Text>
+      </Pressable>
 
-      {/* Dniówka i stawka za km obok siebie — parametry rozliczeniowe
-          firmy, przeniesione tu z zakładki HR (dotyczą konfiguracji firmy,
-          nie samych pracowników — Zespół w HR tylko z nich korzysta przy
-          liczeniu kolumny "Dniówka"). */}
-      <View style={{ flexDirection: "row", gap: 10 }} className="mb-3">
-        <Pressable
-          onPress={() => {
-            setWorkdayOpen(!workdayOpen);
-            setKmRateOpen(false);
-          }}
-          className="bg-surface border border-border rounded-2xl overflow-hidden"
-          style={{ flex: 1, flexDirection: "row", alignItems: "center", padding: 14 }}
-        >
-          <IconBadge name="schedule" size={18} />
-          <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
-            <Text style={{ color: COLORS.muted, fontSize: 10 }}>DNIÓWKA</Text>
-            <Text
-              style={{
-                color: COLORS.foreground,
-                fontWeight: "700",
-                fontSize: 14,
-                marginTop: 2,
-              }}
-              numberOfLines={1}
-            >
-              {workdayHours} h / dzień
-            </Text>
-          </View>
-          <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
-            {workdayOpen ? "Zwiń" : "Zmień"}
+      <Pressable
+        onPress={() => {
+          setKmRateOpen(!kmRateOpen);
+          setWorkdayOpen(false);
+        }}
+        className="bg-surface border border-border rounded-2xl overflow-hidden mb-3"
+        style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
+      >
+        <IconBadge name="directions-car" size={18} />
+        <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
+          <Text style={{ color: COLORS.muted, fontSize: 11 }}>STAWKA ZA KM</Text>
+          <Text
+            style={{
+              color: COLORS.foreground,
+              fontWeight: "700",
+              fontSize: 15,
+              marginTop: 2,
+            }}
+            numberOfLines={1}
+          >
+            {kmRate.toFixed(2)} zł/km
           </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            setKmRateOpen(!kmRateOpen);
-            setWorkdayOpen(false);
-          }}
-          className="bg-surface border border-border rounded-2xl overflow-hidden"
-          style={{ flex: 1, flexDirection: "row", alignItems: "center", padding: 14 }}
-        >
-          <IconBadge name="directions-car" size={18} />
-          <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
-            <Text style={{ color: COLORS.muted, fontSize: 10 }}>STAWKA ZA KM</Text>
-            <Text
-              style={{
-                color: COLORS.foreground,
-                fontWeight: "700",
-                fontSize: 14,
-                marginTop: 2,
-              }}
-              numberOfLines={1}
-            >
-              {kmRate.toFixed(2)} zł/km
-            </Text>
-          </View>
-          <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
-            {kmRateOpen ? "Zwiń" : "Zmień"}
-          </Text>
-        </Pressable>
-      </View>
+        </View>
+        <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+          {kmRateOpen ? "Zwiń" : "Zmień"}
+        </Text>
+      </Pressable>
 
       {workdayOpen && (
         <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
@@ -309,6 +285,31 @@ function AdminSettingsSection() {
             </View>
           </View>
         )}
+      </View>
+
+      {/* "Widok Brygadzisty" — Admin bywa na budowie i chce od razu
+          wypełnić raport dzienny bez zakładania osobnego konta
+          brygadzisty. Przełącza tylko lokalny, nietrwały `devRole`
+          (widok UI) — backend i tak autoryzuje Admina do wszystkiego, co
+          może zrobić Brygadzista (submit_daily_report itd.), więc to
+          czysto kosmetyczne uproszczenie ekranu, nie zmiana uprawnień.
+          Powrót: zakładka "Admin" w widoku Brygadzisty pokazuje
+          Ustawienia z przyciskiem "Wróć do widoku Admina" (patrz
+          settings-screen.tsx + realRole w app-data.tsx). Celowo POD
+          parametrami rozliczeniowymi (dniówka/km/PIN) wyżej — to osobna,
+          drugorzędna akcja, nie konfiguracja firmy. */}
+      <View
+        className="bg-surface border border-border rounded-2xl p-4 mb-4"
+        style={{ alignItems: "center" }}
+      >
+        <Button
+          label="Zmień na widok Brygadzisty"
+          secondary
+          onPress={() => {
+            setDevRole("Brygadzista");
+            setTab("savedReports");
+          }}
+        />
       </View>
 
       <AccountSettingsSection />
@@ -1322,8 +1323,8 @@ function AdminTeamsSubsection() {
                       {members.length} {pluralPL(members.length, "osoba", "osoby", "osób")}
                     </Text>
                   </View>
-                  <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
-                    {expanded ? "⌄" : "›"}
+                  <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                    {expanded ? "▲" : "▼"}
                   </Text>
                 </Pressable>
                 {expanded && (

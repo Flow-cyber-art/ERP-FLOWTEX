@@ -110,6 +110,20 @@ export function PayrollSection() {
     return map;
   }, [savedReports, rangeStart, rangeEnd]);
 
+  // "Brak wpisów" liczony od pierwszego raportu w CAŁYM systemie, nie od
+  // początku okresu — inaczej firma, która zaczęła korzystać z apki w
+  // trakcie roku, dostawałaby fałszywie ogromne "braki" za miesiące
+  // sprzed startu (np. widok "Rok" liczyłby dni robocze od 1 stycznia,
+  // mimo że system w ogóle jeszcze wtedy nie istniał). Brak jakiegokolwiek
+  // raportu w systemie -> 0 (nie ma z czym porównywać).
+  const firstReportDate = useMemo(
+    () =>
+      savedReports.length
+        ? savedReports.reduce((min, r) => (r.date < min ? r.date : min), savedReports[0].date)
+        : null,
+    [savedReports],
+  );
+
   const rows = useMemo(
     () =>
       employees.map((employee) => {
@@ -151,7 +165,11 @@ export function PayrollSection() {
             return sum + countBusinessDaysInRange(from, to);
           }, 0);
 
-        const expectedDays = countBusinessDaysInRange(rangeStart, rangeEnd);
+        const expectedRangeStart =
+          firstReportDate && firstReportDate > rangeStart ? firstReportDate : rangeStart;
+        const expectedDays = firstReportDate
+          ? countBusinessDaysInRange(expectedRangeStart, rangeEnd)
+          : 0;
         const missingDays = Math.max(0, expectedDays - dates.length - leaveDays);
 
         // Dniówka: godziny z Ustawień × stawka godzinowa — płaci się w
@@ -186,7 +204,16 @@ export function PayrollSection() {
           openReportIds,
         };
       }),
-    [employees, timeEntries, leaveRequests, reportsByDate, rangeStart, rangeEnd, workdayHours],
+    [
+      employees,
+      timeEntries,
+      leaveRequests,
+      reportsByDate,
+      rangeStart,
+      rangeEnd,
+      workdayHours,
+      firstReportDate,
+    ],
   );
 
   const totals = rows.reduce(
@@ -435,7 +462,6 @@ export function PayrollSection() {
             <Text style={PAY_TABLE_HEADER}>PRACOWNIK</Text>
             <Text style={[PAY_TABLE_HEADER, PAY_COL_NUMERIC]}>DNIÓWKI</Text>
             <Text style={[PAY_TABLE_HEADER, PAY_COL_NUMERIC]}>URLOP</Text>
-            <Text style={[PAY_TABLE_HEADER, PAY_COL_STATUS]}>STATUS</Text>
             <Text style={[PAY_TABLE_HEADER, PAY_COL_NUMERIC]}>DO WYPŁATY</Text>
             <View style={{ width: 20 }} />
           </View>
@@ -464,28 +490,18 @@ export function PayrollSection() {
                   </Text>
                   <Text style={[PAY_CELL, PAY_COL_NUMERIC]}>{row.workedDays}</Text>
                   <Text style={[PAY_CELL, PAY_COL_NUMERIC]}>{row.leaveDays}</Text>
-                  <View style={PAY_COL_STATUS}>
-                    {row.workedDays === 0 ? (
-                      <Text style={{ color: COLORS.muted, fontSize: 12, textAlign: "right" }}>
-                        brak
-                      </Text>
-                    ) : (
-                      <Text
-                        style={{
-                          color: row.approvedDays === row.workedDays ? COLORS.primary : COLORS.warning,
-                          fontSize: 12,
-                          fontWeight: "700",
-                          textAlign: "right",
-                        }}
-                      >
-                        🔒 {row.approvedDays}/{row.workedDays}
-                      </Text>
-                    )}
-                  </View>
                   <Text style={[PAY_CELL, PAY_COL_NUMERIC, { color: COLORS.primary }]}>
                     {row.payout > 0 ? formatPLN(row.payout) : "—"}
                   </Text>
-                  <Text style={{ width: 20, textAlign: "right", color: COLORS.primary, fontSize: 14 }}>
+                  <Text
+                    style={{
+                      width: 20,
+                      textAlign: "right",
+                      color: COLORS.primary,
+                      fontSize: 16,
+                      fontWeight: "700",
+                    }}
+                  >
                     {expanded ? "▲" : "▼"}
                   </Text>
                 </Pressable>
@@ -548,7 +564,6 @@ export function PayrollSection() {
             <Text style={[PAY_CELL, PAY_COL_NUMERIC, { fontWeight: "800" }]}>
               {totals.leaveDays}
             </Text>
-            <View style={PAY_COL_STATUS} />
             <Text
               style={[PAY_CELL, PAY_COL_NUMERIC, { fontWeight: "800", color: COLORS.primary }]}
             >
@@ -563,7 +578,6 @@ export function PayrollSection() {
 }
 
 const PAY_COL_NUMERIC = { flex: 1, textAlign: "right" as const };
-const PAY_COL_STATUS = { flex: 1.3, alignItems: "flex-end" as const };
 const PAY_TABLE_HEADER = { color: COLORS.muted, fontSize: 10, fontWeight: "700" as const, flex: 2 };
 const PAY_CELL = { color: COLORS.foreground, fontSize: 12, fontWeight: "700" as const };
 const PAY_COL_NAME = { flex: 2, color: COLORS.foreground, fontSize: 13, fontWeight: "700" as const };

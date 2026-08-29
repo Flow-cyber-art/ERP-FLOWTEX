@@ -677,7 +677,7 @@ export function BuildsScreen() {
                         </Text>
                       )}
                     </View>
-                    <Text style={{ color: COLORS.primary }}>
+                    <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
                       {picker === "material" ? "▲" : "▼"}
                     </Text>
                   </Pressable>
@@ -1008,7 +1008,7 @@ export function BuildsScreen() {
                     więc pokazywanie go na każdym wierszu nic nie mówi i
                     dublował się wizualnie ze strzałką rozwijania. */}
                 {isClosed && <StatusBadge status="ok" label="ZAMKNIĘTA" />}
-                <Text style={{ color: COLORS.primary, fontSize: 16 }}>
+                <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
                   {isOpen ? "▲" : "▼"}
                 </Text>
               </View>
@@ -1273,8 +1273,8 @@ export function BuildsScreen() {
                       </Text>
                     )}
                   </View>
-                  <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
-                    {(snapshot ? techMaterialsExpandedBuildId === b.id : pickerOpen) ? "⌄" : "›"}
+                  <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                    {(snapshot ? techMaterialsExpandedBuildId === b.id : pickerOpen) ? "▲" : "▼"}
                   </Text>
                 </Pressable>
 
@@ -1568,7 +1568,7 @@ export function BuildsScreen() {
                             label={STATUS_LABEL[order.status]}
                           />
                           <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                            {isOrderOpen ? "⌄" : "›"}
+                            {isOrderOpen ? "▲" : "▼"}
                           </Text>
                         </View>
                       </Pressable>
@@ -1857,8 +1857,8 @@ export function BuildsScreen() {
                         {buildAssignments.length > 0 ? ` (${buildAssignments.length})` : ""}
                       </Text>
                       {buildAssignments.length > 0 && (
-                        <Text style={{ color: COLORS.primary, fontSize: 14, fontWeight: "700" }}>
-                          {expandedExtraMaterialsBuildId === b.id ? "⌄" : "›"}
+                        <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                          {expandedExtraMaterialsBuildId === b.id ? "▲" : "▼"}
                         </Text>
                       )}
                     </Pressable>
@@ -1932,7 +1932,7 @@ export function BuildsScreen() {
                             </Text>
                           )}
                         </View>
-                        <Text style={{ color: COLORS.primary }}>
+                        <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
                           {picker === "material" ? "▲" : "▼"}
                         </Text>
                       </Pressable>
@@ -2147,8 +2147,8 @@ export function BuildsScreen() {
                             <Text className="text-xs text-primary font-bold">
                               {a.planned} {material?.unit}
                             </Text>
-                            <Text style={{ color: COLORS.primary, fontSize: 15, fontWeight: "700" }}>
-                              {isOpen ? "⌄" : "›"}
+                            <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                              {isOpen ? "▲" : "▼"}
                             </Text>
                           </View>
                         </Pressable>
@@ -2228,8 +2228,8 @@ export function BuildsScreen() {
               <Text style={{ color: COLORS.muted, fontSize: 11 }}>
                 PORTAL KLIENTA
               </Text>
-              <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
-                {expandedPortalBuildId === b.id ? "⌄" : "›"}
+              <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                {expandedPortalBuildId === b.id ? "▲" : "▼"}
               </Text>
             </Pressable>
             {expandedPortalBuildId === b.id && (
@@ -2535,8 +2535,8 @@ export function BuildsScreen() {
               <Text style={{ color: COLORS.muted, fontSize: 11 }}>
                 ZDJĘCIA{photoCounts[b.id] ? ` (${photoCounts[b.id]})` : ""}
               </Text>
-              <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
-                {expandedPhotosBuildId === b.id ? "⌄" : "›"}
+              <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
+                {expandedPhotosBuildId === b.id ? "▲" : "▼"}
               </Text>
             </Pressable>
             {expandedPhotosBuildId === b.id && (
@@ -2662,7 +2662,7 @@ export function BuildsScreen() {
               Raporty ({buildReports.length}
               {pendingCount > 0 ? ` · ${pendingCount} do sprawdzenia` : ""})
             </Text>
-            <Text style={{ color: COLORS.primary, fontSize: 14 }}>
+            <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
               {reportsExpanded ? "▲" : "▼"}
             </Text>
           </Pressable>

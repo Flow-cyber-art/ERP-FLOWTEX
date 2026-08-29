@@ -586,7 +586,7 @@ export function TechnologiesScreen() {
                     <Text style={{ color: COLORS.muted, fontSize: 12, marginRight: 10 }}>
                       {materialCount} {materialCount === 1 ? "materiał" : "materiały"}
                     </Text>
-                    <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                    <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
                       {isExpanded ? "▲" : "▼"}
                     </Text>
                   </Pressable>

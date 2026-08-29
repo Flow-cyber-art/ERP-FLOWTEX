@@ -90,7 +90,7 @@ export function TeamTimeScreen() {
               {selectedEmployee?.name || "Wybierz pracownika"}
             </Text>
           </View>
-          <Text style={{ color: COLORS.primary, fontSize: 16 }}>
+          <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
             {supervisorPickerOpen ? "▲" : "▼"}
           </Text>
         </Pressable>

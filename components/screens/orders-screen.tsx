@@ -268,9 +268,17 @@ export function OrdersScreen() {
   }, [shortages, orders, batchedOrderIds]);
 
   const brakiCount = rows.filter((r) => r.status === "brak").length;
+  // Liczniki wliczają też zamówienia wygenerowane z planu technologii
+  // budowy (buildOrders, sekcja "Zamówienia z planu budów" niżej) —
+  // wcześniej liczyły wyłącznie zamówienia magazynowe (orders), więc
+  // przyjęcie dostawy z zamówienia wygenerowanego z technologii nie
+  // ruszało licznika "Dostarczone".
   const wDrodzeCount =
-    orders.filter((o) => o.status === "do realizacji" || o.status === "zamówione").length;
-  const dostarczoneCount = orders.filter((o) => o.status === "dostarczone").length;
+    orders.filter((o) => o.status === "do realizacji" || o.status === "zamówione").length +
+    buildOrders.filter((o) => o.status === "robocze" || o.status === "zamówione").length;
+  const dostarczoneCount =
+    orders.filter((o) => o.status === "dostarczone").length +
+    buildOrders.filter((o) => o.status === "przyjęte").length;
 
   const visibleRows = rows.filter((r) => {
     if (filter === "braki") return r.status === "brak";

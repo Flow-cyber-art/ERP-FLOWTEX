@@ -1187,7 +1187,13 @@ function useAppDataState(
         );
         setTimeEntries(d.timeEntries || initialTimeEntries);
         setOrders(d.orders || []);
-        setSavedReports(d.savedReports || []);
+        // NIE wczytujemy tu d.savedReports: raporty są dziś autorytatywnie
+        // w Supabase (reportsQuery/mergeEffect niżej) — wczytanie starego
+        // lokalnego zrzutu z tego klucza potrafiło "wskrzeszać" raporty
+        // dawno skasowane z bazy (np. po czyszczeniu bazy), bo scalanie z
+        // serwerem usuwa lokalny wpis tylko wtedy, gdy serwer zwróci wpis
+        // o tym samym buildId+date — a po czyszczeniu bazy serwer nie
+        // zwraca nic, więc taki "duch" zostawał na zawsze.
         if (d.workdayHours) {
           setWorkdayHours(d.workdayHours);
           setWorkdayHoursInput(String(d.workdayHours));
@@ -1196,6 +1202,8 @@ function useAppDataState(
     });
   }, []);
   useEffect(() => {
+    // savedReports celowo NIE trafia już do tego zrzutu — patrz komentarz
+    // przy jego wczytywaniu wyżej (raporty są dziś autorytatywnie w bazie).
     AsyncStorage.setItem(
       "budowy-simulator",
       JSON.stringify({
@@ -1206,19 +1214,9 @@ function useAppDataState(
         timeEntries,
         orders,
         workdayHours,
-        savedReports,
       }),
     );
-  }, [
-    materials,
-    builds,
-    assignments,
-    employees,
-    timeEntries,
-    orders,
-    workdayHours,
-    savedReports,
-  ]);
+  }, [materials, builds, assignments, employees, timeEntries, orders, workdayHours]);
   const activeBuild = builds.find((b) => b.id === selectedBuildId) || builds[0];
   const buildAssignments = assignments.filter(
     (a) => a.buildId === activeBuild?.id,

@@ -174,6 +174,11 @@ export function BuildsScreen() {
   // Łączna liczba zdjęć w folderze, do nagłówka "ZDJĘCIA (n)" — zgłaszana
   // przez BuildPhotosSection (onCountChange), które i tak już ją pobiera.
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
+  // Zdjęcia budowy — zwinięte domyślnie, ten sam wzorzec akordeonu co
+  // reszta sekcji na karcie budowy (Portal klienta, Materiały dodatkowe).
+  const [expandedPhotosBuildId, setExpandedPhotosBuildId] = useState<
+    string | null
+  >(null);
   // Portal klienta (QR/PIN/link) — konfiguracja ustawiana raz na budowę,
   // domyślnie zwinięta, żeby nie zajmowała miejsca przy każdym wejściu
   // (ten sam wzorzec zwijania co przy edycji technologii/zdjęć wyżej).
@@ -2200,123 +2205,6 @@ export function BuildsScreen() {
               );
             })()}
 
-          {/* Zdjęcia budowy — katalog na Google Drive (utworzony przyciskiem
-              niżej albo, dla starszych budów, wklejony ręcznie jako zwykły
-              link) + dołączanie zdjęć wprost z apki (build-photos-section.tsx). */}
-          <View
-            style={{
-              marginTop: 12,
-              paddingTop: 12,
-              borderTopWidth: 1,
-              borderTopColor: COLORS.border,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                ZDJĘCIA{photoCounts[b.id] ? ` (${photoCounts[b.id]})` : ""}
-              </Text>
-              {/* Możliwość poprawienia linku zostaje, ale jako drobna,
-                  drugorzędna akcja — nie "Zmień link" jako główny przycisk:
-                  użytkownik nie chce "zmieniać linku", tylko otworzyć
-                  zdjęcia (patrz duża karta z BuildPhotosSection niżej). */}
-              {b.photosUrl && (
-                <Pressable
-                  onPress={() => {
-                    const isEditing = editingPhotosBuildId === b.id;
-                    setEditingPhotosBuildId(isEditing ? null : b.id);
-                    setPhotosUrlInput(isEditing ? "" : b.photosUrl || "");
-                  }}
-                >
-                  <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
-                    {editingPhotosBuildId === b.id ? "Zwiń" : "Edytuj link"}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-            {!b.photosUrl && (
-              <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 14 }}>
-                <Pressable
-                  disabled={creatingDriveFolderId === b.id}
-                  onPress={async () => {
-                    setDriveFolderError(null);
-                    setCreatingDriveFolderId(b.id);
-                    try {
-                      await createBuildDriveFolder(Number(b.id));
-                      // Realtime na "builds" (use-realtime-sync.ts)
-                      // odświeży photosUrl/driveFolderId za chwilę same —
-                      // nie trzeba tu ręcznie invalidować.
-                    } catch (err) {
-                      setDriveFolderError(
-                        err instanceof Error ? err.message : "Nie udało się stworzyć katalogu.",
-                      );
-                    } finally {
-                      setCreatingDriveFolderId(null);
-                    }
-                  }}
-                >
-                  <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
-                    {creatingDriveFolderId === b.id
-                      ? "Tworzenie katalogu…"
-                      : "Stwórz katalog na zdjęcia"}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    const isEditing = editingPhotosBuildId === b.id;
-                    setEditingPhotosBuildId(isEditing ? null : b.id);
-                    setPhotosUrlInput(isEditing ? "" : b.photosUrl || "");
-                  }}
-                >
-                  <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
-                    {editingPhotosBuildId === b.id ? "Zwiń" : "…lub wklej link ręcznie"}
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-            {driveFolderError && (
-              <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
-                {driveFolderError}
-              </Text>
-            )}
-            {editingPhotosBuildId === b.id && (
-              <View style={{ marginTop: 10 }}>
-                <Field
-                  placeholder="https://drive.google.com/..."
-                  value={photosUrlInput}
-                  onChangeText={setPhotosUrlInput}
-                  autoCapitalize="none"
-                />
-                <View style={{ marginTop: 10 }}>
-                  <Button
-                    label="Zapisz link"
-                    onPress={() => {
-                      updateBuildPhotosUrl(b.id, photosUrlInput.trim());
-                      setEditingPhotosBuildId(null);
-                    }}
-                  />
-                </View>
-              </View>
-            )}
-            <View style={{ marginTop: 10 }}>
-              <BuildPhotosSection
-                buildId={Number(b.id)}
-                driveFolderUrl={b.photosUrl ?? null}
-                variant="admin"
-                onCountChange={(count) =>
-                  setPhotoCounts((prev) =>
-                    prev[b.id] === count ? prev : { ...prev, [b.id]: count },
-                  )
-                }
-              />
-            </View>
-          </View>
-
           <View
             style={{
               marginTop: 12,
@@ -2618,6 +2506,138 @@ export function BuildsScreen() {
               );
             })()
           )}
+
+          {/* Zdjęcia budowy — katalog na Google Drive (utworzony przyciskiem
+              niżej albo, dla starszych budów, wklejony ręcznie jako zwykły
+              link) + dołączanie zdjęć wprost z apki (build-photos-section.tsx).
+              Zwinięte domyślnie, ten sam wzorzec akordeonu co Portal klienta
+              i Materiały dodatkowe wyżej. */}
+          <View
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTopWidth: 1,
+              borderTopColor: COLORS.border,
+            }}
+          >
+            <Pressable
+              onPress={() =>
+                setExpandedPhotosBuildId(
+                  expandedPhotosBuildId === b.id ? null : b.id,
+                )
+              }
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                ZDJĘCIA{photoCounts[b.id] ? ` (${photoCounts[b.id]})` : ""}
+              </Text>
+              <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
+                {expandedPhotosBuildId === b.id ? "⌄" : "›"}
+              </Text>
+            </Pressable>
+            {expandedPhotosBuildId === b.id && (
+              <View style={{ marginTop: 10 }}>
+                {/* Możliwość poprawienia linku zostaje, ale jako drobna,
+                    drugorzędna akcja — nie "Zmień link" jako główny przycisk:
+                    użytkownik nie chce "zmieniać linku", tylko otworzyć
+                    zdjęcia (patrz duża karta z BuildPhotosSection niżej). */}
+                {b.photosUrl && (
+                  <Pressable
+                    onPress={() => {
+                      const isEditing = editingPhotosBuildId === b.id;
+                      setEditingPhotosBuildId(isEditing ? null : b.id);
+                      setPhotosUrlInput(isEditing ? "" : b.photosUrl || "");
+                    }}
+                    style={{ alignSelf: "flex-end", marginBottom: 8 }}
+                  >
+                    <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                      {editingPhotosBuildId === b.id ? "Zwiń" : "Edytuj link"}
+                    </Text>
+                  </Pressable>
+                )}
+                {!b.photosUrl && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                    <Pressable
+                      disabled={creatingDriveFolderId === b.id}
+                      onPress={async () => {
+                        setDriveFolderError(null);
+                        setCreatingDriveFolderId(b.id);
+                        try {
+                          await createBuildDriveFolder(Number(b.id));
+                          // Realtime na "builds" (use-realtime-sync.ts)
+                          // odświeży photosUrl/driveFolderId za chwilę same —
+                          // nie trzeba tu ręcznie invalidować.
+                        } catch (err) {
+                          setDriveFolderError(
+                            err instanceof Error ? err.message : "Nie udało się stworzyć katalogu.",
+                          );
+                        } finally {
+                          setCreatingDriveFolderId(null);
+                        }
+                      }}
+                    >
+                      <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+                        {creatingDriveFolderId === b.id
+                          ? "Tworzenie katalogu…"
+                          : "Stwórz katalog na zdjęcia"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        const isEditing = editingPhotosBuildId === b.id;
+                        setEditingPhotosBuildId(isEditing ? null : b.id);
+                        setPhotosUrlInput(isEditing ? "" : b.photosUrl || "");
+                      }}
+                    >
+                      <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                        {editingPhotosBuildId === b.id ? "Zwiń" : "…lub wklej link ręcznie"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+                {driveFolderError && (
+                  <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
+                    {driveFolderError}
+                  </Text>
+                )}
+                {editingPhotosBuildId === b.id && (
+                  <View style={{ marginTop: 10 }}>
+                    <Field
+                      placeholder="https://drive.google.com/..."
+                      value={photosUrlInput}
+                      onChangeText={setPhotosUrlInput}
+                      autoCapitalize="none"
+                    />
+                    <View style={{ marginTop: 10 }}>
+                      <Button
+                        label="Zapisz link"
+                        onPress={() => {
+                          updateBuildPhotosUrl(b.id, photosUrlInput.trim());
+                          setEditingPhotosBuildId(null);
+                        }}
+                      />
+                    </View>
+                  </View>
+                )}
+                <View style={{ marginTop: 10 }}>
+                  <BuildPhotosSection
+                    buildId={Number(b.id)}
+                    driveFolderUrl={b.photosUrl ?? null}
+                    variant="admin"
+                    onCountChange={(count) =>
+                      setPhotoCounts((prev) =>
+                        prev[b.id] === count ? prev : { ...prev, [b.id]: count },
+                      )
+                    }
+                  />
+                </View>
+              </View>
+            )}
+          </View>
 
           {/* Raporty tej konkretnej budowy — pojedyncze źródło prawdy,
               zamiast rozjeżdżania się z ekranem "Raporty". */}

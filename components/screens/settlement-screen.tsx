@@ -189,17 +189,19 @@ export function SettlementScreen() {
     (sum, r) => sum + r.extraCosts.reduce((s, c) => s + c.amount, 0),
     0,
   );
-  // Stawka ZAMROŻONA na wpisie godzin (t.hourlyRate) w momencie
-  // raportowania — nie aktualna employee.hourlyRate, patrz
+  // Stawka ZAMROŻONA na wpisie godzin (t.costRate) w momencie
+  // raportowania — nie aktualna employee.costRate, patrz
   // supabase/sql/055_stawka_zamrozona_w_godzinach.sql. Fallback na
-  // aktualną stawkę tylko dla wpisów sprzed tej migracji.
+  // aktualną stawkę tylko dla wpisów sprzed tej migracji. Koszt budowy
+  // liczymy ze stawki KOSZTOWEJ (koszt pracodawcy) — stawka godzinowa
+  // służy wyłącznie do wypłaty (patrz payroll-screen.tsx).
   const laborCost = buildTimeEntries.reduce((sum, t) => {
     const employee = employees.find((e) => e.id === t.employeeId);
-    const rate = t.hourlyRate ?? employee?.hourlyRate ?? 0;
+    const rate = t.costRate ?? employee?.costRate ?? 0;
     return sum + t.hours * rate;
   }, 0);
   // Planowany koszt robocizny (patrz supabase/sql/040_planowany_koszt_
-  // robocizny.sql) — suma stawek godzinowych CZŁONKÓW brygady
+  // robocizny.sql) — suma stawek KOSZTOWYCH CZŁONKÓW brygady
   // przypisanej do budowy × planowane godziny/dzień × planowane dni
   // robocze (durationDays, ISTNIEJĄCE pole, ten sam sens co dotąd).
   // Zero, gdy budowa nie ma jeszcze przypisanej brygady.
@@ -209,7 +211,7 @@ export function SettlementScreen() {
       .filter((m) => m.teamId === Number(build.teamId))
       .reduce((sum, m) => {
         const employee = employees.find((e) => e.id === String(m.employeeId));
-        return sum + (employee?.hourlyRate || 0);
+        return sum + (employee?.costRate || 0);
       }, 0);
     return memberRateSum * (build.plannedHoursPerDay || 0) * (build.durationDays || 0);
   }, [build, teamMembers, employees]);

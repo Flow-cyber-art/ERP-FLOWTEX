@@ -24,7 +24,6 @@ function portalOrigin(): string {
 
 export function BuildPortalSection({ buildId }: { buildId: number }) {
   const [settings, setSettings] = useState<PublicPortalSettings | null>(null);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [pinEditing, setPinEditing] = useState(false);
@@ -32,11 +31,9 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
   const [qrFullscreen, setQrFullscreen] = useState(false);
 
   const refresh = () => {
-    setLoading(true);
     getPublicPortalSettings(buildId)
       .then(setSettings)
-      .catch(() => notify("Błąd", "Nie udało się wczytać ustawień portalu klienta."))
-      .finally(() => setLoading(false));
+      .catch(() => notify("Błąd", "Nie udało się wczytać ustawień portalu klienta."));
   };
 
   useEffect(refresh, [buildId]);
@@ -52,7 +49,12 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
       .catch(() => setQrDataUrl(null));
   }, [settings?.publicAccessEnabled, settings?.publicToken]);
 
-  if (loading || !settings) {
+  // Tylko pierwsze ładowanie zwraca ten wąski placeholder zamiast całej
+  // sekcji — `refresh()` po każdym przełączniku (dostęp/PIN/zdjęcia/
+  // notatki/kontrakt) też ustawia `loading`, ale wtedy `settings` już
+  // istnieje z poprzedniego wczytania, więc karta zostaje na miejscu
+  // zamiast znikać i wracać (co przesuwało scroll całej strony na górę).
+  if (!settings) {
     return <Text style={{ color: COLORS.muted, fontSize: 12 }}>Wczytywanie…</Text>;
   }
 

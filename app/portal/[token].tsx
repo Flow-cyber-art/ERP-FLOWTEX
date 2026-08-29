@@ -453,10 +453,18 @@ function StagesStepper({ stages }: { stages: PublicBuildView["stages"] }) {
 
 function PhotosCard({ view }: { view: PublicBuildView }) {
   if (view.photos.length === 0) return null;
+  // Backend zwraca już wyłącznie zdjęcia z najnowszego dnia, w którym
+  // cokolwiek wgrano (patrz get_public_build) — tu tylko dodatkowo tniemy
+  // do 6 w samej siatce, żeby karta nie urosła w nieskończoność w dni z
+  // bardzo dużą liczbą zdjęć.
   const shown = view.photos.slice(0, 6);
+  const latestDay = formatDateShortPL(view.photos[0].createdAt);
   return (
     <Card>
-      <CardHeader title="Zdjęcia z budowy" right={`${shown.length} z ${view.photos.length}`} />
+      <CardHeader
+        title="Zdjęcia z budowy"
+        right={`${latestDay} · ${shown.length} z ${view.photos.length}`}
+      />
       <View style={{ padding: 20 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
           {shown.map((p) => (

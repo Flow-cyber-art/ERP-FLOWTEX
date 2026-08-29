@@ -49,9 +49,7 @@ function HeroGauge({ view }: { view: PublicBuildView }) {
       ? "Budowa jeszcze się nie rozpoczęła"
       : view.displayStatus === "zamknieta"
         ? "Budowa zakończona"
-        : view.currentStageName
-          ? `Trwa: ${view.currentStageName}`
-          : "Postęp budowy";
+        : "Postęp budowy";
   return (
     <View style={{ alignItems: "center", marginTop: 12, marginBottom: 8 }}>
       <View
@@ -94,36 +92,43 @@ function HeroGauge({ view }: { view: PublicBuildView }) {
   );
 }
 
-function StagesTimeline({ stages }: { stages: PublicBuildView["stages"] }) {
+function StagesProgress({ stages }: { stages: PublicBuildView["stages"] }) {
   if (!stages.length) return null;
   return (
     <View style={{ marginTop: 8 }}>
       {stages.map((s, i) => (
-        <View key={s.name + i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+        <View key={s.name + i} style={{ marginBottom: i === stages.length - 1 ? 0 : 14 }}>
           <View
             style={{
-              width: 22,
-              height: 22,
-              borderRadius: 11,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: s.completed ? COLORS.success : "transparent",
-              borderWidth: s.completed ? 0 : 2,
-              borderColor: COLORS.border,
-              marginRight: 12,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginBottom: 6,
             }}
           >
-            {s.completed && <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>✓</Text>}
+            <Text style={{ color: COLORS.foreground, fontWeight: "600", flex: 1, marginRight: 8 }}>
+              {s.name}
+            </Text>
+            <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "700" }}>
+              {Math.round(s.percent)}%
+            </Text>
           </View>
-          <Text
+          <View
             style={{
-              color: s.completed ? COLORS.foreground : COLORS.muted,
-              fontWeight: s.completed ? "700" : "500",
-              flex: 1,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: COLORS.background,
+              overflow: "hidden",
             }}
           >
-            {s.name}
-          </Text>
+            <View
+              style={{
+                width: `${Math.min(100, Math.max(0, s.percent))}%`,
+                height: "100%",
+                borderRadius: 4,
+                backgroundColor: s.percent >= 100 ? COLORS.success : COLORS.primary,
+              }}
+            />
+          </View>
         </View>
       ))}
     </View>
@@ -275,7 +280,7 @@ export default function PublicBuildPortal() {
 
       <Card>
         <HeroGauge view={view} />
-        <StagesTimeline stages={view.stages} />
+        <StagesProgress stages={view.stages} />
       </Card>
 
       <Card>

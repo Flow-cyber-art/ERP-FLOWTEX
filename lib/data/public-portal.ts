@@ -77,7 +77,10 @@ export async function regeneratePublicToken(buildId: number): Promise<string> {
   return data as string;
 }
 
-export type PublicBuildStage = { name: string; completed: boolean };
+// Procent KAŻDEGO etapu liczony z realnego zużycia materiału tego etapu
+// (koszt zużyty / zaplanowany), nie z ręcznego odznaczania — patrz
+// supabase/sql/057_portal_klienta_etapy_z_materialow.sql.
+export type PublicBuildStage = { name: string; percent: number };
 
 export type PublicBuildView = {
   requiresPin?: boolean;
@@ -89,9 +92,10 @@ export type PublicBuildView = {
   plannedEndDate: string;
   status: "aktywna" | "zamknięta";
   displayStatus: "nierozpoczeta" | "aktywna" | "zamknieta";
+  // Postęp CAŁEJ budowy, też liczony z realnego zużycia materiałów
+  // (wartość zużyta / zaplanowana).
   progressPercent: number;
   statusColor: "green" | "yellow" | "red" | null;
-  currentStageName: string | null;
   stages: PublicBuildStage[];
   materials: string[];
   lastUpdateDate: string | null;

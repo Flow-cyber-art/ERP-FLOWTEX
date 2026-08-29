@@ -15,6 +15,7 @@ import {
   ReportStepper,
   ScreenHeader,
   TimeOptionsList,
+  pluralPL,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { BuildPhotosSection } from "@/components/build-photos-section";
@@ -1334,9 +1335,9 @@ export function ReportScreen() {
             style={{ color: COLORS.muted, fontSize: 13, flex: 1, minWidth: 0 }}
           >
             Gotowe do zapisania · {draftPeople.length}{" "}
-            {draftPeople.length === 1 ? "osoba" : "osoby"} ·{" "}
+            {pluralPL(draftPeople.length, "osoba", "osoby", "osób")} ·{" "}
             {buildAssignments.length}{" "}
-            {buildAssignments.length === 1 ? "materiał" : "materiały"}
+            {pluralPL(buildAssignments.length, "materiał", "materiały", "materiałów")}
           </Text>
         </View>
       )}

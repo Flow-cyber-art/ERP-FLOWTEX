@@ -532,11 +532,6 @@ export function BuildsScreen() {
               h)
             </Text>
           ) : null}
-          <Text className="text-xs text-muted mt-3">
-            Materiały przypisane:{" "}
-            {assignments.filter((a) => a.buildId === b.id).length}
-          </Text>
-
           {/* Technologia (Faza 2) — plan materiałowy = m² budowy × zużycie
               z receptury, zamrożony w momencie przypisania (patrz
               build_technology_snapshot). Późniejsza zmiana/nowa wersja
@@ -602,7 +597,7 @@ export function BuildsScreen() {
                           {snapshot.technologyName}
                         </Text>
                         <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
-                          v{snapshot.technologyVersion} · {b.areaM2 ?? "?"} m²
+                          v{snapshot.technologyVersion} · {b.areaM2 ?? "—"} m²
                         </Text>
                       </>
                     ) : (

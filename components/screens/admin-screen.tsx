@@ -9,6 +9,7 @@ import {
   IconBadge,
   QuantityStepper,
   StatusBadge,
+  pluralPL,
 } from "@/components/report-ui";
 import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
 import {
@@ -1106,7 +1107,7 @@ function AdminTeamsSubsection() {
                       {team.name}
                     </Text>
                     <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                      {members.length} {members.length === 1 ? "osoba" : "osób"}
+                      {members.length} {pluralPL(members.length, "osoba", "osoby", "osób")}
                     </Text>
                   </View>
                   <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>

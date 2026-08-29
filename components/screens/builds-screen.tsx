@@ -90,6 +90,7 @@ export function BuildsScreen() {
     addToDraft,
     commitAssignments,
     saveBuild,
+    updateBuildBasicInfo,
     approveReport,
     closeBuild,
     reopenBuild,
@@ -186,7 +187,28 @@ export function BuildsScreen() {
     useState<string | null>(null);
   // Przypisanie/zmiana technologii (Faza 2) — jeden picker na raz, ten
   // sam wzorzec co edycja linku do zdjęć powyżej.
+  // Edycja podstawowych danych budowy (numer/nazwa/odpowiedzialny/klient/
+  // adres/wartość kontraktu) po jej utworzeniu — ten sam wzorzec zwijania
+  // co reszta akordeonów na karcie budowy, jeden formularz na raz.
+  const [editingBasicInfoBuildId, setEditingBasicInfoBuildId] = useState<
+    string | null
+  >(null);
+  const [basicInfoDraft, setBasicInfoDraft] = useState({
+    number: "",
+    name: "",
+    manager: "",
+    clientName: "",
+    address: "",
+    contractValue: "",
+  });
+  const [basicInfoBusy, setBasicInfoBusy] = useState(false);
   const [techEditBuildId, setTechEditBuildId] = useState<string | null>(null);
+  // Materiały z planu technologii — zwinięte domyślnie razem z samą
+  // technologią (jeden akordeon: zwinięta technologia = zwinięte
+  // materiały), rozwijane osobnym kliknięciem od edycji/przypisania
+  // technologii (techEditBuildId poniżej).
+  const [techMaterialsExpandedBuildId, setTechMaterialsExpandedBuildId] =
+    useState<string | null>(null);
   const [techPickerId, setTechPickerId] = useState<number | null>(null);
   const [techAreaInput, setTechAreaInput] = useState("");
   const [techBusy, setTechBusy] = useState(false);
@@ -1020,6 +1042,139 @@ export function BuildsScreen() {
                 paddingTop: 16,
               }}
             >
+          {(() => {
+            const isEditingBasicInfo = editingBasicInfoBuildId === b.id;
+            return (
+              <View style={{ marginBottom: 12 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                      {b.clientName ? `Klient: ${b.clientName}` : "Klient nie podany"}
+                    </Text>
+                    {b.address && (
+                      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                        {b.address}
+                      </Text>
+                    )}
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                      {b.contractValue
+                        ? `Kontrakt: ${formatPLN(Number(b.contractValue))}`
+                        : "Wartość kontraktu nie podana"}
+                    </Text>
+                  </View>
+                  {!isClosed && (
+                    <Pressable
+                      onPress={() => {
+                        if (isEditingBasicInfo) {
+                          setEditingBasicInfoBuildId(null);
+                          return;
+                        }
+                        setBasicInfoDraft({
+                          number: b.number,
+                          name: b.name,
+                          manager: b.manager,
+                          clientName: b.clientName ?? "",
+                          address: b.address ?? "",
+                          contractValue: b.contractValue ? String(b.contractValue) : "",
+                        });
+                        setEditingBasicInfoBuildId(b.id);
+                      }}
+                    >
+                      <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                        {isEditingBasicInfo ? "Anuluj" : "Edytuj"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+
+                {isEditingBasicInfo && (
+                  <View
+                    style={{
+                      backgroundColor: COLORS.background,
+                      borderRadius: 12,
+                      padding: 12,
+                      marginTop: 10,
+                    }}
+                  >
+                    <Text className="text-xs text-muted uppercase mb-2">Numer budowy</Text>
+                    <Field
+                      value={basicInfoDraft.number}
+                      onChangeText={(v: string) =>
+                        setBasicInfoDraft({ ...basicInfoDraft, number: v })
+                      }
+                    />
+                    <Text className="text-xs text-muted uppercase mt-3 mb-2">Nazwa</Text>
+                    <Field
+                      value={basicInfoDraft.name}
+                      onChangeText={(v: string) =>
+                        setBasicInfoDraft({ ...basicInfoDraft, name: v })
+                      }
+                    />
+                    <Text className="text-xs text-muted uppercase mt-3 mb-2">
+                      Osoba odpowiedzialna
+                    </Text>
+                    <Field
+                      value={basicInfoDraft.manager}
+                      onChangeText={(v: string) =>
+                        setBasicInfoDraft({ ...basicInfoDraft, manager: v })
+                      }
+                    />
+                    <Text className="text-xs text-muted uppercase mt-3 mb-2">
+                      Klient (opcjonalnie)
+                    </Text>
+                    <Field
+                      value={basicInfoDraft.clientName}
+                      onChangeText={(v: string) =>
+                        setBasicInfoDraft({ ...basicInfoDraft, clientName: v })
+                      }
+                    />
+                    <Text className="text-xs text-muted uppercase mt-3 mb-2">
+                      Adres (opcjonalnie)
+                    </Text>
+                    <Field
+                      value={basicInfoDraft.address}
+                      onChangeText={(v: string) =>
+                        setBasicInfoDraft({ ...basicInfoDraft, address: v })
+                      }
+                    />
+                    <Text className="text-xs text-muted uppercase mt-3 mb-2">
+                      Wartość kontraktu (PLN, opcjonalnie)
+                    </Text>
+                    <Field
+                      placeholder="np. 250000"
+                      value={basicInfoDraft.contractValue}
+                      onChangeText={(v: string) =>
+                        setBasicInfoDraft({ ...basicInfoDraft, contractValue: v })
+                      }
+                      keyboardType="decimal-pad"
+                    />
+                    <View style={{ marginTop: 12 }}>
+                      <Button
+                        label={basicInfoBusy ? "Zapisywanie…" : "Zapisz"}
+                        disabled={basicInfoBusy}
+                        onPress={async () => {
+                          setBasicInfoBusy(true);
+                          try {
+                            await updateBuildBasicInfo(b.id, basicInfoDraft, () =>
+                              setEditingBasicInfoBuildId(null),
+                            );
+                          } finally {
+                            setBasicInfoBusy(false);
+                          }
+                        }}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
           {b.startDate && b.durationDays ? (
             <Text className="text-xs text-muted mt-2">
               Start: {b.startDate} · {b.durationDays} dni · zakończenie:{" "}
@@ -1066,13 +1221,24 @@ export function BuildsScreen() {
                     dublować tej samej akcji dwoma sposobami na raz. */}
                 <Pressable
                   onPress={() => {
-                    if (pickerOpen) {
-                      setTechEditBuildId(null);
+                    if (!snapshot) {
+                      // Brak technologii — dotknięcie wiersza od razu
+                      // otwiera przypisanie (nie ma czego "rozwijać").
+                      if (pickerOpen) {
+                        setTechEditBuildId(null);
+                        return;
+                      }
+                      setTechEditBuildId(b.id);
+                      setTechPickerId(null);
+                      setTechAreaInput(b.areaM2 ?? "");
                       return;
                     }
-                    setTechEditBuildId(b.id);
-                    setTechPickerId(null);
-                    setTechAreaInput(b.areaM2 ?? "");
+                    // Technologia już przypisana — dotknięcie
+                    // rozwija/zwija materiały, edycja/zmiana ma osobny
+                    // link "Zmień technologię" w rozwiniętym widoku.
+                    setTechMaterialsExpandedBuildId(
+                      techMaterialsExpandedBuildId === b.id ? null : b.id,
+                    );
                   }}
                   style={{
                     flexDirection: "row",
@@ -1103,9 +1269,24 @@ export function BuildsScreen() {
                     )}
                   </View>
                   <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "700" }}>
-                    {pickerOpen ? "⌄" : "›"}
+                    {(snapshot ? techMaterialsExpandedBuildId === b.id : pickerOpen) ? "⌄" : "›"}
                   </Text>
                 </Pressable>
+
+                {snapshot && techMaterialsExpandedBuildId === b.id && !pickerOpen && (
+                  <Pressable
+                    onPress={() => {
+                      setTechEditBuildId(b.id);
+                      setTechPickerId(null);
+                      setTechAreaInput(b.areaM2 ?? "");
+                    }}
+                    style={{ marginTop: 8 }}
+                  >
+                    <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                      Zmień technologię
+                    </Text>
+                  </Pressable>
+                )}
 
                 {pickerOpen && (
                   <View style={{ marginTop: 10 }}>
@@ -1176,6 +1357,7 @@ export function BuildsScreen() {
                                     Number(techAreaInput),
                                   );
                                   setTechEditBuildId(null);
+                                  setTechMaterialsExpandedBuildId(b.id);
                                 } finally {
                                   setTechBusy(false);
                                 }
@@ -1188,7 +1370,7 @@ export function BuildsScreen() {
                   </View>
                 )}
 
-                {!pickerOpen && plan.length > 0 && (() => {
+                {!pickerOpen && techMaterialsExpandedBuildId === b.id && plan.length > 0 && (() => {
                   // Koszt planowany = plannedQuantity × AKTUALNA cena
                   // materiału (materials.unitPrice — średnia ważona stanu,
                   // przeliczana przy każdej partii, patrz fn_recalc_material

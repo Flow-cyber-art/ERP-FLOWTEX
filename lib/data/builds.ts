@@ -24,12 +24,16 @@ export type BuildRow = {
   status: BuildStatus;
   photosUrl: string | null;
   driveFolderId: string | null;
+  clientName: string | null;
+  address: string | null;
+  areaM2: string | null;
+  contractValue: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 const BUILD_COLUMNS =
-  "id, number, name, manager, teamId, startDate, durationDays, plannedHoursPerDay, status, photosUrl, driveFolderId:drive_folder_id, createdAt, updatedAt";
+  "id, number, name, manager, teamId, startDate, durationDays, plannedHoursPerDay, status, photosUrl, driveFolderId:drive_folder_id, clientName, address, areaM2, contractValue, createdAt, updatedAt";
 
 export async function listBuilds(): Promise<BuildRow[]> {
   const { data, error } = await supabase
@@ -51,6 +55,9 @@ export type CreateBuildInput = {
   durationDays: number;
   teamId?: number | null;
   plannedHoursPerDay?: number;
+  clientName?: string | null;
+  address?: string | null;
+  contractValue?: number | null;
 };
 
 /**
@@ -69,6 +76,9 @@ export async function createBuild(input: CreateBuildInput): Promise<BuildRow> {
       durationDays: input.durationDays,
       teamId: input.teamId ?? null,
       plannedHoursPerDay: input.plannedHoursPerDay ?? 8,
+      clientName: input.clientName || null,
+      address: input.address || null,
+      contractValue: input.contractValue ?? null,
       status: "aktywna" satisfies BuildStatus,
     })
     .select(BUILD_COLUMNS)
@@ -147,6 +157,40 @@ export async function updateBuildLaborPlan(
     })
     .eq("id", buildId);
   if (error) throw new Error(error.message);
+}
+
+export type UpdateBuildBasicInfoInput = {
+  number: string;
+  name: string;
+  manager: string;
+  clientName?: string | null;
+  address?: string | null;
+  contractValue?: number | null;
+};
+
+/** Edycja podstawowych danych budowy (numer/nazwa/odpowiedzialny/klient/adres/kontrakt) po utworzeniu. */
+export async function updateBuildBasicInfo(
+  buildId: number,
+  input: UpdateBuildBasicInfoInput,
+): Promise<void> {
+  const { error } = await supabase
+    .from("builds")
+    .update({
+      number: input.number,
+      name: input.name,
+      manager: input.manager,
+      clientName: input.clientName || null,
+      address: input.address || null,
+      contractValue: input.contractValue ?? null,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq("id", buildId);
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error(`Budowa z numerem "${input.number}" już istnieje.`);
+    }
+    throw new Error(error.message);
+  }
 }
 
 export async function updateBuildPhotosUrl(buildId: number, photosUrl: string): Promise<void> {

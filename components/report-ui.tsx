@@ -368,10 +368,10 @@ const Button = ({
   secondary = false,
   fullWidth = false,
   disabled = false,
-  // Emoji renderowane osobno od `label` — na Tekście z ustawionym `color`
-  // (jak niżej) system podmienia glify emoji na jednokolorowe, "wytłuszczone"
-  // wersje zamiast pełnokolorowych; osobny Text bez nadpisanego koloru
-  // zostawia natywne, kolorowe emoji (📷, 🖼 itd.).
+  // Ikona z MaterialIcons (ta sama biblioteka co IconBadge/reszta apki),
+  // renderowana w kolorze etykiety — dawniej emoji (📷, 🖼 itd.) renderowały
+  // się natywnie w pełnym kolorze, niespójnie z monochromatycznymi ikonkami
+  // reszty interfejsu.
   icon,
 }: {
   label: string;
@@ -379,7 +379,7 @@ const Button = ({
   secondary?: boolean;
   fullWidth?: boolean;
   disabled?: boolean;
-  icon?: string;
+  icon?: keyof typeof MaterialIcons.glyphMap;
 }) => (
   <Pressable
     onPress={onPress}
@@ -401,7 +401,13 @@ const Button = ({
       opacity: disabled ? 0.5 : pressed ? 0.75 : 1,
     })}
   >
-    {icon && <Text style={{ fontSize: 16 }}>{icon}</Text>}
+    {icon && (
+      <MaterialIcons
+        name={icon}
+        size={18}
+        color={secondary ? COLORS.foreground : COLORS.background}
+      />
+    )}
     <Text
       style={{
         color: secondary ? COLORS.foreground : COLORS.background,

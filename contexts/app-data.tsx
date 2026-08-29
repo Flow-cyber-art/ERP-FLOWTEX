@@ -15,6 +15,7 @@ import {
   createBuild,
   listBuilds,
   reopenBuild as reopenBuildRemote,
+  updateBuildBasicInfo as updateBuildBasicInfoRemote,
   updateBuildPhotosUrl as updateBuildPhotosUrlRemote,
   type CloseBuildReturnItem,
 } from "@/lib/data/builds";
@@ -951,6 +952,17 @@ function useAppDataState(
       setMaterialActiveRemote(vars.materialId, vars.active),
   });
   const createBuildMutation = useMutation({ mutationFn: createBuild });
+  const updateBuildBasicInfoMutation = useMutation({
+    mutationFn: (vars: {
+      buildId: number;
+      number: string;
+      name: string;
+      manager: string;
+      clientName?: string | null;
+      address?: string | null;
+      contractValue?: number | null;
+    }) => updateBuildBasicInfoRemote(vars.buildId, vars),
+  });
   const closeBuildMutation = useMutation({
     mutationFn: (vars: { buildId: number; returns: CloseBuildReturnItem[] }) =>
       closeBuildRemote(vars.buildId, vars.returns),
@@ -1537,6 +1549,45 @@ function useAppDataState(
       // nie zależy w żaden sposób od tego, czy katalog już istnieje.
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać budowy.");
+    }
+  };
+  // Edycja podstawowych danych budowy po jej utworzeniu (numer/nazwa/
+  // odpowiedzialny/klient/adres/wartość kontraktu) — te same pola co krok 1
+  // kreatora w saveBuild wyżej, tylko jako update zamiast insert.
+  const updateBuildBasicInfo = async (
+    buildId: string,
+    input: {
+      number: string;
+      name: string;
+      manager: string;
+      clientName: string;
+      address: string;
+      contractValue: string;
+    },
+    onSaved?: () => void,
+  ) => {
+    const missing: string[] = [];
+    if (!input.number) missing.push("Numer budowy");
+    if (!input.name) missing.push("Nazwa");
+    if (!input.manager) missing.push("Osoba odpowiedzialna");
+    if (missing.length > 0) {
+      notify("Uzupełnij wymagane pola", missing.join(", "));
+      return;
+    }
+    try {
+      await updateBuildBasicInfoMutation.mutateAsync({
+        buildId: Number(buildId),
+        number: input.number,
+        name: input.name,
+        manager: input.manager,
+        clientName: input.clientName || undefined,
+        address: input.address || undefined,
+        contractValue: input.contractValue ? Number(input.contractValue) : undefined,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      onSaved?.();
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać danych budowy.");
     }
   };
   // Przypisanie technologii do budowy (Faza 2) — atomowo w RPC: zapisuje
@@ -2607,6 +2658,7 @@ function useAppDataState(
     removeBuildAssignment,
     saveMaterial,
     saveBuild,
+    updateBuildBasicInfo,
     saveWorkdayHours,
     saveDailyReport,
     saveEmployee,

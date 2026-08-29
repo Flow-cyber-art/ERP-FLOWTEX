@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Button, COLORS, notify } from "@/components/report-ui";
 import { listBuildPhotos, uploadBuildPhoto } from "@/lib/data/drive-photos";
 
@@ -160,7 +161,7 @@ export function BuildPhotosSection({
             style={{ paddingVertical: 22 }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={{ fontSize: 15 }}>📁</Text>
+              <MaterialIcons name="folder-open" size={16} color={COLORS.foreground} />
               <Text style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
                 Otwórz folder zdjęć ↗
               </Text>
@@ -178,7 +179,7 @@ export function BuildPhotosSection({
             <View style={{ marginTop: 12 }}>
               <Button
                 label="Dodaj zdjęcia z galerii"
-                icon="🖼️"
+                icon="photo-library"
                 secondary
                 onPress={pickFromLibrary}
               />
@@ -194,7 +195,7 @@ export function BuildPhotosSection({
                 gap: 6,
               }}
             >
-              <Text style={{ fontSize: 14 }}>📷</Text>
+              <MaterialIcons name="photo-camera" size={16} color={COLORS.muted} />
               <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "700" }}>
                 Zrób zdjęcie
               </Text>
@@ -220,10 +221,15 @@ export function BuildPhotosSection({
       {uploadingIndicator || (
         <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
           <View style={{ flex: 1 }}>
-            <Button label="Zrób zdjęcie" icon="📷" secondary onPress={takePhoto} />
+            <Button label="Zrób zdjęcie" icon="photo-camera" secondary onPress={takePhoto} />
           </View>
           <View style={{ flex: 1 }}>
-            <Button label="Dołącz z galerii" icon="🖼️" secondary onPress={pickFromLibrary} />
+            <Button
+              label="Dołącz z galerii"
+              icon="photo-library"
+              secondary
+              onPress={pickFromLibrary}
+            />
           </View>
         </View>
       )}

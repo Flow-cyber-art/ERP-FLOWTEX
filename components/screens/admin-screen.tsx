@@ -11,8 +11,6 @@ import {
   StatusBadge,
 } from "@/components/report-ui";
 import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
-import { HrSection } from "@/components/screens/hr-screen";
-import { AttendanceSection } from "@/components/screens/attendance-screen";
 import {
   LEAVE_STATUS_BADGE,
   LEAVE_TYPE_LABELS,
@@ -31,29 +29,28 @@ import {
   setAdminUserRole,
 } from "@/lib/data/admin-users";
 
-// Panel administracyjny, HR i konta logowania były wcześniej (albo w
-// koncepcji, albo w kodzie) osobnymi zakładkami nawigacji, mimo że
-// wszystkie dotyczą tego samego: jak firma jest skonfigurowana, nie
-// codziennej pracy na budowie. Jeden ekran z wewnętrznym przełącznikiem,
-// żeby nie trzeba było skakać między pozycjami menu. Technologie NIE są
-// tu (mimo że to też "konfiguracja firmy") — mają własną pozycję w
-// nawigacji (patrz app/(tabs)/index.tsx), bo na desktopie zasługują na
-// stałą widoczność, a na mobile dzielą miejsce z zakładką Magazyn.
-type AdminTab = "team" | "hours" | "attendance" | "leaves" | "accounts" | "settings";
+// Panel administracyjny i konta logowania — konfiguracja firmy, nie
+// codzienna praca na budowie. Wszystko związane z pracownikiem (Zespół,
+// stawki, Rozliczenie godzin, Obecności, Urlopy) mieszka teraz w osobnej
+// zakładce nawigacji "HR" (patrz components/screens/hr-panel-screen.tsx,
+// app/(tabs)/index.tsx) — AdminTeamSection/AdminLeaveSection zostają
+// zdefiniowane w tym pliku (i eksportowane), żeby uniknąć przenoszenia
+// dużych bloków kodu, ale renderuje je już tylko HrPanelScreen.
+type AdminTab = "accounts" | "settings";
 
 export function AdminScreen() {
   // "Ustawienia" pierwsza — najczęstszy powód wejścia w tę zakładkę jest
   // teraz szybkie przełączenie widoku Admin/Brygadzista (patrz
-  // AdminSettingsSection niżej), nie zarządzanie zespołem, więc nie ma
+  // AdminSettingsSection niżej), nie zarządzanie kontami, więc nie ma
   // sensu robić na to dodatkowego kliknięcia za każdym razem.
   const [section, setSection] = useState<AdminTab>("settings");
 
   return (
     <>
-      {/* Bez ScreenHeader tutaj — jego tytuł ("Zespół", "Rozliczenie
-          godzin"...) tylko powtarzał to, co już mówi podświetlony
-          przycisk poniżej, i zabierał miejsce bez potrzeby. Przyciski
-          same pełnią rolę i nawigacji, i wskaźnika aktualnej sekcji. */}
+      {/* Bez ScreenHeader tutaj — jego tytuł tylko powtarzał to, co już
+          mówi podświetlony przycisk poniżej, i zabierał miejsce bez
+          potrzeby. Przyciski same pełnią rolę i nawigacji, i wskaźnika
+          aktualnej sekcji. */}
       <View className="bg-surface border border-border rounded-2xl p-2 mb-5">
         <View
           style={{
@@ -66,10 +63,6 @@ export function AdminScreen() {
           {(
             [
               ["settings", "Ustawienia"],
-              ["team", "Zespół i dniówka"],
-              ["hours", "Rozliczenie godzin"],
-              ["attendance", "Obecności"],
-              ["leaves", "HR — Urlopy"],
               ["accounts", "Konta logowania"],
             ] as const
           ).map(([value, label]) => (
@@ -99,19 +92,7 @@ export function AdminScreen() {
         </View>
       </View>
 
-      {section === "team" ? (
-        <AdminTeamSection />
-      ) : section === "hours" ? (
-        <HrSection />
-      ) : section === "attendance" ? (
-        <AttendanceSection />
-      ) : section === "leaves" ? (
-        <AdminLeaveSection />
-      ) : section === "accounts" ? (
-        <AdminAccountsSection />
-      ) : (
-        <AdminSettingsSection />
-      )}
+      {section === "accounts" ? <AdminAccountsSection /> : <AdminSettingsSection />}
     </>
   );
 }
@@ -180,7 +161,7 @@ const EMPTY_NEW_EMPLOYEE: NewEmployeeInput = {
   costRate: "",
 };
 
-function AdminTeamSection() {
+export function AdminTeamSection() {
   const {
     workdayHours,
     workdayHoursInput,
@@ -643,7 +624,7 @@ function AdminTeamSection() {
 // pracy nie jest nigdzie śledzony) + wszystkie wnioski do wglądu/decyzji.
 // Zatwierdzanie samo w sobie może zrobić też Brygadzista (patrz
 // team-time-screen.tsx) — Admin dodatkowo widzi historię i ustawia pulę.
-function AdminLeaveSection() {
+export function AdminLeaveSection() {
   const { employees, leaveRequests, updateEmployeeLeaveDays } = useAppData();
   const [editingPoolId, setEditingPoolId] = useState<string | null>(null);
   const [poolInput, setPoolInput] = useState("");

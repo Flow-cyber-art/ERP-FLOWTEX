@@ -85,6 +85,11 @@ const LeaveScreen = lazy(() =>
     default: m.LeaveScreen,
   })),
 );
+const HrPanelScreen = lazy(() =>
+  import("@/components/screens/hr-panel-screen").then((m) => ({
+    default: m.HrPanelScreen,
+  })),
+);
 
 function HomeScreenInner() {
   const {
@@ -350,8 +355,8 @@ function HomeScreenInner() {
   );
   // Kolejność wg cyklu życia budowy: Budowy → Technologie (receptura) →
   // Magazyn (materiały, sparowane z Technologie jako toggle na mobile) →
-  // Zamówienia → Raporty → Rozliczenie → Admin na końcu jako funkcja
-  // "meta", poza flow budowy.
+  // Zamówienia → Raporty → Rozliczenie → HR i Admin na końcu jako funkcje
+  // "meta", poza flow budowy (HR = pracownicy, Admin = konfiguracja firmy).
   const visibleRoutes =
     devRole === "Admin"
       ? [
@@ -369,6 +374,7 @@ function HomeScreenInner() {
               ]
             : [ordersManagerButton]),
           routeButton("settlement", "Σ", "Rozliczenie"),
+          routeButton("hr", "◈", "HR"),
           adminButton,
         ]
       : devRole === "Brygadzista"
@@ -566,6 +572,7 @@ function HomeScreenInner() {
               {tab === "orders" && devRole === "Admin" && <OrdersScreen />}
               {tab === "manager" && devRole === "Admin" && <ManagerScreen />}
               {tab === "settlement" && devRole === "Admin" && <SettlementScreen />}
+              {tab === "hr" && devRole === "Admin" && <HrPanelScreen />}
               {tab === "admin" && devRole === "Admin" && <AdminScreen />}
               {tab === "report" && devRole === "Brygadzista" && <ReportScreen />}
               {tab === "savedReports" && devRole === "Brygadzista" && (

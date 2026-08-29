@@ -305,6 +305,14 @@ const TIMELINE_DAYS_BEFORE = 45;
 const TIMELINE_DAYS_AFTER = 45;
 const TIMELINE_CELL_WIDTH = 22;
 const TIMELINE_NAME_WIDTH = 110;
+// Wysokości wierszy nagłówka/pracownika — te same stałe po obu stronach
+// (kolumna imion poza ScrollView + siatka dni w ScrollView), żeby wiersze
+// zgadzały się co do piksela mimo że renderują się w dwóch osobnych
+// drzewach.
+const TIMELINE_MONTH_ROW_HEIGHT = 16;
+const TIMELINE_DAY_ROW_HEIGHT = 16;
+const TIMELINE_ROW_HEIGHT = 20;
+const TIMELINE_ROW_GAP = 4;
 
 function MonthTimeline({
   today,
@@ -381,10 +389,48 @@ function MonthTimeline({
         Przesuń palcem, żeby zobaczyć inne dni. Zielony = obecność · niebieski = urlop
         zatwierdzony · bursztynowy = urlop oczekujący · czerwony = brak
       </Text>
-      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator>
-        <View>
-          <View style={{ flexDirection: "row", marginLeft: TIMELINE_NAME_WIDTH }}>
-            <View style={{ width: days.length * TIMELINE_CELL_WIDTH, height: 16 }}>
+      {/* Imiona pracowników POZA horyzontalnym ScrollView — osobna, nie
+          przewijająca się kolumna po lewej, żeby zostawały widoczne przy
+          przesuwaniu dni w prawo. Wysokości wierszy po obu stronach
+          (nagłówek miesiąca/dni + wiersz pracownika) muszą się zgadzać
+          co do piksela, stąd te same stałe (TIMELINE_*_HEIGHT) w obu. */}
+      <View style={{ flexDirection: "row" }}>
+        <View
+          style={{
+            width: TIMELINE_NAME_WIDTH,
+            borderRightWidth: 1,
+            borderRightColor: COLORS.border,
+          }}
+        >
+          <View style={{ height: TIMELINE_MONTH_ROW_HEIGHT }} />
+          <View
+            style={{
+              height: TIMELINE_DAY_ROW_HEIGHT,
+              marginBottom: TIMELINE_ROW_GAP,
+            }}
+          />
+          {rows.map(({ employee }) => (
+            <View
+              key={employee.id}
+              style={{
+                height: TIMELINE_ROW_HEIGHT,
+                marginBottom: TIMELINE_ROW_GAP,
+                justifyContent: "center",
+                paddingRight: 8,
+              }}
+            >
+              <Text
+                style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "700" }}
+                numberOfLines={1}
+              >
+                {employee.name}
+              </Text>
+            </View>
+          ))}
+        </View>
+        <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator>
+          <View>
+            <View style={{ width: days.length * TIMELINE_CELL_WIDTH, height: TIMELINE_MONTH_ROW_HEIGHT }}>
               {monthLabels.map(({ date, i }) => (
                 <Text
                   key={date}
@@ -402,63 +448,63 @@ function MonthTimeline({
                 </Text>
               ))}
             </View>
-          </View>
-          <View style={{ flexDirection: "row", marginBottom: 4 }}>
-            <View style={{ width: TIMELINE_NAME_WIDTH }} />
-            {days.map((date) => (
-              <View
-                key={date}
-                style={{ width: TIMELINE_CELL_WIDTH, alignItems: "center" }}
-              >
-                <Text
-                  style={{
-                    color: date === today ? COLORS.primary : COLORS.muted,
-                    fontSize: 9,
-                    fontWeight: date === today ? "800" : "400",
-                  }}
-                >
-                  {date.slice(8, 10)}
-                </Text>
-              </View>
-            ))}
-          </View>
-          {rows.map(({ employee }) => (
             <View
-              key={employee.id}
-              style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}
+              style={{
+                flexDirection: "row",
+                height: TIMELINE_DAY_ROW_HEIGHT,
+                alignItems: "center",
+                marginBottom: TIMELINE_ROW_GAP,
+              }}
             >
-              <Text
-                style={{
-                  width: TIMELINE_NAME_WIDTH,
-                  color: COLORS.foreground,
-                  fontSize: 12,
-                  fontWeight: "700",
-                }}
-                numberOfLines={1}
-              >
-                {employee.name}
-              </Text>
               {days.map((date) => (
                 <View
                   key={date}
                   style={{ width: TIMELINE_CELL_WIDTH, alignItems: "center" }}
                 >
-                  <View
+                  <Text
                     style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 4,
-                      backgroundColor: cellColor(employee.id, date),
-                      borderWidth: cellColor(employee.id, date) === "transparent" ? 1 : 0,
-                      borderColor: COLORS.border,
+                      color: date === today ? COLORS.primary : COLORS.muted,
+                      fontSize: 9,
+                      fontWeight: date === today ? "800" : "400",
                     }}
-                  />
+                  >
+                    {date.slice(8, 10)}
+                  </Text>
                 </View>
               ))}
             </View>
-          ))}
-        </View>
-      </ScrollView>
+            {rows.map(({ employee }) => (
+              <View
+                key={employee.id}
+                style={{
+                  flexDirection: "row",
+                  height: TIMELINE_ROW_HEIGHT,
+                  alignItems: "center",
+                  marginBottom: TIMELINE_ROW_GAP,
+                }}
+              >
+                {days.map((date) => (
+                  <View
+                    key={date}
+                    style={{ width: TIMELINE_CELL_WIDTH, alignItems: "center" }}
+                  >
+                    <View
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: 4,
+                        backgroundColor: cellColor(employee.id, date),
+                        borderWidth: cellColor(employee.id, date) === "transparent" ? 1 : 0,
+                        borderColor: COLORS.border,
+                      }}
+                    />
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 }

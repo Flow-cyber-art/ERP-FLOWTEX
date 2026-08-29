@@ -21,12 +21,32 @@
 -- contexts/app-data.tsx do wyznaczenia stage_name raportowanych
 -- materiałów). Priorytet: jawny link, potem dopasowanie po nazwie.
 --
--- Uruchom PO 059_portal_klienta_zdjecia_i_notatki.sql (i po
--- 045_ujednolic_dopasowanie_materialu.sql, skąd bierze
--- normalize_material_name — jeśli już w bazie, nic dodatkowego nie
--- trzeba). Bezpieczne do wielokrotnego wklejenia. Jak uruchomić:
+-- Uruchom PO 059_portal_klienta_zdjecia_i_notatki.sql. Definicja
+-- normalize_material_name dopisana TU jawnie (create or replace, więc
+-- bezpieczna nawet jeśli 045_ujednolic_dopasowanie_materialu.sql nigdy
+-- nie zostało wklejone do tej bazy — funkcja get_public_build z niej
+-- korzysta). Bezpieczne do wielokrotnego wklejenia. Jak uruchomić:
 -- Supabase Dashboard -> SQL Editor -> wklej całość -> Run.
 -- ============================================================
+
+create or replace function normalize_material_name(p_name text)
+returns text
+language sql
+immutable
+as $$
+  select trim(
+    regexp_replace(
+      lower(
+        translate(
+          coalesce(p_name, ''),
+          'ĄąĆćĘęŃńÓóŚśŹźŻż',
+          'AaCcEeNnOoSsZzZz'
+        )
+      ),
+      '\s+', ' ', 'g'
+    )
+  );
+$$;
 
 create or replace function get_public_build(p_token uuid, p_pin text default null)
 returns json

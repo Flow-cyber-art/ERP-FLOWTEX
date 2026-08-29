@@ -12,6 +12,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
 import { HrSection } from "@/components/screens/hr-screen";
+import { AttendanceSection } from "@/components/screens/attendance-screen";
 import {
   LEAVE_STATUS_BADGE,
   LEAVE_TYPE_LABELS,
@@ -38,7 +39,7 @@ import {
 // tu (mimo że to też "konfiguracja firmy") — mają własną pozycję w
 // nawigacji (patrz app/(tabs)/index.tsx), bo na desktopie zasługują na
 // stałą widoczność, a na mobile dzielą miejsce z zakładką Magazyn.
-type AdminTab = "team" | "hours" | "leaves" | "accounts" | "settings";
+type AdminTab = "team" | "hours" | "attendance" | "leaves" | "accounts" | "settings";
 
 export function AdminScreen() {
   // "Ustawienia" pierwsza — najczęstszy powód wejścia w tę zakładkę jest
@@ -67,6 +68,7 @@ export function AdminScreen() {
               ["settings", "Ustawienia"],
               ["team", "Zespół i dniówka"],
               ["hours", "Rozliczenie godzin"],
+              ["attendance", "Obecności"],
               ["leaves", "HR — Urlopy"],
               ["accounts", "Konta logowania"],
             ] as const
@@ -101,6 +103,8 @@ export function AdminScreen() {
         <AdminTeamSection />
       ) : section === "hours" ? (
         <HrSection />
+      ) : section === "attendance" ? (
+        <AttendanceSection />
       ) : section === "leaves" ? (
         <AdminLeaveSection />
       ) : section === "accounts" ? (

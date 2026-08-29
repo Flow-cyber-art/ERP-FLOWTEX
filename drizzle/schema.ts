@@ -10,6 +10,7 @@ import {
   text,
   time,
   timestamp,
+  uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -243,6 +244,12 @@ export const builds = pgTable("builds", {
   plannedHoursPerDay: decimal("plannedHoursPerDay", { precision: 5, scale: 2 })
     .notNull()
     .default("8"),
+  // Portal Klienta (patrz supabase/sql/052_portal_klienta.sql) — publiczny,
+  // read-only podgląd postępu budowy przez token w URL / QR, bez logowania.
+  publicToken: uuid("public_token").defaultRandom().unique(),
+  publicAccessEnabled: boolean("public_access_enabled").notNull().default(false),
+  publicPinHash: text("public_pin_hash"),
+  showContractValueToClient: boolean("show_contract_value_to_client").notNull().default(false),
 });
 
 export const buildMaterials = pgTable(

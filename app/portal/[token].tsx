@@ -634,6 +634,7 @@ export default function PublicBuildPortal() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
+  const { width } = useWindowDimensions();
 
   const load = useCallback(
     async (pin?: string) => {
@@ -741,7 +742,6 @@ export default function PublicBuildPortal() {
   // technologia z prawej) tylko od szerokości, przy której mockup HTML
   // się na to przełącza (.grid, max-width:900px w oryginalnym CSS) —
   // węższe ekrany (telefon) zostają w jednej kolumnie.
-  const { width } = useWindowDimensions();
   const isWide = width >= 900;
 
   return (

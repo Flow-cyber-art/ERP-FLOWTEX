@@ -11,6 +11,7 @@ import {
   Field,
   formatPLN,
   IconBadge,
+  notify,
   pluralPL,
   QuantityStepper,
   ReportCard,
@@ -566,8 +567,15 @@ export function BuildsScreen() {
                     // Technologia opcjonalna: bez wyboru "Dalej" po prostu
                     // przechodzi do kolejnego kroku — dopiero wybór
                     // konkretnej pozycji + m² uruchamia realne przypisanie.
-                    if (!wizardTechId || !wizardAreaInput) {
+                    if (!wizardTechId) {
                       setWizardStep(3);
+                      return;
+                    }
+                    if (!Number(wizardAreaInput)) {
+                      notify(
+                        "Brak powierzchni",
+                        "Wpisz powierzchnię (m²), żeby przypisać wybraną technologię.",
+                      );
                       return;
                     }
                     setWizardAssigning(true);
@@ -1149,7 +1157,17 @@ export function BuildsScreen() {
                             <Button
                               label="Zapisz plan materiałowy"
                               onPress={async () => {
-                                if (!techPickerId || !Number(techAreaInput)) return;
+                                if (!techPickerId) {
+                                  notify("Brak technologii", "Wybierz technologię z listy powyżej.");
+                                  return;
+                                }
+                                if (!Number(techAreaInput)) {
+                                  notify(
+                                    "Brak powierzchni",
+                                    "Wpisz powierzchnię (m²), żeby wyliczyć plan materiałowy.",
+                                  );
+                                  return;
+                                }
                                 setTechBusy(true);
                                 try {
                                   await assignBuildTechnology(

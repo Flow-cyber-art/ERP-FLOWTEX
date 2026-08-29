@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
-import { Image, Modal, Platform, Pressable, Text, View } from "react-native";
+import { Image, Linking, Modal, Platform, Pressable, Text, View } from "react-native";
 
 import { Button, COLORS, Field, confirmAction, notify } from "@/components/report-ui";
 import {
@@ -141,6 +141,14 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
     );
   };
 
+  const openLink = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.open(portalUrl, "_blank", "noopener,noreferrer");
+    } else {
+      Linking.openURL(portalUrl);
+    }
+  };
+
   const copyLink = async () => {
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
@@ -227,11 +235,26 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
               </Text>
             </Pressable>
           </Modal>
-          <Text selectable style={{ color: COLORS.muted, fontSize: 12, textAlign: "center" }}>
-            {portalUrl}
-          </Text>
-          <View style={{ marginTop: 10 }}>
-            <Button label="Kopiuj link" secondary onPress={copyLink} />
+          <Pressable onPress={openLink}>
+            <Text
+              selectable
+              style={{
+                color: COLORS.primary ?? "#3B82F6",
+                fontSize: 12,
+                textAlign: "center",
+                textDecorationLine: "underline",
+              }}
+            >
+              {portalUrl}
+            </Text>
+          </Pressable>
+          <View style={{ marginTop: 10, flexDirection: "row", gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Button label="Otwórz portal" onPress={openLink} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Kopiuj link" secondary onPress={copyLink} />
+            </View>
           </View>
 
           <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 14 }}>

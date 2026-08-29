@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, {
@@ -736,9 +737,18 @@ export default function PublicBuildPortal() {
   const plannedEnd = formatDatePL(view.plannedEndDate);
   const startDate = formatDatePL(view.startDate);
   const lastUpdate = formatDatePL(view.lastUpdateDate);
+  // Dwukolumnowy układ (gauge/etapy z lewej, zdjęcia/aktualizacje/
+  // technologia z prawej) tylko od szerokości, przy której mockup HTML
+  // się na to przełącza (.grid, max-width:900px w oryginalnym CSS) —
+  // węższe ekrany (telefon) zostają w jednej kolumnie.
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: PC.bg }} contentContainerStyle={{ padding: 18, paddingTop: 40, paddingBottom: 48 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: PC.bg }} contentContainerStyle={{ padding: 18, paddingTop: 40, paddingBottom: 48, alignItems: "center" }}>
+      {/* max-width: 1180 wyśrodkowane — ten sam .wrap co w mockupie HTML,
+          strona nie ma się rozciągać na całą szerokość ekranu. */}
+      <View style={{ width: "100%", maxWidth: 1180 }}>
       {/* Pasek marki — uproszczony (bez position:sticky, niekrytyczne na
           jednorazowym podglądzie z linku/QR). */}
       <View
@@ -823,32 +833,38 @@ export default function PublicBuildPortal() {
         </View>
       </View>
 
-      <View style={{ marginTop: 26 }}>
-        <Card>
-          <Gauge view={view} />
-          {view.stages.length > 0 && (
-            <>
-              <View style={{ borderTopWidth: 1, borderTopColor: PC.line }} />
-              <StagesStepper stages={view.stages} />
-            </>
-          )}
-        </Card>
-
-        <PhotosCard view={view} />
-        <NotesCard notes={view.notes} />
-        <TechCard view={view} />
-
-        {view.contractValue != null && (
-          <Card>
-            <CardHeader title="Wartość kontraktu" />
-            <View style={{ padding: 20 }}>
-              <Text style={{ color: PC.txt, fontSize: 20, fontWeight: "800" }}>
-                {formatPLN(Number(view.contractValue))}
-              </Text>
-            </View>
+      <View style={{ marginTop: 26, flexDirection: isWide ? "row" : "column", gap: 18 }}>
+        <View style={{ flex: isWide ? 1.35 : undefined }}>
+          <Card style={{ marginBottom: 0 }}>
+            <Gauge view={view} />
+            {view.stages.length > 0 && (
+              <>
+                <View style={{ borderTopWidth: 1, borderTopColor: PC.line }} />
+                <StagesStepper stages={view.stages} />
+              </>
+            )}
           </Card>
-        )}
+        </View>
 
+        <View style={{ flex: isWide ? 1 : undefined }}>
+          <PhotosCard view={view} />
+          <NotesCard notes={view.notes} />
+          <TechCard view={view} />
+
+          {view.contractValue != null && (
+            <Card>
+              <CardHeader title="Wartość kontraktu" />
+              <View style={{ padding: 20 }}>
+                <Text style={{ color: PC.txt, fontSize: 20, fontWeight: "800" }}>
+                  {formatPLN(Number(view.contractValue))}
+                </Text>
+              </View>
+            </Card>
+          )}
+        </View>
+      </View>
+
+      <View style={{ marginTop: 14 }}>
         <View
           style={{
             marginTop: 4,
@@ -886,6 +902,7 @@ export default function PublicBuildPortal() {
             Widok generowany automatycznie z systemu ERP Flowtex
           </Text>
         </View>
+      </View>
       </View>
     </ScrollView>
   );

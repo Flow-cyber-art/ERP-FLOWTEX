@@ -104,9 +104,9 @@ begin
     select
       p.stage_name,
       min(p.id) as min_id,
-      sum(p."plannedQuantity" * coalesce(m."unitPrice", 0)) as planned_cost
+      sum(p.planned_quantity * coalesce(m."unitPrice", 0)) as planned_cost
     from build_material_plan p
-    left join materials m on m.id = p."linkedMaterialId"
+    left join materials m on m.id = p.linked_material_id
     where p.build_id = v_build.id
     group by p.stage_name
   ) s

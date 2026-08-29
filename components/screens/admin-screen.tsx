@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import {
   COLORS,
@@ -668,13 +668,54 @@ export function AdminTeamSection() {
 // pracy nie jest nigdzie śledzony) + wszystkie wnioski do wglądu/decyzji.
 // Zatwierdzanie samo w sobie może zrobić też Brygadzista (patrz
 // team-time-screen.tsx) — Admin dodatkowo widzi historię i ustawia pulę.
+// Tylko te dwa typy zużywają roczną pulę dni (polskie prawo pracy: urlop
+// na żądanie to 4 dni Z puli urlopu wypoczynkowego, nie osobna pula) —
+// ta sama reguła co w leave-screen.tsx (POOL_TYPES).
+const LEAVE_POOL_TYPES = ["wypoczynkowy", "na_zadanie"];
+const LEAVE_HISTORY_FILTERS = [
+  ["all", "Wszystkie"],
+  ["zatwierdzony", "Zatwierdzone"],
+  ["odrzucony", "Odrzucone"],
+  ["anulowany", "Anulowane"],
+] as const;
+
 export function AdminLeaveSection() {
   const { employees, leaveRequests, updateEmployeeLeaveDays } = useAppData();
   const [editingPoolId, setEditingPoolId] = useState<string | null>(null);
   const [poolInput, setPoolInput] = useState("");
+  const [historyFilter, setHistoryFilter] =
+    useState<(typeof LEAVE_HISTORY_FILTERS)[number][0]>("all");
+
+  const currentYear = new Date().getFullYear();
+
+  // Kolizje: dwóch lub więcej pracowników z zatwierdzonym/oczekującym
+  // urlopem nakładającym się w czasie — realny problem planistyczny
+  // (kto zostaje na budowie), nie tylko limit dni. Model apki to jedna
+  // brygada, więc kolizja jest firmowa, nie "w obrębie zespołu".
+  const collisions = useMemo(() => {
+    const relevant = leaveRequests.filter(
+      (r) => r.status === "zatwierdzony" || r.status === "oczekujący",
+    );
+    const found: { from: string; to: string; names: string[] }[] = [];
+    for (let i = 0; i < relevant.length; i++) {
+      for (let j = i + 1; j < relevant.length; j++) {
+        const a = relevant[i];
+        const b = relevant[j];
+        if (a.employeeId === b.employeeId) continue;
+        const from = a.dateFrom > b.dateFrom ? a.dateFrom : b.dateFrom;
+        const to = a.dateTo < b.dateTo ? a.dateTo : b.dateTo;
+        if (from > to) continue;
+        const nameA = employees.find((e) => e.id === a.employeeId)?.name || "Pracownik";
+        const nameB = employees.find((e) => e.id === b.employeeId)?.name || "Pracownik";
+        found.push({ from, to, names: [nameA, nameB] });
+      }
+    }
+    return found;
+  }, [leaveRequests, employees]);
 
   const decidedRequests = leaveRequests
     .filter((r) => r.status !== "oczekujący")
+    .filter((r) => historyFilter === "all" || r.status === historyFilter)
     .sort((a, b) => (b.decidedAt || "").localeCompare(a.decidedAt || ""))
     .slice(0, 20);
 
@@ -683,69 +724,165 @@ export function AdminLeaveSection() {
       <LeavePendingApprovals />
 
       <Text className="text-lg font-bold text-foreground mb-3">
-        Pula dni urlopowych
+        Pula urlopowa — {currentYear}
       </Text>
       <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
-        {employees.map((employee, i) => (
-          <View
-            key={employee.id}
-            style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: COLORS.border }}
-          >
-            <Pressable
-              onPress={() => {
-                if (editingPoolId === employee.id) {
-                  setEditingPoolId(null);
-                } else {
-                  setEditingPoolId(employee.id);
-                  setPoolInput(String(employee.leaveDaysPerYear ?? 26));
-                }
-              }}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-              }}
+        {employees.map((employee, i) => {
+          const limit = employee.leaveDaysPerYear ?? 26;
+          const used = leaveRequests
+            .filter(
+              (r) =>
+                r.employeeId === employee.id &&
+                r.status === "zatwierdzony" &&
+                LEAVE_POOL_TYPES.includes(r.type) &&
+                new Date(r.dateFrom).getFullYear() === currentYear,
+            )
+            .reduce((sum, r) => sum + r.businessDays, 0);
+          const remaining = Math.max(0, limit - used);
+          const usedFraction = limit > 0 ? Math.min(1, used / limit) : 0;
+          return (
+            <View
+              key={employee.id}
+              style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: COLORS.border }}
             >
-              <Text
-                style={{ flex: 1, color: COLORS.foreground, fontWeight: "700", fontSize: 14 }}
-                numberOfLines={1}
+              <Pressable
+                onPress={() => {
+                  if (editingPoolId === employee.id) {
+                    setEditingPoolId(null);
+                  } else {
+                    setEditingPoolId(employee.id);
+                    setPoolInput(String(limit));
+                  }
+                }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                }}
               >
-                {employee.name}
-              </Text>
-              <Text style={{ color: COLORS.muted, fontSize: 13 }}>
-                {employee.leaveDaysPerYear ?? 26} dni/rok
-              </Text>
-            </Pressable>
-            {editingPoolId === employee.id && (
-              <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-                <QuantityStepper value={poolInput} onChangeText={setPoolInput} step={1} />
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Button label="Anuluj" secondary onPress={() => setEditingPoolId(null)} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      label="Zapisz"
-                      onPress={() => {
-                        updateEmployeeLeaveDays(employee.id, Number(poolInput) || 0);
-                        setEditingPoolId(null);
+                <View style={{ flex: 1.4, minWidth: 0, paddingRight: 8 }}>
+                  <Text
+                    style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 14 }}
+                    numberOfLines={1}
+                  >
+                    {employee.name}
+                  </Text>
+                  <View
+                    style={{
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: COLORS.background,
+                      overflow: "hidden",
+                      marginTop: 6,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: `${Math.max(4, usedFraction * 100)}%`,
+                        height: "100%",
+                        backgroundColor:
+                          usedFraction >= 1 ? COLORS.warning : COLORS.primary,
+                        borderRadius: 3,
                       }}
                     />
                   </View>
+                  <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 4 }}>
+                    {used}/{limit} wykorzystane
+                  </Text>
                 </View>
-              </View>
-            )}
-          </View>
-        ))}
+                <Text
+                  style={{
+                    flex: 1,
+                    textAlign: "right",
+                    color: COLORS.foreground,
+                    fontWeight: "700",
+                    fontSize: 14,
+                  }}
+                >
+                  {remaining} dni
+                </Text>
+              </Pressable>
+              {editingPoolId === employee.id && (
+                <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+                  <Text className="text-xs text-muted uppercase mb-2">Pula dni na rok</Text>
+                  <QuantityStepper value={poolInput} onChangeText={setPoolInput} step={1} />
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Button label="Anuluj" secondary onPress={() => setEditingPoolId(null)} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label="Zapisz"
+                        onPress={() => {
+                          updateEmployeeLeaveDays(employee.id, Number(poolInput) || 0);
+                          setEditingPoolId(null);
+                        }}
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
+            </View>
+          );
+        })}
       </View>
 
-      <Text className="text-lg font-bold text-foreground mb-3">
-        Historia wniosków
-      </Text>
+      {collisions.length > 0 && (
+        <View
+          className="rounded-2xl p-4 mb-5"
+          style={{ backgroundColor: COLORS.warningBg, borderWidth: 1, borderColor: COLORS.warning }}
+        >
+          <Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 13, marginBottom: 4 }}>
+            ⚠ Nakładające się urlopy
+          </Text>
+          {collisions.map((c, i) => (
+            <Text key={i} style={{ color: COLORS.warning, fontSize: 12, marginTop: i > 0 ? 4 : 0 }}>
+              {c.from} – {c.to} · {c.names.join(" i ")} poza pracą jednocześnie
+            </Text>
+          ))}
+        </View>
+      )}
+
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 10,
+        }}
+      >
+        <Text className="text-lg font-bold text-foreground">Historia wniosków</Text>
+      </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+        {LEAVE_HISTORY_FILTERS.map(([value, label]) => (
+          <Pressable
+            key={value}
+            onPress={() => setHistoryFilter(value)}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: historyFilter === value ? COLORS.primary : COLORS.border,
+              backgroundColor: historyFilter === value ? COLORS.primary : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                color: historyFilter === value ? COLORS.background : COLORS.muted,
+                fontWeight: "700",
+                fontSize: 12,
+              }}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       {decidedRequests.length === 0 ? (
         <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
-          <Text className="text-sm text-muted">Brak rozpatrzonych wniosków.</Text>
+          <Text className="text-sm text-muted">Brak wniosków dla wybranego filtra.</Text>
         </View>
       ) : (
         decidedRequests.map((r) => {
@@ -758,10 +895,11 @@ export function AdminLeaveSection() {
             >
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text className="text-sm font-bold text-foreground">
-                  {employees.find((e) => e.id === r.employeeId)?.name || "Pracownik"}
+                  {employees.find((e) => e.id === r.employeeId)?.name || "Pracownik"} ·{" "}
+                  {LEAVE_TYPE_LABELS[r.type]}
                 </Text>
                 <Text className="text-xs text-muted mt-1">
-                  {LEAVE_TYPE_LABELS[r.type]} · {r.dateFrom}
+                  {r.dateFrom}
                   {r.dateFrom !== r.dateTo ? ` – ${r.dateTo}` : ""} · {r.businessDays} dni
                 </Text>
               </View>

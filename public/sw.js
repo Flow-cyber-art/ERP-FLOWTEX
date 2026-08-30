@@ -6,7 +6,7 @@
 // cache'owania). Nie trzeba jej ruszać przy zwykłych wdrożeniach appki —
 // od tego jest osobny mechanizm: app/version.json + BUILD_VERSION,
 // patrz lib/pwa/useVersionCheck.ts.
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";   // było "v1";
 const CACHE_NAME = `budowy-static-${CACHE_VERSION}`;
 
 // Ścieżki, które NIGDY nie mają trafić do cache'a — zawsze świeże z

@@ -28,11 +28,19 @@ export function useRegisterWebPush(role: "Admin" | "Brygadzista" | "Pracownik") 
     if (role !== "Admin") return;
     if (Platform.OS !== "web") return;
     if (typeof window === "undefined" || typeof navigator === "undefined") return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      // eslint-disable-next-line no-console
+      console.warn("[web-push] przeglądarka nie wspiera Push API (albo to zwykła karta Safari, nie PWA dodane do ekranu głównego).");
+      return;
+    }
     if (typeof Notification === "undefined") return;
 
     const vapidPublicKey = Constants.expoConfig?.extra?.vapidPublicKey as string | undefined;
-    if (!vapidPublicKey) return;
+    if (!vapidPublicKey) {
+      // eslint-disable-next-line no-console
+      console.warn("[web-push] brak vapidPublicKey w Constants.expoConfig.extra — build appki nie ma najnowszej konfiguracji.");
+      return;
+    }
 
     let cancelled = false;
 
@@ -58,10 +66,17 @@ export function useRegisterWebPush(role: "Admin" | "Brygadzista" | "Pracownik") 
           endpoint: string;
           keys?: { p256dh?: string; auth?: string };
         });
-      } catch {
+        // eslint-disable-next-line no-console
+        console.info("[web-push] subskrypcja zarejestrowana.");
+      } catch (err) {
         // Brak uprawnień, przeglądarka niewspierana, strona nie jest
         // zainstalowana jako PWA na iOS itd. — powiadomienia są
-        // usprawnieniem, nigdy nie mogą wywrócić reszty apki.
+        // usprawnieniem, nigdy nie mogą wywrócić reszty apki. Logujemy
+        // do konsoli (nie do UI), żeby dało się to zdiagnozować zdalnie
+        // (Safari -> Ustawienia -> Zaawansowane -> Web Inspector, albo
+        // podłączenie do Maca) bez przebudowywania appki za każdym razem.
+        // eslint-disable-next-line no-console
+        console.warn("[web-push] rejestracja nie powiodła się:", err);
       }
     })();
 

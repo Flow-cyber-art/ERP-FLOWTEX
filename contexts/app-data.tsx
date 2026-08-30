@@ -155,6 +155,9 @@ export type OrderCartItem = {
   quantity: number;
   unit: string;
   materialId?: string;
+  // Stan minimalny NOWEGO materiału (brak materialId) — patrz
+  // CreateOrderInput.newMaterialMin w lib/data/orders.ts.
+  newMaterialMin?: number;
 };
 
 export type SavedReport = {
@@ -2251,6 +2254,7 @@ function useAppDataState(
           quantity: item.quantity,
           unit: item.unit,
           batchId,
+          newMaterialMin: item.newMaterialMin,
         });
       }
       await invalidate("orders");

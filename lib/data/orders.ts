@@ -45,6 +45,14 @@ export type CreateOrderInput = {
   // submitOrderCart w contexts/app-data.tsx. Pojedyncze zamówienia
   // (createOrderFromShortage) go nie przekazują.
   batchId?: string;
+  // Stan minimalny NOWEGO materiału (materialId brak — patrz
+  // "To nowy materiał — dodaj do zamówienia" w orders-screen.tsx).
+  // Materiał w magazynie powstaje dopiero przy przyjęciu dostawy
+  // (receive_material_order, 065_stan_minimalny_nowego_materialu.sql),
+  // więc wartość trzeba przenieść przez zamówienie; brak (undefined) =
+  // fallback 5 po stronie bazy. Bez znaczenia dla zamówień materiału już
+  // istniejącego w magazynie (materiał ma już swój `min`).
+  newMaterialMin?: number;
 };
 
 export async function createOrder(input: CreateOrderInput): Promise<void> {
@@ -54,6 +62,7 @@ export async function createOrder(input: CreateOrderInput): Promise<void> {
     quantity: input.quantity,
     unit: input.unit,
     batchId: input.batchId ?? null,
+    new_material_min: input.materialId ? null : (input.newMaterialMin ?? null),
     status: "do realizacji" satisfies OrderStatus,
   });
   if (error) throw new Error(error.message);

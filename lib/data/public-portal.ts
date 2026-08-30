@@ -22,10 +22,13 @@ export type PublicPortalSettings = {
   // 063_portal_klienta_podsumowanie_ai.sql. null = jeszcze niewygenerowane.
   aiClientSummary: string | null;
   aiClientSummaryGeneratedAt: string | null;
+  // Czy klient może sam wygenerować raport AI z przycisku w publicznym
+  // portalu — patrz 064_portal_klienta_klient_generuje_raport_ai.sql.
+  allowClientAiSummary: boolean;
 };
 
 const SETTINGS_SELECT =
-  "publicToken:public_token, publicAccessEnabled:public_access_enabled, publicPinHash:public_pin_hash, showContractValueToClient:show_contract_value_to_client, showPhotosToClient:show_photos_to_client, showNotesToClient:show_notes_to_client, aiClientSummary:ai_client_summary, aiClientSummaryGeneratedAt:ai_client_summary_generated_at";
+  "publicToken:public_token, publicAccessEnabled:public_access_enabled, publicPinHash:public_pin_hash, showContractValueToClient:show_contract_value_to_client, showPhotosToClient:show_photos_to_client, showNotesToClient:show_notes_to_client, aiClientSummary:ai_client_summary, aiClientSummaryGeneratedAt:ai_client_summary_generated_at, allowClientAiSummary:allow_client_ai_summary";
 
 export async function getPublicPortalSettings(buildId: number): Promise<PublicPortalSettings> {
   const { data, error } = await supabase
@@ -43,6 +46,7 @@ export async function getPublicPortalSettings(buildId: number): Promise<PublicPo
     showNotesToClient: boolean;
     aiClientSummary: string | null;
     aiClientSummaryGeneratedAt: string | null;
+    allowClientAiSummary: boolean;
   };
   return {
     publicToken: row.publicToken,
@@ -53,7 +57,16 @@ export async function getPublicPortalSettings(buildId: number): Promise<PublicPo
     showNotesToClient: row.showNotesToClient,
     aiClientSummary: row.aiClientSummary,
     aiClientSummaryGeneratedAt: row.aiClientSummaryGeneratedAt,
+    allowClientAiSummary: row.allowClientAiSummary,
   };
+}
+
+export async function setAllowClientAiSummary(buildId: number, allow: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("builds")
+    .update({ allow_client_ai_summary: allow })
+    .eq("id", buildId);
+  if (error) throw new Error(error.message);
 }
 
 export async function setPublicAccessEnabled(buildId: number, enabled: boolean): Promise<void> {
@@ -145,6 +158,9 @@ export type PublicBuildView = {
   // Zbiorcze podsumowanie AI całej budowy — pokazywane nad listą notatek
   // dziennych, null gdy jeszcze niewygenerowane lub notatki wyłączone.
   aiSummary: string | null;
+  // Pokazuje przycisk "Wygeneruj raport z budowy AI" klientowi w portalu
+  // — patrz 064_portal_klienta_klient_generuje_raport_ai.sql.
+  allowClientAiSummary: boolean;
   lastUpdateDate: string | null;
   photosUrl: string | null;
   contractValue: string | null;

@@ -76,10 +76,17 @@ export function OrdersScreen() {
   // Reset przy każdej zmianie nazwy (setOrderMaterialName), żeby literówka
   // poprawiona na coś innego wymagała ponownego potwierdzenia.
   const [orderConfirmedNewMaterial, setOrderConfirmedNewMaterial] = useState(false);
+  // Stan minimalny NOWEGO materiału — pytamy o niego tutaj (nie dopiero
+  // przy przyjęciu dostawy), bo to jedyny moment, w którym ktoś w ogóle
+  // świadomie zakłada ten materiał. Bez tego receive_material_order
+  // wstawiał sztywne 5 dla każdego nowego materiału (patrz
+  // 065_stan_minimalny_nowego_materialu.sql).
+  const [orderMinStock, setOrderMinStock] = useState("");
   const orderMaterialName = orderMaterialNameRaw;
   const setOrderMaterialName = (name: string) => {
     setOrderMaterialNameRaw(name);
     setOrderConfirmedNewMaterial(false);
+    setOrderMinStock("");
   };
   // Koszyk zamówienia ręcznego ("Zamów materiał spoza listy") — pozycje
   // zbierane lokalnie, zanim cokolwiek trafi do bazy. Dopiero finalne
@@ -108,11 +115,14 @@ export function OrdersScreen() {
         quantity,
         unit: matched?.unit || orderUnit || "szt.",
         materialId: matched?.id,
+        newMaterialMin:
+          !matched && orderMinStock.trim() ? Number(orderMinStock) : undefined,
       },
     ]);
     setOrderMaterialName("");
     setOrderQuantity("");
     setOrderUnit("szt.");
+    setOrderMinStock("");
   };
   // Jawne potwierdzenie "materiału nie ma na liście, dodaj go jako nowy" —
   // pokazywane w UI tylko gdy wpisana nazwa nie ma jednoznacznego
@@ -472,6 +482,19 @@ export function OrdersScreen() {
                 value={orderUnit}
                 onChangeText={setOrderUnit}
                 style={{ marginTop: 8 }}
+              />
+            </View>
+          )}
+          {!exactMaterialMatch && orderConfirmedNewMaterial && (
+            <View style={{ marginTop: 10 }}>
+              <Text className="text-xs text-muted uppercase mb-2">
+                Stan minimalny ({orderUnit || "szt."})
+              </Text>
+              <Field
+                placeholder="np. 5 — poniżej tego stanu pojawi się alert braku"
+                value={orderMinStock}
+                onChangeText={setOrderMinStock}
+                keyboardType="decimal-pad"
               />
             </View>
           )}

@@ -18,7 +18,10 @@ import {
   updateBuildBasicInfo as updateBuildBasicInfoRemote,
   updateBuildLaborPlan as updateBuildLaborPlanRemote,
   updateBuildPhotosUrl as updateBuildPhotosUrlRemote,
+  listBuildStageCompletions,
+  setBuildStageCompleted as setBuildStageCompletedRemote,
   type CloseBuildReturnItem,
+  type BuildStageCompletionRow,
 } from "@/lib/data/builds";
 import {
   adjustMaterialStock as adjustMaterialStockRemote,
@@ -606,6 +609,18 @@ function useAppDataState(
     enabled: tabDataEnabled(["builds", "report", "settlement"]),
   });
   const buildMaterialPlans = (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[];
+  // Etapy odznaczone przez Brygadzistę jako zakończone (checkbox w
+  // raporcie) — niezależnie od realnego zużycia materiału, portal Klienta
+  // pokazuje dla takiego etapu 100% (patrz supabase/sql/071_...).
+  const buildStageCompletionsQuery = useQuery({
+    queryKey: ["buildStageCompletions", "list"],
+    queryFn: listBuildStageCompletions,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    enabled: tabDataEnabled(["builds", "report", "settlement"]),
+  });
+  const buildStageCompletions = (buildStageCompletionsQuery.data ?? []) as BuildStageCompletionRow[];
   // Zamówienia jako nagłówek+pozycje (Faza 3) — dla WSZYSTKICH budów naraz,
   // filtrowane po buildId w UI, ten sam wzorzec co plan materiałowy wyżej.
   // Budowy (generowanie/przyjęcie z planu) i Zamówienia (lista/przyjęcie).
@@ -997,6 +1012,10 @@ function useAppDataState(
   const updateBuildPhotosUrlMutation = useMutation({
     mutationFn: (vars: { buildId: number; photosUrl: string }) =>
       updateBuildPhotosUrlRemote(vars.buildId, vars.photosUrl),
+  });
+  const setBuildStageCompletedMutation = useMutation({
+    mutationFn: (vars: { buildId: number; stageName: string; completed: boolean; completedBy?: string | null }) =>
+      setBuildStageCompletedRemote(vars.buildId, vars.stageName, vars.completed, vars.completedBy),
   });
   const assignTechnologyMutation = useMutation({
     mutationFn: (vars: { buildId: number; technologyId: number; areaM2: number }) =>
@@ -2595,6 +2614,25 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać linku do zdjęć.");
     }
   };
+  // Brygadzista odznacza checkboxem zakończenie etapu technologii —
+  // niezależnie od procentu zużycia materiału (patrz komentarz przy
+  // buildStageCompletionsQuery). Odznaczenie (completed=false) cofa
+  // zakończenie, gdyby brygadzista kliknął przez pomyłkę.
+  const setStageCompleted = async (buildId: string, stageName: string, completed: boolean) => {
+    const numericId = Number(buildId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await setBuildStageCompletedMutation.mutateAsync({
+        buildId: numericId,
+        stageName,
+        completed,
+        completedBy: myProfileId ?? null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["buildStageCompletions", "list"] });
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać zakończenia etapu.");
+    }
+  };
   return {
     tab,
     devRole,
@@ -2614,6 +2652,7 @@ function useAppDataState(
     buildTechnologySnapshots: (buildTechnologySnapshotsQuery.data ??
       []) as BuildTechnologySnapshotRow[],
     buildMaterialPlans,
+    buildStageCompletions,
     assignBuildTechnology,
     buildOrders: (buildOrdersQuery.data ?? []) as BuildOrderRow[],
     generateOrderFromPlan,
@@ -2698,6 +2737,7 @@ function useAppDataState(
     closeBuild,
     reopenBuild,
     updateBuildPhotosUrl,
+    setStageCompleted,
     setEmployees,
     setTimeEntries,
     setHrSaved,

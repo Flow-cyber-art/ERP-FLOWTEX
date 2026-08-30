@@ -60,6 +60,8 @@ export function ReportScreen() {
     activeBuild,
     buildAssignments,
     buildMaterialPlans,
+    buildStageCompletions,
+    setStageCompleted,
     saveDailyReport,
     getReportDefaults,
     addPersonToDraft,
@@ -535,15 +537,21 @@ export function ReportScreen() {
 
             {/* Etapy technologii (Faza 6) — rozwijana lista, materiały etapu
                 z pełnego planu (nie tylko już dostarczone), plan vs
-                zużyto dzisiaj. Bez oznaczania "zakończenia" etapu — to
-                raportowanie zużycia, nie postępu; budowę zamyka Admin
-                (Faza 9). */}
+                zużyto dzisiaj. Zakończenie etapu Brygadzista potwierdza
+                checkboxem (build_stage_completions, supabase/sql/071_...)
+                niezależnie od procentowego rozliczenia materiału — Portal
+                Klienta pokazuje wtedy dla etapu 100% i przechodzi na
+                kolejny (patrz get_public_build). Rząd nadal rozwija się po
+                dotknięciu paska z nazwą etapu. */}
             {stageOrder.length > 0 && (
               <View className="border-t border-border p-4">
                 <Text className="text-xs text-muted uppercase mb-2">Technologia</Text>
                 {stageOrder.map((stageName) => {
                   const stagePlan = planByStage.get(stageName) ?? [];
                   const isCollapsed = collapsedStages[stageName] ?? true;
+                  const isStageCompleted = buildStageCompletions.some(
+                    (c) => c.buildId === Number(activeBuild?.id) && c.stageName === stageName,
+                  );
                   return (
                     <View
                       key={stageName}
@@ -570,9 +578,28 @@ export function ReportScreen() {
                         <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
                           {stageName}
                         </Text>
-                        <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                          {isCollapsed ? "▼" : "▲"}
-                        </Text>
+                        <Pressable
+                          disabled={reportApproved || !activeBuild}
+                          onPress={() => {
+                            if (!activeBuild) return;
+                            setStageCompleted(activeBuild.id, stageName, !isStageCompleted);
+                          }}
+                          hitSlop={8}
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 6,
+                            borderWidth: 2,
+                            borderColor: isStageCompleted ? COLORS.primary : COLORS.border,
+                            backgroundColor: isStageCompleted ? COLORS.primary : "transparent",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          {isStageCompleted && (
+                            <MaterialIcons name="check" size={16} color={COLORS.background} />
+                          )}
+                        </Pressable>
                       </Pressable>
 
                       {!isCollapsed && (

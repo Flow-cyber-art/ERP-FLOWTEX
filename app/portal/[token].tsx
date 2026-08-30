@@ -376,9 +376,6 @@ function Gauge({ view }: { view: PublicBuildView }) {
               <Text style={{ color: PC.txt3, fontSize: 11, marginTop: 2, letterSpacing: 1 }}>
                 ETAP
               </Text>
-              <Text style={{ color: PC.accent2, fontSize: 12, marginTop: 4, fontWeight: "600" }}>
-                {Math.round(percent)}% całości zlecenia
-              </Text>
             </>
           ) : (
             <>
@@ -393,7 +390,20 @@ function Gauge({ view }: { view: PublicBuildView }) {
         </View>
       </View>
 
-      <View style={{ alignItems: "center", marginTop: 16 }}>
+      {view.stages.length > 0 && (
+        <Text
+          style={{
+            color: PC.accent2,
+            fontSize: 17,
+            marginTop: 14,
+            fontWeight: "700",
+          }}
+        >
+          {Math.round(percent)}% całości zlecenia
+        </Text>
+      )}
+
+      <View style={{ alignItems: "center", marginTop: 34 }}>
         {currentStage ? (
           <>
             <Text style={{ color: PC.txt3, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase" }}>

@@ -1,10 +1,19 @@
 // Oczyszczona wersja notatki brygadzisty z JEDNEGO raportu dziennego —
-// przycisk przy raporcie w panelu Admina. Surowa `reports.note` bywa
-// skrótowa, napisana pod presją czasu, czasem emocjonalna albo wspomina
-// rzeczy, których zleceniodawca nie powinien czytać wprost (spięcia w
-// ekipie, problemy personalne). Admin nadal widzi surowy tekst — ta
-// funkcja generuje DRUGĄ wersję (reports.client_note), przeznaczoną
-// wyłącznie do portalu klienta (patrz 063_portal_klienta_podsumowanie_ai.sql).
+// wywoływane AUTOMATYCZNIE przy zatwierdzeniu raportu przez Admina
+// (patrz approveReport w contexts/app-data.tsx), nie ręcznym przyciskiem.
+// Surowa `reports.note` bywa skrótowa, napisana pod presją czasu, czasem
+// emocjonalna albo wspomina rzeczy, których zleceniodawca nie powinien
+// czytać wprost (spięcia w ekipie, problemy personalne). Admin nadal
+// widzi surowy tekst w ReportCard — ta funkcja generuje DRUGĄ wersję
+// (reports.client_note), przeznaczoną wyłącznie do portalu klienta
+// (patrz 063_portal_klienta_podsumowanie_ai.sql).
+//
+// Generowanie jest bramkowane przez builds.show_notes_to_client: ten sam
+// przełącznik "Udostępnij notatki klientowi" w panelu budowy decyduje
+// zarówno o WIDOCZNOŚCI notatek w portalu, jak i o tym, czy AI w ogóle
+// ma je tworzyć — gdy wyłączony, ta funkcja nic nie robi (zwraca
+// `skipped: true`), żeby nie zużywać wywołań Gemini na budowy, których
+// klient i tak nie zobaczy.
 //
 // Dla zbiorczego podsumowania całej budowy (wszystkie dni naraz) patrz
 // supabase/functions/generate-client-summary — osobna funkcja, osobny
@@ -90,12 +99,17 @@ Deno.serve(async (req) => {
 
   const { data: report, error: reportError } = await admin
     .from("reports")
-    .select("id, date, note")
+    .select("id, date, note, buildId, builds(show_notes_to_client)")
     .eq("id", reportId)
     .maybeSingle();
   if (reportError || !report) return json({ error: "Nie znaleziono raportu." }, 404);
+
+  const showNotesToClient = (report as any).builds?.show_notes_to_client === true;
+  if (!showNotesToClient) {
+    return json({ skipped: true, reason: "Udostępnianie notatek klientowi jest wyłączone dla tej budowy." });
+  }
   if (!report.note || !report.note.trim()) {
-    return json({ error: "Ten raport nie ma notatki brygadzisty do przetworzenia." }, 400);
+    return json({ skipped: true, reason: "Ten raport nie ma notatki brygadzisty do przetworzenia." });
   }
 
   const userPrompt = `Data raportu: ${report.date}.

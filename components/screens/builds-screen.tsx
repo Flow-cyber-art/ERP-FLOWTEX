@@ -21,7 +21,6 @@ import {
 } from "@/components/report-ui";
 import { useAppData, type NewBuildInput } from "@/contexts/app-data";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
-import { generateClientSummary } from "@/lib/data/ai-summary";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { BuildPortalSection } from "@/components/build-portal-section";
 import { todayISO } from "@/components/report-ui";
@@ -93,7 +92,6 @@ export function BuildsScreen() {
     saveBuild,
     updateBuildBasicInfo,
     approveReport,
-    generateReportClientNoteAction,
     closeBuild,
     reopenBuild,
     updateBuildPhotosUrl,
@@ -173,13 +171,6 @@ export function BuildsScreen() {
   // folder) na czas wywołania edge function drive-photos.
   const [creatingDriveFolderId, setCreatingDriveFolderId] = useState<string | null>(null);
   const [driveFolderError, setDriveFolderError] = useState<string | null>(null);
-  // Notatka dla klienta (Gemini) per pojedynczy raport dzienny —
-  // generowana na żądanie przyciskiem w ReportCard (sekcja "Raporty"
-  // budowy); zbiorcze podsumowanie CAŁEJ budowy ma osobny stan w
-  // BuildPortalSection. `generatingSummaryId` to id raportu aktualnie
-  // przetwarzanego (blokada podwójnego kliknięcia).
-  const [generatingSummaryId, setGeneratingSummaryId] = useState<string | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
   // Łączna liczba zdjęć w folderze, do nagłówka "ZDJĘCIA (n)" — zgłaszana
   // przez BuildPhotosSection (onCountChange), które i tak już ją pobiera.
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
@@ -2678,11 +2669,6 @@ export function BuildsScreen() {
 
           {reportsExpanded && (
             <View style={{ marginTop: 12 }}>
-              {summaryError && (
-                <Text style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
-                  {summaryError}
-                </Text>
-              )}
               {buildReports.length === 0 ? (
                 <View className="items-center py-4">
                   <IconBadge name="description" size={18} badgeSize={36} />
@@ -2707,20 +2693,7 @@ export function BuildsScreen() {
                     }
                     onApprove={() => approveReport(report.id)}
                     showBuildInfo={false}
-                    onGenerateClientNote={() => {
-                      setGeneratingSummaryId(report.id);
-                      setSummaryError(null);
-                      generateReportClientNoteAction(report.id)
-                        .catch((error: unknown) =>
-                          setSummaryError(
-                            error instanceof Error
-                              ? error.message
-                              : "Nie udało się wygenerować notatki dla klienta.",
-                          ),
-                        )
-                        .finally(() => setGeneratingSummaryId(null));
-                    }}
-                    generatingClientNote={generatingSummaryId === report.id}
+                    showClientNoteStatus
                   />
                 ))
               )}

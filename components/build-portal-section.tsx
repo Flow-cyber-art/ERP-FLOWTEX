@@ -349,6 +349,12 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
                 onPress={toggleNotes}
               />
             </View>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
+              Włączone: przy każdym zatwierdzeniu raportu AI automatycznie generuje neutralną
+              notatkę dla klienta (bez kwot i danych pracowników) z notatki brygadzisty — klient
+              widzi tylko notatkę z ostatniego dnia. Wyłączone: AI nic nie generuje, klient nie
+              widzi żadnych notatek dziennych.
+            </Text>
           </View>
 
           <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 14 }}>

@@ -2477,18 +2477,24 @@ function useAppDataState(
             error,
             "Zatwierdzenie zapisało się lokalnie, ale nie wysłało do serwera — spróbuj ponownie, gdy będzie sieć.",
           ),
+        // Notatka dla klienta (Gemini) jest AUTOMATYCZNA, nie ma osobnego
+        // przycisku — generowana od razu po zatwierdzeniu raportu. Edge
+        // Function sama sprawdza builds.show_notes_to_client i nic nie
+        // robi, gdy przełącznik "Udostępnij notatki klientowi" jest
+        // wyłączony dla tej budowy, więc nie trzeba tego warunku
+        // powtarzać tutaj. Best-effort: błąd Gemini (limit, przejściowa
+        // awaria) nie może zablokować ani cofnąć samego zatwierdzenia
+        // raportu, dlatego cichy catch — admin i tak widzi status notatki
+        // w ReportCard i może zatwierdzić ponownie po stronie Gemini.
+        onSuccess: () => {
+          generateReportClientNote(Number(reportId))
+            .catch(() => undefined)
+            .finally(() => {
+              queryClient.invalidateQueries({ queryKey: ["reports", "list"] });
+            });
+        },
       },
     );
-  };
-  // Generuje (Gemini) oczyszczoną, neutralną wersję notatki brygadzisty
-  // TEGO JEDNEGO raportu, przeznaczoną wyłącznie do portalu klienta —
-  // patrz supabase/functions/generate-report-note. Surowy report.note
-  // zostaje niezmieniony (widoczny tylko Adminowi w ReportCard).
-  const generateReportClientNoteAction = async (reportId: string) => {
-    const numericId = Number(reportId);
-    if (Number.isNaN(numericId)) return;
-    await generateReportClientNote(numericId);
-    await queryClient.invalidateQueries({ queryKey: ["reports", "list"] });
   };
   // Zamyka budowę i zapisuje snapshot finalnego rozliczenia (godziny,
   // materiały plan/zużycie, koszty dodatkowe). Wymaga, żeby wszystkie
@@ -2643,7 +2649,6 @@ function useAppDataState(
     startNewReport,
     getReportDefaults,
     approveReport,
-    generateReportClientNoteAction,
     closeBuild,
     reopenBuild,
     updateBuildPhotosUrl,

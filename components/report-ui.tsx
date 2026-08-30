@@ -1333,8 +1333,7 @@ const ReportCard = ({
   onToggle,
   onApprove,
   showBuildInfo = true,
-  onGenerateClientNote,
-  generatingClientNote = false,
+  showClientNoteStatus = false,
 }: {
   report: ReportCardData;
   build?: Build;
@@ -1345,11 +1344,11 @@ const ReportCard = ({
   onToggle: () => void;
   onApprove: () => void;
   showBuildInfo?: boolean;
-  // Obecność tego callbacku decyduje o pokazaniu sekcji "dla klienta" —
-  // przekazywany tylko z widoku Admina (builds-screen.tsx), nie z "Moje
-  // raporty" brygadzisty, który tej karty w ogóle nie widzi z przyciskiem.
-  onGenerateClientNote?: () => void;
-  generatingClientNote?: boolean;
+  // Pokazuje status notatki dla klienta (generowanej automatycznie przy
+  // zatwierdzeniu raportu, patrz approveReport w contexts/app-data.tsx) —
+  // wyłącznie w widoku Admina (builds-screen.tsx), nie w "Moje raporty"
+  // brygadzisty, gdzie ta informacja nie ma znaczenia.
+  showClientNoteStatus?: boolean;
 }) => {
   const approved = report.status === "approved";
   const planned = assignments.filter((a) => a.buildId === build?.id);
@@ -1675,7 +1674,7 @@ const ReportCard = ({
             </View>
           )}
 
-          {onGenerateClientNote && report.note && (
+          {showClientNoteStatus && report.note && (
             <View
               style={{
                 marginTop: 12,
@@ -1695,33 +1694,19 @@ const ReportCard = ({
               </Text>
               {report.clientNote === undefined ? (
                 <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
-                  Jeszcze nie wygenerowano — klient nie zobaczy notatki tego dnia, dopóki nie
-                  utworzysz oczyszczonej wersji.
+                  Brak — generowana automatycznie przy zatwierdzeniu raportu, tylko gdy
+                  &quot;Udostępnij notatki klientowi&quot; jest włączone dla tej budowy.
                 </Text>
               ) : report.clientNote === null ? (
                 <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
-                  Wygenerowano, ale notatka nie zawierała nic nadającego się do pokazania klientowi
-                  — ten dzień nie pojawi się w portalu.
+                  Wygenerowano automatycznie, ale notatka nie zawierała nic nadającego się do
+                  pokazania klientowi — ten dzień nie pojawi się w portalu.
                 </Text>
               ) : (
                 <Text style={{ color: COLORS.foreground, fontSize: 13, marginTop: 6 }}>
                   {report.clientNote}
                 </Text>
               )}
-              <View style={{ marginTop: 10 }}>
-                <Button
-                  label={
-                    generatingClientNote
-                      ? "Generowanie…"
-                      : report.clientNote !== undefined
-                        ? "Wygeneruj ponownie"
-                        : "Wygeneruj notatkę dla klienta"
-                  }
-                  secondary
-                  disabled={generatingClientNote}
-                  onPress={onGenerateClientNote}
-                />
-              </View>
             </View>
           )}
 

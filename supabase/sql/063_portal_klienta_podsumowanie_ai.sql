@@ -9,16 +9,23 @@
 -- mechanizmy zastępują to, czym karmimy portal klienta:
 --
 --   1. reports.client_note — oczyszczona, neutralna wersja notatki
---      JEDNEGO konkretnego dnia, generowana na żądanie Admina przyciskiem
---      przy danym raporcie (Edge Function generate-report-note). Portal
---      klienta pokazuje listę tych wpisów dzień po dniu (zamiast surowych
---      reports.note jak w 059_portal_klienta_zdjecia_i_notatki.sql).
+--      NAJNOWSZEGO zatwierdzonego dnia, generowana AUTOMATYCZNIE przy
+--      zatwierdzeniu raportu przez Admina (Edge Function
+--      generate-report-note, wywoływana z approveReport w
+--      contexts/app-data.tsx) — bez osobnego przycisku. Ten sam
+--      przełącznik builds.show_notes_to_client ("Udostępnij notatki
+--      klientowi" w panelu budowy) decyduje zarówno o WIDOCZNOŚCI w
+--      portalu, jak i o tym, czy AI w ogóle ma generować — gdy wyłączony,
+--      Edge Function nic nie robi. Portal klienta pokazuje WYŁĄCZNIE
+--      notatkę z ostatniego dnia, nie historię (zamiast listy do 10
+--      wpisów jak w 059_portal_klienta_zdjecia_i_notatki.sql).
 --
 --   2. builds.ai_client_summary — skonsolidowane podsumowanie CAŁEJ
---      budowy (wszystkie zatwierdzone raporty naraz), generowane
+--      budowy (wszystkie zatwierdzone raporty naraz), generowane RĘCZNIE
 --      przyciskiem "Wygeneruj raport z budowy AI" w sekcji Portalu
---      Klienta (Edge Function generate-client-summary). Portal klienta
---      pokazuje je jako jeden nadrzędny tekst nad listą notatek dziennych.
+--      Klienta (Edge Function generate-client-summary) — to jedyny
+--      przycisk generowania w całej tej funkcjonalności. Portal klienta
+--      pokazuje je jako jeden nadrzędny tekst nad notatką z ostatniego dnia.
 --
 -- Oba teksty generowane przez Gemini z twardą instrukcją pomijania kwot,
 -- kosztów i danych osobowych pracowników — patrz komentarze w obu Edge
@@ -172,10 +179,12 @@ begin
     v_photos := '[]'::json;
   end if;
 
-  -- Notatki dla klienta — WYŁĄCZNIE wersje oczyszczone przez AI
-  -- (reports.client_note per dzień), nigdy surowe reports.note.
-  -- Raport bez wygenerowanej jeszcze wersji dla klienta jest pomijany
-  -- (nic nie pokazujemy zamiast pokazywać surowy tekst brygadzisty).
+  -- Notatka dla klienta — WYŁĄCZNIE wersja oczyszczona przez AI
+  -- (reports.client_note), nigdy surowe reports.note, i WYŁĄCZNIE
+  -- najnowszy dzień (nie historia) — jedna pozycja w tablicy, żeby front
+  -- (NotesCard) nie musiał się zmieniać. Raport bez jeszcze wygenerowanej
+  -- wersji dla klienta jest pomijany (nic nie pokazujemy zamiast surowego
+  -- tekstu brygadzisty).
   if v_build.show_notes_to_client then
     select json_agg(
       json_build_object('date', n.date, 'note', n.client_note) order by n.date desc
@@ -186,7 +195,7 @@ begin
       where "buildId" = v_build.id and status = 'approved'
         and client_note is not null and length(trim(client_note)) > 0
       order by date desc
-      limit 10
+      limit 1
     ) n;
   else
     v_notes := '[]'::json;

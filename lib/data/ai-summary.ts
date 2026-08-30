@@ -18,6 +18,23 @@ export async function generateClientSummary(
   return data as { summary: string; generatedAt: string };
 }
 
+/**
+ * Wariant wołany z publicznego portalu klienta (bez sesji) — dozwolony
+ * tylko gdy Admin włączył "Klient może wygenerować raport AI" dla danej
+ * budowy (builds.allow_client_ai_summary), co Edge Function sama
+ * sprawdza po tokenie portalu.
+ */
+export async function generateClientSummaryPublic(
+  publicToken: string,
+): Promise<{ summary: string; generatedAt: string }> {
+  const { data, error } = await supabase.functions.invoke("generate-client-summary", {
+    body: { publicToken },
+  });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  return data as { summary: string; generatedAt: string };
+}
+
 export async function generateReportClientNote(
   reportId: number,
 ): Promise<{ clientNote: string | null; generatedAt: string }> {

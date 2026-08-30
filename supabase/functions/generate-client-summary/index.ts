@@ -16,6 +16,17 @@
 // neutralny ton — model ma instrukcję pomijać w opisie skargi/emocje/
 // konflikty personalne, jeśli się w notatkach pojawią).
 //
+// Dwie ścieżki wywołania:
+//  - Admin (panel wewnętrzny) — body { buildId }, wymaga sesji z rolą
+//    Admin. Zostawione dla ew. przyszłego użycia z panelu.
+//  - Klient (portal publiczny, bez logowania) — body { publicToken },
+//    dozwolone WYŁĄCZNIE gdy budowa ma public_access_enabled = true I
+//    allow_client_ai_summary = true (przełącznik "Klient może wygenerować
+//    raport AI" w sekcji Portalu Klienta, patrz 064_portal_klienta_
+//    klient_generuje_raport_ai.sql) — to jedyny sposób, w jaki ta funkcja
+//    trafia do 90% wywołań: klient klika przycisk pod "Ostatnimi
+//    aktualizacjami" w app/portal/[token].tsx.
+//
 // Wymaga (Supabase Dashboard -> Edge Functions -> Secrets):
 //   GEMINI_API_KEY — klucz z Google AI Studio (https://aistudio.google.com/apikey).
 //
@@ -65,9 +76,6 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ error: "Brak nagłówka autoryzacji." }, 401);
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -79,32 +87,56 @@ Deno.serve(async (req) => {
     );
   }
 
-  const callerClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const {
-    data: { user },
-  } = await callerClient.auth.getUser();
-  if (!user) return json({ error: "Nieprawidłowa sesja." }, 401);
-
-  const admin = createClient(supabaseUrl, serviceKey);
-  const { data: callerProfile } = await admin
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!callerProfile || callerProfile.role !== "Admin") {
-    return json({ error: "Wymagana rola Admin." }, 403);
-  }
-
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
     return json({ error: "Nieprawidłowe body żądania." }, 400);
   }
-  const buildId = Number(body.buildId);
-  if (!buildId) return json({ error: "Brak buildId." }, 400);
+
+  const admin = createClient(supabaseUrl, serviceKey);
+  let buildId: number;
+
+  if (typeof body.publicToken === "string" && body.publicToken) {
+    // Ścieżka klienta — bez sesji, wyłącznie po tokenie portalu + zgodzie
+    // Admina zapisanej na budowie.
+    const { data: build, error: buildError } = await admin
+      .from("builds")
+      .select("id, public_access_enabled, allow_client_ai_summary")
+      .eq("public_token", body.publicToken)
+      .maybeSingle();
+    if (buildError || !build) return json({ error: "Nie znaleziono budowy." }, 404);
+    if (!build.public_access_enabled || !build.allow_client_ai_summary) {
+      return json(
+        { error: "Generowanie raportu AI nie jest włączone dla tej budowy." },
+        403,
+      );
+    }
+    buildId = build.id;
+  } else {
+    // Ścieżka Admina — wymaga sesji z rolą Admin.
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Brak nagłówka autoryzacji." }, 401);
+    const callerClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const {
+      data: { user },
+    } = await callerClient.auth.getUser();
+    if (!user) return json({ error: "Nieprawidłowa sesja." }, 401);
+
+    const { data: callerProfile } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!callerProfile || callerProfile.role !== "Admin") {
+      return json({ error: "Wymagana rola Admin." }, 403);
+    }
+
+    buildId = Number(body.buildId);
+    if (!buildId) return json({ error: "Brak buildId." }, 400);
+  }
 
   const { data: build, error: buildError } = await admin
     .from("builds")

@@ -16,6 +16,7 @@ import {
   QuantityStepper,
   ReportCard,
   ScreenHeader,
+  SearchablePicker,
   StatusBadge,
   WizardStepper,
 } from "@/components/report-ui";
@@ -150,6 +151,13 @@ export function BuildsScreen() {
   // Raportach/Rozliczeniu), nie osobna zakładka nawigacji — patrz
   // buildsView w kontekście i setBuildsView niżej.
   const [buildQuery, setBuildQuery] = useState("");
+  // Wybór "Osoby odpowiedzialnej" z listy pracowników/brygadzistów (zamiast
+  // dowolnego tekstu) — jeden picker na wizard (krok 1) i osobny na
+  // edycję danych podstawowych istniejącej budowy (poniżej, w akordeonie).
+  const [wizardManagerPickerOpen, setWizardManagerPickerOpen] = useState(false);
+  const [wizardManagerQuery, setWizardManagerQuery] = useState("");
+  const [managerPickerBuildId, setManagerPickerBuildId] = useState<string | null>(null);
+  const [managerPickerQuery, setManagerPickerQuery] = useState("");
   const [expandedBuildReports, setExpandedBuildReports] = useState<
     Record<string, boolean>
   >({});
@@ -361,13 +369,6 @@ export function BuildsScreen() {
         {wizardStep === 1 && (
         <>
         <Field
-          placeholder="Numer budowy"
-          value={newBuild.number}
-          onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, number: v })
-          }
-        />
-        <Field
           placeholder="Nazwa budowy"
           value={newBuild.name}
           onChangeText={(v: string) =>
@@ -375,11 +376,53 @@ export function BuildsScreen() {
           }
         />
         <Field
-          placeholder="Osoba odpowiedzialna"
-          value={newBuild.manager}
+          placeholder="Numer budowy"
+          value={newBuild.number}
           onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, manager: v })
+            setNewBuild({ ...newBuild, number: v })
           }
+          style={{ marginTop: 10 }}
+        />
+        <Pressable
+          onPress={() => setWizardManagerPickerOpen(true)}
+          className="bg-surface border border-border rounded-2xl"
+          style={{
+            marginTop: 10,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text
+            style={{
+              color: newBuild.manager ? COLORS.foreground : COLORS.muted,
+              fontSize: 14,
+            }}
+          >
+            {newBuild.manager || "Osoba odpowiedzialna"}
+          </Text>
+          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>Wybierz</Text>
+        </Pressable>
+        <SearchablePicker
+          visible={wizardManagerPickerOpen}
+          onClose={() => setWizardManagerPickerOpen(false)}
+          query={wizardManagerQuery}
+          onQueryChange={setWizardManagerQuery}
+          placeholder="🔍 Szukaj pracownika…"
+          selectedKey={newBuild.manager}
+          onSelect={(key) => {
+            setNewBuild({ ...newBuild, manager: key });
+            setWizardManagerPickerOpen(false);
+          }}
+          emptyLabel="Brak pracowników pasujących do wyszukiwania."
+          items={employees
+            .filter((e) => e.active)
+            .filter((e) =>
+              e.name.toLowerCase().includes(wizardManagerQuery.trim().toLowerCase()),
+            )
+            .map((e) => ({ key: e.name, title: e.name, subtitle: e.role }))}
         />
         <Field
           placeholder="Klient (opcjonalnie)"
@@ -1107,28 +1150,67 @@ export function BuildsScreen() {
                       marginTop: 10,
                     }}
                   >
-                    <Text className="text-xs text-muted uppercase mb-2">Numer budowy</Text>
-                    <Field
-                      value={basicInfoDraft.number}
-                      onChangeText={(v: string) =>
-                        setBasicInfoDraft({ ...basicInfoDraft, number: v })
-                      }
-                    />
-                    <Text className="text-xs text-muted uppercase mt-3 mb-2">Nazwa</Text>
+                    <Text className="text-xs text-muted uppercase mb-2">Nazwa</Text>
                     <Field
                       value={basicInfoDraft.name}
                       onChangeText={(v: string) =>
                         setBasicInfoDraft({ ...basicInfoDraft, name: v })
                       }
                     />
+                    <Text className="text-xs text-muted uppercase mt-3 mb-2">Numer budowy</Text>
+                    <Field
+                      value={basicInfoDraft.number}
+                      onChangeText={(v: string) =>
+                        setBasicInfoDraft({ ...basicInfoDraft, number: v })
+                      }
+                    />
                     <Text className="text-xs text-muted uppercase mt-3 mb-2">
                       Osoba odpowiedzialna
                     </Text>
-                    <Field
-                      value={basicInfoDraft.manager}
-                      onChangeText={(v: string) =>
-                        setBasicInfoDraft({ ...basicInfoDraft, manager: v })
-                      }
+                    <Pressable
+                      onPress={() => {
+                        setManagerPickerQuery("");
+                        setManagerPickerBuildId(b.id);
+                      }}
+                      className="bg-surface border border-border rounded-2xl"
+                      style={{
+                        paddingHorizontal: 14,
+                        paddingVertical: 12,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: basicInfoDraft.manager ? COLORS.foreground : COLORS.muted,
+                          fontSize: 14,
+                        }}
+                      >
+                        {basicInfoDraft.manager || "Wybierz osobę"}
+                      </Text>
+                      <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
+                        Wybierz
+                      </Text>
+                    </Pressable>
+                    <SearchablePicker
+                      visible={managerPickerBuildId === b.id}
+                      onClose={() => setManagerPickerBuildId(null)}
+                      query={managerPickerQuery}
+                      onQueryChange={setManagerPickerQuery}
+                      placeholder="🔍 Szukaj pracownika…"
+                      selectedKey={basicInfoDraft.manager}
+                      onSelect={(key) => {
+                        setBasicInfoDraft({ ...basicInfoDraft, manager: key });
+                        setManagerPickerBuildId(null);
+                      }}
+                      emptyLabel="Brak pracowników pasujących do wyszukiwania."
+                      items={employees
+                        .filter((e) => e.active)
+                        .filter((e) =>
+                          e.name.toLowerCase().includes(managerPickerQuery.trim().toLowerCase()),
+                        )
+                        .map((e) => ({ key: e.name, title: e.name, subtitle: e.role }))}
                     />
                     <Text className="text-xs text-muted uppercase mt-3 mb-2">
                       Klient (opcjonalnie)

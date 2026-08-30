@@ -27,6 +27,7 @@ import {
   fetchPublicBuild,
   type PublicBuildView,
 } from "@/lib/data/public-portal";
+import { generateClientSummaryPublic } from "@/lib/data/ai-summary";
 
 /**
  * Portal Klienta — publiczna, NIEAUTORYZOWANA strona podglądu postępu
@@ -711,11 +712,19 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
 function NotesCard({
   notes,
   aiSummary,
+  allowClientAiSummary,
+  generatingSummary,
+  summaryError,
+  onGenerateSummary,
 }: {
   notes: PublicBuildView["notes"];
   aiSummary: PublicBuildView["aiSummary"];
+  allowClientAiSummary: boolean;
+  generatingSummary: boolean;
+  summaryError: string | null;
+  onGenerateSummary: () => void;
 }) {
-  if (notes.length === 0 && !aiSummary) return null;
+  if (notes.length === 0 && !aiSummary && !allowClientAiSummary) return null;
   return (
     <Card>
       <CardHeader title="Ostatnie aktualizacje" />
@@ -768,6 +777,29 @@ function NotesCard({
           </View>
         ))}
       </View>
+      )}
+      {allowClientAiSummary && (
+        <View
+          style={{
+            paddingHorizontal: 20,
+            paddingTop: notes.length > 0 || aiSummary ? 14 : 16,
+            paddingBottom: 20,
+            borderTopWidth: notes.length > 0 || aiSummary ? 1 : 0,
+            borderTopColor: PC.line,
+          }}
+        >
+          {summaryError && (
+            <Text style={{ color: PC.danger, fontSize: 12, marginBottom: 10 }}>
+              {summaryError}
+            </Text>
+          )}
+          <Button
+            label={generatingSummary ? "Generowanie…" : "Wygeneruj raport z budowy AI"}
+            onPress={onGenerateSummary}
+            disabled={generatingSummary}
+            fullWidth
+          />
+        </View>
       )}
     </Card>
   );
@@ -847,6 +879,8 @@ export default function PublicBuildPortal() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const { width } = useWindowDimensions();
 
   const load = useCallback(
@@ -871,6 +905,27 @@ export default function PublicBuildPortal() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Klient generuje raport AI sam, na życzenie — dozwolone tylko gdy
+  // Admin włączył "Klient może wygenerować raport AI" dla tej budowy
+  // (view.allowClientAiSummary, patrz build-portal-section.tsx). Po
+  // sukcesie doładowujemy widok (z zapamiętanym PIN-em, jeśli budowa go
+  // wymaga), żeby świeże `aiSummary` pojawiło się od razu.
+  const generateSummary = async () => {
+    if (!token) return;
+    setGeneratingSummary(true);
+    setSummaryError(null);
+    try {
+      await generateClientSummaryPublic(token);
+      await load(pinInput.trim() || undefined);
+    } catch (err) {
+      setSummaryError(
+        err instanceof Error ? err.message : "Nie udało się wygenerować raportu.",
+      );
+    } finally {
+      setGeneratingSummary(false);
+    }
+  };
 
   const submitPin = async () => {
     if (!pinInput.trim()) return;
@@ -1086,7 +1141,14 @@ export default function PublicBuildPortal() {
 
         <View style={{ flex: isWide ? 1 : undefined }}>
           <PhotosCard view={view} />
-          <NotesCard notes={view.notes} aiSummary={view.aiSummary} />
+          <NotesCard
+            notes={view.notes}
+            aiSummary={view.aiSummary}
+            allowClientAiSummary={view.allowClientAiSummary}
+            generatingSummary={generatingSummary}
+            summaryError={summaryError}
+            onGenerateSummary={generateSummary}
+          />
           <TechCard view={view} />
 
           {view.contractValue != null && (

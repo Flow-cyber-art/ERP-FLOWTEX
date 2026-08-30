@@ -18,6 +18,7 @@ import {
   LeavePendingApprovals,
 } from "@/components/screens/leave-screen";
 import { AccountSettingsSection } from "@/components/account-settings-section";
+import { WebPushSettingsSection } from "@/components/web-push-settings-section";
 import type { AppRole } from "@/lib/data/auth";
 import { signOut } from "@/lib/data/auth";
 import {
@@ -313,6 +314,7 @@ function AdminSettingsSection() {
       </View>
 
       <AccountSettingsSection />
+      <WebPushSettingsSection />
       <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
         <Button
           label="Wyloguj"

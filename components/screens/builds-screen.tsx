@@ -373,12 +373,6 @@ export function BuildsScreen() {
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
         <WizardStepper steps={WIZARD_STEPS} current={wizardStep} />
-        <Pressable
-          onPress={closeWizard}
-          style={{ alignSelf: "flex-end", marginTop: -10, marginBottom: 10 }}
-        >
-          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>Anuluj</Text>
-        </Pressable>
         {wizardStep === 1 && (
         <>
         <Field
@@ -569,20 +563,25 @@ export function BuildsScreen() {
             </Text>
           </Text>
         )}
-        <View style={{ marginTop: 12 }}>
-          <Button
-            label="Zapisz i dalej"
-            onPress={() =>
-              saveBuild(
-                { ...newBuild, plannedHoursPerDay: String(workdayHours) },
-                (createdId) => {
-                  setNewBuild(createEmptyNewBuild());
-                  setWizardBuildId(createdId);
-                  setWizardStep(2);
-                },
-              )
-            }
-          />
+        <View style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Button label="Anuluj" secondary onPress={closeWizard} />
+          </View>
+          <View style={{ flex: 2 }}>
+            <Button
+              label="Zapisz i dalej"
+              onPress={() =>
+                saveBuild(
+                  { ...newBuild, plannedHoursPerDay: String(workdayHours) },
+                  (createdId) => {
+                    setNewBuild(createEmptyNewBuild());
+                    setWizardBuildId(createdId);
+                    setWizardStep(2);
+                  },
+                )
+              }
+            />
+          </View>
         </View>
         </>
         )}

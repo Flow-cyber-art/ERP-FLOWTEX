@@ -1,9 +1,10 @@
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -205,10 +206,36 @@ const GAUGE_STROKE = 14;
 const GAUGE_RADIUS = (GAUGE_SIZE - GAUGE_STROKE) / 2;
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_RADIUS;
 
+// Pierścienie warstw (jeden na etap/warstwę budowy) — na wzór "activity
+// rings" z iOS: każda warstwa to osobny, węższy pierścień, od zewnątrz do
+// środka, każdy w innym kolorze, wypełniony proporcjonalnie do % tej
+// warstwy. Gdy budowa nie ma etapów, zostaje pojedynczy pierścień ogólnego
+// postępu (obsłużone niżej przez ringsForStages z jednym elementem).
+const RING_STROKE = 10;
+const RING_GAP = 5;
+
+function ringColor(index: number, total: number) {
+  const hue = total > 0 ? (index * 360) / Math.max(total, 1) : 0;
+  return `hsl(${Math.round(hue)}, 68%, 62%)`;
+}
+
 function Gauge({ view }: { view: PublicBuildView }) {
   const tone = view.statusColor ? STATUS_TONE[view.statusColor] : null;
   const percent = Math.max(0, Math.min(100, view.progressPercent));
   const offset = GAUGE_CIRCUMFERENCE * (1 - percent / 100);
+
+  const rings = view.stages.map((stage, i) => {
+    const radius = GAUGE_RADIUS - i * (RING_STROKE + RING_GAP);
+    const circumference = 2 * Math.PI * radius;
+    const stagePercent = Math.max(0, Math.min(100, stage.percent));
+    return {
+      stage,
+      radius,
+      circumference,
+      offset: circumference * (1 - stagePercent / 100),
+      color: ringColor(i, view.stages.length),
+    };
+  });
 
   const currentStageIndex = view.stages.findIndex((s) => s.percent < 100);
   const currentStage =
@@ -276,25 +303,53 @@ function Gauge({ view }: { view: PublicBuildView }) {
               <Stop offset="100%" stopColor={PC.accent} />
             </LinearGradient>
           </Defs>
-          <Circle
-            cx={GAUGE_SIZE / 2}
-            cy={GAUGE_SIZE / 2}
-            r={GAUGE_RADIUS}
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth={GAUGE_STROKE}
-            fill="none"
-          />
-          <Circle
-            cx={GAUGE_SIZE / 2}
-            cy={GAUGE_SIZE / 2}
-            r={GAUGE_RADIUS}
-            stroke="url(#gaugeGradient)"
-            strokeWidth={GAUGE_STROKE}
-            strokeLinecap="round"
-            strokeDasharray={GAUGE_CIRCUMFERENCE}
-            strokeDashoffset={offset}
-            fill="none"
-          />
+          {rings.length > 0 ? (
+            rings.map((ring, i) => (
+              <Fragment key={i}>
+                <Circle
+                  cx={GAUGE_SIZE / 2}
+                  cy={GAUGE_SIZE / 2}
+                  r={ring.radius}
+                  stroke="rgba(255,255,255,0.06)"
+                  strokeWidth={RING_STROKE}
+                  fill="none"
+                />
+                <Circle
+                  cx={GAUGE_SIZE / 2}
+                  cy={GAUGE_SIZE / 2}
+                  r={ring.radius}
+                  stroke={ring.color}
+                  strokeWidth={RING_STROKE}
+                  strokeLinecap="round"
+                  strokeDasharray={ring.circumference}
+                  strokeDashoffset={ring.offset}
+                  fill="none"
+                />
+              </Fragment>
+            ))
+          ) : (
+            <>
+              <Circle
+                cx={GAUGE_SIZE / 2}
+                cy={GAUGE_SIZE / 2}
+                r={GAUGE_RADIUS}
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth={GAUGE_STROKE}
+                fill="none"
+              />
+              <Circle
+                cx={GAUGE_SIZE / 2}
+                cy={GAUGE_SIZE / 2}
+                r={GAUGE_RADIUS}
+                stroke="url(#gaugeGradient)"
+                strokeWidth={GAUGE_STROKE}
+                strokeLinecap="round"
+                strokeDasharray={GAUGE_CIRCUMFERENCE}
+                strokeDashoffset={offset}
+                fill="none"
+              />
+            </>
+          )}
         </Svg>
         <View
           style={{
@@ -349,6 +404,35 @@ function Gauge({ view }: { view: PublicBuildView }) {
           <Text style={{ color: PC.txt, fontSize: 15, fontWeight: "700" }}>{subtitle}</Text>
         )}
       </View>
+
+      {rings.length > 1 && (
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: 10,
+            marginTop: 18,
+            paddingHorizontal: 4,
+          }}
+        >
+          {rings.map((ring, i) => (
+            <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: ring.color,
+                }}
+              />
+              <Text style={{ color: PC.txt2, fontSize: 11 }}>
+                {ring.stage.name} · {Math.round(ring.stage.percent)}%
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -886,7 +970,32 @@ export default function PublicBuildPortal() {
             FLOWTEX
           </Text>
         </View>
-        <Text style={{ color: PC.txt3, fontSize: 11 }}>🔒 Podgląd dla zleceniodawcy</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Text style={{ color: PC.txt3, fontSize: 11 }}>🔒 Podgląd dla zleceniodawcy</Text>
+          {Platform.OS === "web" && (
+            <Pressable
+              onPress={() => {
+                // Panel jest otwierany jako osobna karta/link (patrz
+                // build-portal-section.tsx openLink), nie modal w apce —
+                // "zamknięcie" to zamknięcie tej karty przeglądarki.
+                if (typeof window !== "undefined") window.close();
+              }}
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 8,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: PC.surface2,
+                borderWidth: 1,
+                borderColor: PC.line,
+              }}
+              accessibilityLabel="Zamknij panel"
+            >
+              <Text style={{ color: PC.txt2, fontSize: 13, fontWeight: "700" }}>✕</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Nagłówek budowy */}

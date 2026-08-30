@@ -454,7 +454,7 @@ export function AdminTeamSection() {
           <View
             style={{ flexDirection: "row", gap: 6, marginTop: 10, flexWrap: "wrap" }}
           >
-            {["Brygadzista", "Pracownik", "Admin"].map((role) => (
+            {["Brygadzista", "Pracownik"].map((role) => (
               <Pressable
                 key={role}
                 onPress={() => setNewEmployee({ ...newEmployee, role })}

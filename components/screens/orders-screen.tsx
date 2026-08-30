@@ -10,6 +10,7 @@ import {
   QuantityStepper,
   ScreenHeader,
   StatusBadge,
+  UNIT_OPTIONS,
 } from "@/components/report-ui";
 import { useAppData, type OrderCartItem } from "@/contexts/app-data";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
@@ -68,6 +69,7 @@ export function OrdersScreen() {
 
   const [orderMaterialNameRaw, setOrderMaterialNameRaw] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("");
+  const [orderUnit, setOrderUnit] = useState("szt.");
   const [orderSaved, setOrderSaved] = useState(false);
   // Czy wpisana nazwa (bez jednoznacznego dopasowania w magazynie) została
   // JAWNIE potwierdzona jako nowy materiał — patrz addToOrderCart niżej.
@@ -104,12 +106,13 @@ export function OrdersScreen() {
         id: `cart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         materialName: orderMaterialName.trim(),
         quantity,
-        unit: matched?.unit || "szt.",
+        unit: matched?.unit || orderUnit || "szt.",
         materialId: matched?.id,
       },
     ]);
     setOrderMaterialName("");
     setOrderQuantity("");
+    setOrderUnit("szt.");
   };
   // Jawne potwierdzenie "materiału nie ma na liście, dodaj go jako nowy" —
   // pokazywane w UI tylko gdy wpisana nazwa nie ma jednoznacznego
@@ -434,6 +437,43 @@ export function OrdersScreen() {
                 </Pressable>
               </>
             )
+          )}
+          {!exactMaterialMatch && orderMaterialName.trim().length > 0 && (
+            <View style={{ marginTop: 10 }}>
+              <Text className="text-xs text-muted uppercase mb-2">Jednostka</Text>
+              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                {UNIT_OPTIONS.map((unit) => (
+                  <Pressable
+                    key={unit}
+                    onPress={() => setOrderUnit(unit)}
+                    style={{
+                      backgroundColor:
+                        orderUnit === unit ? COLORS.primary : COLORS.background,
+                      borderRadius: 10,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      borderWidth: 1,
+                      borderColor: orderUnit === unit ? COLORS.primary : COLORS.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: orderUnit === unit ? COLORS.background : COLORS.foreground,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {unit}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Field
+                placeholder="albo wpisz własną jednostkę"
+                value={orderUnit}
+                onChangeText={setOrderUnit}
+                style={{ marginTop: 8 }}
+              />
+            </View>
           )}
           <Text
             style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}

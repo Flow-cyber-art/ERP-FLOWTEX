@@ -16,6 +16,7 @@ import {
   listBuilds,
   reopenBuild as reopenBuildRemote,
   updateBuildBasicInfo as updateBuildBasicInfoRemote,
+  updateBuildLaborPlan as updateBuildLaborPlanRemote,
   updateBuildPhotosUrl as updateBuildPhotosUrlRemote,
   type CloseBuildReturnItem,
 } from "@/lib/data/builds";
@@ -978,6 +979,14 @@ function useAppDataState(
       contractValue?: number | null;
     }) => updateBuildBasicInfoRemote(vars.buildId, vars),
   });
+  const updateBuildLaborPlanMutation = useMutation({
+    mutationFn: (vars: {
+      buildId: number;
+      teamId: number | null;
+      durationDays: number;
+      plannedHoursPerDay: number;
+    }) => updateBuildLaborPlanRemote(vars.buildId, vars),
+  });
   const closeBuildMutation = useMutation({
     mutationFn: (vars: { buildId: number; returns: CloseBuildReturnItem[] }) =>
       closeBuildRemote(vars.buildId, vars.returns),
@@ -1601,6 +1610,35 @@ function useAppDataState(
       onSaved?.();
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać danych budowy.");
+    }
+  };
+  // Edycja brygady/dni roboczych/godzin dziennych po utworzeniu budowy —
+  // te same pola co krok 1 kreatora (sekcja "Brygada i planowana
+  // robocizna"), tylko jako update zamiast insert. Bez tego brygadę dało
+  // się przypisać WYŁĄCZNIE w trakcie zakładania budowy — literówka albo
+  // zmiana ekipy w trakcie realizacji nie miała jak się poprawić.
+  const updateBuildLaborPlan = async (
+    buildId: string,
+    input: { teamId: string; durationDays: string; plannedHoursPerDay: string },
+    onSaved?: () => void,
+  ) => {
+    const durationDays = Number(input.durationDays);
+    const plannedHoursPerDay = Number(input.plannedHoursPerDay) || 8;
+    if (!durationDays || durationDays <= 0) {
+      notify("Uzupełnij wymagane pola", "Liczba dni roboczych");
+      return;
+    }
+    try {
+      await updateBuildLaborPlanMutation.mutateAsync({
+        buildId: Number(buildId),
+        teamId: input.teamId ? Number(input.teamId) : null,
+        durationDays,
+        plannedHoursPerDay,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      onSaved?.();
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać brygady/planu robocizny.");
     }
   };
   // Przypisanie technologii do budowy (Faza 2) — atomowo w RPC: zapisuje
@@ -2689,6 +2727,7 @@ function useAppDataState(
     saveMaterial,
     saveBuild,
     updateBuildBasicInfo,
+    updateBuildLaborPlan,
     saveWorkdayHours,
     saveDailyReport,
     saveEmployee,

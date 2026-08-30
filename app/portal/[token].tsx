@@ -208,10 +208,12 @@ const GAUGE_RADIUS = (GAUGE_SIZE - GAUGE_STROKE) / 2;
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_RADIUS;
 
 // Pierścienie warstw (jeden na etap/warstwę budowy) — na wzór "activity
-// rings" z iOS: każda warstwa to osobny, węższy pierścień, od zewnątrz do
-// środka, każdy w innym kolorze, wypełniony proporcjonalnie do % tej
-// warstwy. Gdy budowa nie ma etapów, zostaje pojedynczy pierścień ogólnego
-// postępu (obsłużone niżej przez ringsForStages z jednym elementem).
+// rings" z iOS: każda warstwa to osobny, węższy pierścień, PIERWSZY etap
+// w ŚRODKU (najmniejszy promień) a OSTATNI na zewnątrz (największy) —
+// czyli w kolejności realizacji, patrząc od środka na zewnątrz — każdy w
+// innym kolorze, wypełniony proporcjonalnie do % tej warstwy. Gdy budowa
+// nie ma etapów, zostaje pojedynczy pierścień ogólnego postępu (obsłużone
+// niżej przez ringsForStages z jednym elementem).
 const RING_STROKE = 10;
 const RING_GAP = 5;
 
@@ -226,7 +228,10 @@ function Gauge({ view }: { view: PublicBuildView }) {
   const offset = GAUGE_CIRCUMFERENCE * (1 - percent / 100);
 
   const rings = view.stages.map((stage, i) => {
-    const radius = GAUGE_RADIUS - i * (RING_STROKE + RING_GAP);
+    // Pierwszy etap (i=0) w ŚRODKU, ostatni na ZEWNĄTRZ — odwrócony
+    // indeks, bo promień rośnie na zewnątrz.
+    const reversedIndex = view.stages.length - 1 - i;
+    const radius = GAUGE_RADIUS - reversedIndex * (RING_STROKE + RING_GAP);
     const circumference = 2 * Math.PI * radius;
     const stagePercent = Math.max(0, Math.min(100, stage.percent));
     return {

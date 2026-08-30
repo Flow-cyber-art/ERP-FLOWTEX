@@ -27,7 +27,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
             całkowicie podmienia domyślny <head> Expo Routera, który
             normalnie wstawiłby <title> sam, więc trzeba go dopisać
             ręcznie. */}
-        <title>FLOWTEX ERP</title>
+        <title>ERP FLOWTEX</title>
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"

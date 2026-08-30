@@ -89,6 +89,46 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// Web Push (Safari iOS 16.4+, patrz 068_web_push_ios_safari.sql i
+// lib/notifications/use-register-web-push.ts) — Admin dostaje
+// powiadomienie o nowym raporcie nawet gdy appka jest zamknięta.
+// Payload wysyłany przez send-report-notification to zwykły JSON
+// {title, body, data}.
+self.addEventListener("push", (event) => {
+  let payload = { title: "Nowy raport dzienny", body: "" };
+  try {
+    if (event.data) payload = { ...payload, ...event.data.json() };
+  } catch {
+    // Payload spoza JSON-a (nie powinno się zdarzyć z naszego serwera) —
+    // zostają wartości domyślne zamiast wywrócić handler.
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: payload.data ?? {},
+    }),
+  );
+});
+
+// Kliknięcie w powiadomienie: skup istniejącą kartę appki, jeśli jest
+// otwarta, zamiast zawsze otwierać nową.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = clientsList.find((c) => "focus" in c);
+      if (existing) {
+        existing.focus();
+        return;
+      }
+      await self.clients.openWindow("/");
+    })(),
+  );
+});
+
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();

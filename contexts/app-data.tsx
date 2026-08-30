@@ -73,6 +73,7 @@ import {
 } from "@/lib/data/build-materials";
 import { generateReportClientNote } from "@/lib/data/ai-summary";
 import { useRegisterPushToken } from "@/lib/notifications/use-register-push-token";
+import { useRegisterWebPush } from "@/lib/notifications/use-register-web-push";
 import {
   listReports,
   submitDailyReport,
@@ -279,6 +280,7 @@ function useAppDataState(
   myEmployeeId: string | null = null,
 ) {
   useRegisterPushToken(initialRole);
+  useRegisterWebPush(initialRole);
   const [tab, setTab] = useState(
     initialRole === "Pracownik"
       ? "worker"

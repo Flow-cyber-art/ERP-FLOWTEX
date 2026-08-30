@@ -92,6 +92,7 @@ export function BuildsScreen() {
     commitAssignments,
     saveBuild,
     updateBuildBasicInfo,
+    updateBuildLaborPlan,
     approveReport,
     closeBuild,
     reopenBuild,
@@ -215,6 +216,18 @@ export function BuildsScreen() {
     contractValue: "",
   });
   const [basicInfoBusy, setBasicInfoBusy] = useState(false);
+  // Edycja brygady/dni roboczych po utworzeniu budowy — wcześniej dało
+  // się to ustawić WYŁĄCZNIE w wizardzie (krok 1), bez możliwości zmiany
+  // ekipy w trakcie realizacji ani poprawki literówki w liczbie dni.
+  const [editingLaborPlanBuildId, setEditingLaborPlanBuildId] = useState<
+    string | null
+  >(null);
+  const [laborPlanDraft, setLaborPlanDraft] = useState({
+    teamId: "",
+    durationDays: "",
+    plannedHoursPerDay: "8",
+  });
+  const [laborPlanBusy, setLaborPlanBusy] = useState(false);
   const [techEditBuildId, setTechEditBuildId] = useState<string | null>(null);
   // Materiały z planu technologii — zwinięte domyślnie razem z samą
   // technologią (jeden akordeon: zwinięta technologia = zwinięte
@@ -1270,6 +1283,130 @@ export function BuildsScreen() {
               h)
             </Text>
           ) : null}
+          {!isClosed &&
+            (() => {
+              const isEditingLaborPlan = editingLaborPlanBuildId === b.id;
+              const currentTeam = teams.find((t) => String(t.id) === String(b.teamId));
+              return (
+                <View style={{ marginTop: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text className="text-xs text-muted">
+                      Brygada: {currentTeam?.name ?? "nie przypisano"}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        if (isEditingLaborPlan) {
+                          setEditingLaborPlanBuildId(null);
+                          return;
+                        }
+                        setLaborPlanDraft({
+                          teamId: b.teamId ? String(b.teamId) : "",
+                          durationDays: b.durationDays ? String(b.durationDays) : "",
+                          plannedHoursPerDay: b.plannedHoursPerDay
+                            ? String(b.plannedHoursPerDay)
+                            : String(workdayHours),
+                        });
+                        setEditingLaborPlanBuildId(b.id);
+                      }}
+                    >
+                      <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                        {isEditingLaborPlan ? "Anuluj" : "Edytuj"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  {isEditingLaborPlan && (
+                    <View
+                      style={{
+                        backgroundColor: COLORS.background,
+                        borderRadius: 12,
+                        padding: 12,
+                        marginTop: 8,
+                      }}
+                    >
+                      <Text className="text-xs text-muted uppercase mb-2">Brygada</Text>
+                      <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                        {teams.map((t) => (
+                          <Pressable
+                            key={t.id}
+                            onPress={() =>
+                              setLaborPlanDraft({
+                                ...laborPlanDraft,
+                                teamId:
+                                  String(t.id) === laborPlanDraft.teamId ? "" : String(t.id),
+                              })
+                            }
+                            style={{
+                              backgroundColor:
+                                String(t.id) === laborPlanDraft.teamId
+                                  ? COLORS.primary
+                                  : COLORS.surface,
+                              borderRadius: 8,
+                              paddingHorizontal: 9,
+                              paddingVertical: 7,
+                              borderWidth: 1,
+                              borderColor:
+                                String(t.id) === laborPlanDraft.teamId
+                                  ? COLORS.primary
+                                  : COLORS.border,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color:
+                                  String(t.id) === laborPlanDraft.teamId
+                                    ? COLORS.background
+                                    : COLORS.foreground,
+                                fontWeight: "700",
+                                fontSize: 12,
+                              }}
+                            >
+                              {t.name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        {teams.length === 0 && (
+                          <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                            Brak brygad — dodaj je w Admin → Zespół i dniówka.
+                          </Text>
+                        )}
+                      </View>
+                      <Text className="text-xs text-muted uppercase mt-3 mb-2">
+                        Liczba dni roboczych
+                      </Text>
+                      <Field
+                        value={laborPlanDraft.durationDays}
+                        onChangeText={(v: string) =>
+                          setLaborPlanDraft({ ...laborPlanDraft, durationDays: v })
+                        }
+                        keyboardType="number-pad"
+                      />
+                      <View style={{ marginTop: 12 }}>
+                        <Button
+                          label={laborPlanBusy ? "Zapisywanie…" : "Zapisz"}
+                          disabled={laborPlanBusy}
+                          onPress={async () => {
+                            setLaborPlanBusy(true);
+                            try {
+                              await updateBuildLaborPlan(b.id, laborPlanDraft, () =>
+                                setEditingLaborPlanBuildId(null),
+                              );
+                            } finally {
+                              setLaborPlanBusy(false);
+                            }
+                          }}
+                        />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
           {/* Technologia (Faza 2) — plan materiałowy = m² budowy × zużycie
               z receptury, zamrożony w momencie przypisania (patrz
               build_technology_snapshot). Późniejsza zmiana/nowa wersja

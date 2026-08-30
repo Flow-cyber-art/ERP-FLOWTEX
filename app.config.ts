@@ -130,10 +130,26 @@ const config: ExpoConfig = {
           "Aplikacja potrzebuje dostępu do aparatu, żeby zrobić zdjęcia budowy.",
       },
     ],
+    [
+      "expo-notifications",
+      {
+        icon: "./assets/images/icon.png",
+        color: "#1B1B1D",
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
+  },
+  // ID projektu EAS — nie sekret, wymagany przez
+  // Notifications.getExpoPushTokenAsync (patrz lib/notifications/
+  // use-register-push-token.ts) do wydania tokenu push na urządzeniu
+  // natywnym. Utworzony na expo.dev, podpięty pod to repo.
+  extra: {
+    eas: {
+      projectId: "7ef1583f-9529-4eb8-b84c-a2a1a00d19be",
+    },
   },
 };
 

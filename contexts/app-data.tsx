@@ -72,6 +72,7 @@ import {
   type BuildMaterialReturnRow,
 } from "@/lib/data/build-materials";
 import { generateReportClientNote } from "@/lib/data/ai-summary";
+import { useRegisterPushToken } from "@/lib/notifications/use-register-push-token";
 import {
   listReports,
   submitDailyReport,
@@ -277,6 +278,7 @@ function useAppDataState(
   myProfileId: string | null = null,
   myEmployeeId: string | null = null,
 ) {
+  useRegisterPushToken(initialRole);
   const [tab, setTab] = useState(
     initialRole === "Pracownik"
       ? "worker"

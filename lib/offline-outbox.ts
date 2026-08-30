@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { submitDailyReport, SupabaseRpcError } from "@/lib/data/reports";
+import { notifyNewReport } from "@/lib/data/push-tokens";
 
 /**
  * Kolejka "wyślij, gdy się da" dla raportów dziennych. Nie jest to
@@ -176,6 +177,10 @@ export async function flushOutbox(): Promise<{
           note: item.note,
         });
         succeededKeys.push(reportKey(item));
+        // Push do Adminów "na bieżąco" — best-effort, patrz komentarz na
+        // notifyNewReport. Nigdy nie może zablokować ani cofnąć wysyłki
+        // raportu powyżej, która już się udała.
+        notifyNewReport(item.buildId, item.date).catch(() => undefined);
       } catch (error) {
         // Zostaje w kolejce do kolejnej próby niezależnie od przyczyny —
         // ale zapisujemy przyczynę (patrz describeError), żeby UI mógł

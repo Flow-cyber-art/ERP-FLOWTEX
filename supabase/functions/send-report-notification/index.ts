@@ -140,13 +140,21 @@ Deno.serve(async (req) => {
   }
 
   // --- Kanał 2: Web Push (Safari na iPhonie) ---
-  if (vapidPrivateKey) {
+  // Wcześniej brak sekretu po prostu pomijał cały kanał BEZ ŻADNEJ
+  // informacji w odpowiedzi — funkcja zwracała sentWeb: 0 i zero błędów,
+  // co wygląda identycznie jak "nikt nie ma subskrypcji". Teraz zawsze
+  // wprost mówimy dlaczego kanał web nic nie wysłał.
+  if (!vapidPrivateKey) {
+    errors.push("web: brak sekretu VAPID_PRIVATE_KEY w Edge Functions Secrets.");
+  } else {
     try {
       webpush.setVapidDetails(vapidSubject, VAPID_PUBLIC_KEY, vapidPrivateKey);
-      const { data: subs } = await admin
+      const { data: subs, error: subsError } = await admin
         .from("web_push_subscriptions")
         .select("id, endpoint, p256dh, auth")
         .in("profile_id", adminIds);
+      if (subsError) errors.push(`web-select: ${subsError.message}`);
+
       const payload = JSON.stringify({ title, body: bodyText, data: { buildId, date } });
       const staleIds: number[] = [];
       await Promise.all(
@@ -160,9 +168,18 @@ Deno.serve(async (req) => {
           } catch (err: unknown) {
             // 404/410 = subskrypcja martwa (użytkownik odinstalował PWA,
             // wyczyścił dane przeglądarki) — sprzątamy, żeby nie próbować
-            // w nieskończoność za każdym kolejnym raportem.
+            // w nieskończoność za każdym kolejnym raportem. Wszystko inne
+            // (400 zły JWT, 401/403 zły klucz VAPID, 413 za duży payload)
+            // wcześniej ginęło bez śladu — teraz ląduje w `errors`.
             const status = (err as { statusCode?: number })?.statusCode;
-            if (status === 404 || status === 410) staleIds.push(s.id);
+            if (status === 404 || status === 410) {
+              staleIds.push(s.id);
+            } else {
+              const bodyErr = (err as { body?: string })?.body;
+              errors.push(
+                `web-send ${status ?? "?"}: ${bodyErr ?? (err instanceof Error ? err.message : String(err))}`,
+              );
+            }
           }
         }),
       );

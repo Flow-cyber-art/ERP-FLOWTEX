@@ -6,7 +6,7 @@
 // cache'owania). Nie trzeba jej ruszać przy zwykłych wdrożeniach appki —
 // od tego jest osobny mechanizm: app/version.json + BUILD_VERSION,
 // patrz lib/pwa/useVersionCheck.ts.
-const CACHE_VERSION = "v2";   // było "v1";
+const CACHE_VERSION = "v3";
 const CACHE_NAME = `budowy-static-${CACHE_VERSION}`;
 
 // Ścieżki, które NIGDY nie mają trafić do cache'a — zawsze świeże z
@@ -142,11 +142,22 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// Kliknięcie w powiadomienie: skup istniejącą kartę appki, jeśli jest
-// otwarta, zamiast zawsze otwierać nową. Gdy payload niesie data.url —
-// nawiguj tam (np. prosto do raportu).
+// Kliknięcie w powiadomienie -> przejście do KONKRETNEGO raportu.
+//
+// iOS ma tu dwa różne zachowania i oba trzeba obsłużyć osobno:
+//
+//  A) appka ZAMKNIĘTA -> openWindow(url) startuje PWA od razu pod
+//     właściwym adresem.
+//  B) appka W TLE -> focus() NIE zmienia adresu; appka wraca dokładnie
+//     tam, gdzie była. Dlatego wysyłamy do niej wiadomość NAVIGATE_TO,
+//     a nawigację robi expo-router (patrz lib/notifications/
+//     use-push-navigation.ts).
+//
+// Świadomie NIE używamy client.navigate() — na iOS potrafi przeładować
+// całą PWA i wyczyścić stan (np. niezapisany formularz raportu).
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+
   const targetUrl = event.notification.data?.url || "/";
 
   event.waitUntil(
@@ -156,19 +167,15 @@ self.addEventListener("notificationclick", (event) => {
         includeUncontrolled: true,
       });
       const existing = clientsList.find((c) => "focus" in c);
+
       if (existing) {
-        // navigate() bywa niedostępne/rzuca na iOS — focus jest
-        // ważniejszy niż deep link, więc nawigacja jest best-effort.
-        try {
-          if ("navigate" in existing && targetUrl) {
-            await existing.navigate(targetUrl);
-          }
-        } catch {
-          // ignorujemy — zostaje samo skupienie okna
-        }
+        // Najpierw wiadomość, potem focus — po focusie iOS potrafi na
+        // moment uśpić kontekst service workera.
+        existing.postMessage({ type: "NAVIGATE_TO", url: targetUrl });
         await existing.focus();
         return;
       }
+
       await self.clients.openWindow(targetUrl);
     })(),
   );

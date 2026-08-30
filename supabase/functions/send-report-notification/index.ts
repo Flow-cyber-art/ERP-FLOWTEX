@@ -10,8 +10,11 @@
 // ZMIANA vs. poprzednia wersja (przyczyna "push nie działa na iOS"):
 //  1. `npm:web-push` NIE działa niezawodnie na Deno Deploy (opiera się na
 //     node:https / node:crypto i strumieniach Node). Zamienione na
-//     `jsr:@negrel/webpush`, które używa natywnego WebCrypto — to jest
-//     rekomendowana droga dla Supabase Edge Functions.
+//     `jsr:@negrel/webpush@^0.5.0`, które używa natywnego WebCrypto — to
+//     jest rekomendowana droga dla Supabase Edge Functions.
+//     WAŻNE: wersja MUSI być >= 0.5.0 — klasa PushMessageError z metodą
+//     isGone() pojawiła się dopiero tam (w 0.3.x TypeScript podkreśla
+//     `isGone` na czerwono, bo symbolu nie ma w publicznym API).
 //  2. Wszystkie błędy web push są teraz RAPORTOWANE w odpowiedzi
 //     (wcześniej brak sekretu VAPID_PRIVATE_KEY albo błąd 400/403 z
 //     Apple przechodził bezszelestnie i funkcja zwracała "sukces").
@@ -24,9 +27,14 @@
 //     odrzuca żądanie błędem 400 BadJwtToken.
 //
 // Deploy: Supabase Dashboard -> Edge Functions -> send-report-notification.
+//
+// WERSJA: 3 (klucze VAPID naprawione + deep link do raportu).
+// Szybki test, czy masz WLASNIE TEN plik na serwerze: musi zawierac
+// funkcje `buildKeysFromD` oraz zmienna `reportUrl`. Jesli ich nie ma,
+// wdrozyles starsza wersje i wroci blad "web-init: Invalid key usage".
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as webpush from "jsr:@negrel/webpush@0.3.0";
+import * as webpush from "jsr:@negrel/webpush@^0.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,35 +56,67 @@ const VAPID_PUBLIC_KEY =
 
 /**
  * Klucz prywatny może być podany na dwa sposoby:
- *  - jako pełny JWK w JSON (najwygodniejsze, gdy generujesz przez
- *    `webpush.generateVapidKeys()` i robisz `exportVapidKeys`),
- *  - jako sam parametr "d" w base64url (format z web-push CLI).
- * Obsługujemy oba, żeby nie było zgadywania przy wklejaniu sekretu.
+ *  - jako pełny JWK w JSON (z `generate-vapid-keys.ts`) — wklejasz w całości,
+ *  - jako sam parametr "d" w base64url (format web-push CLI, 43 znaki).
+ *
+ * UWAGA (błąd "Invalid key usage" z poprzedniej wersji): do JWK klucza
+ * PUBLICZNEGO nie wolno dokładać pola `d`. WebCrypto widzi `d`, uznaje
+ * klucz za prywatny i odrzuca `key_ops: ["verify"]`, bo weryfikować można
+ * wyłącznie kluczem publicznym. Publiczny JWK musi mieć TYLKO kty/crv/x/y.
  */
 async function importVapidKeys(privateKeyRaw: string) {
   const trimmed = privateKeyRaw.trim();
 
+  // Wariant A: pełny JSON z generate-vapid-keys.ts
   if (trimmed.startsWith("{")) {
-    return await webpush.importVapidKeys(JSON.parse(trimmed), { extractable: false });
+    const parsed = JSON.parse(trimmed);
+    // Skrypt zwraca {publicKey, privateKey}; ktoś mógł też wkleić sam
+    // prywatny JWK — wtedy publiczny odtwarzamy z VAPID_PUBLIC_KEY.
+    if (parsed.publicKey && parsed.privateKey) {
+      return await webpush.importVapidKeys(parsed, { extractable: true });
+    }
+    if (parsed.kty === "EC" && parsed.d) {
+      return await buildKeysFromD(parsed.d);
+    }
+    throw new Error("JSON nie zawiera ani {publicKey,privateKey}, ani pola 'd'.");
   }
 
-  // Klucz publiczny (65 bajtów, 0x04 + X + Y) rozbijamy na współrzędne
-  // JWK, bo WebCrypto przyjmuje wyłącznie format JWK/PKCS8.
+  // Wariant B: samo "d" w base64url
+  return await buildKeysFromD(trimmed);
+}
+
+/**
+ * Odtwarza parę VAPID z klucza prywatnego "d" + znanego klucza
+ * publicznego (VAPID_PUBLIC_KEY), rozbijając ten drugi na współrzędne
+ * x/y — WebCrypto nie przyjmuje surowych 65 bajtów, tylko JWK.
+ */
+async function buildKeysFromD(d: string) {
   const pub = decodeBase64Url(VAPID_PUBLIC_KEY);
   if (pub.length !== 65 || pub[0] !== 0x04) {
-    throw new Error("VAPID_PUBLIC_KEY nie jest poprawnym niezaskompresowanym punktem P-256.");
+    throw new Error(
+      `VAPID_PUBLIC_KEY nie jest punktem P-256 (dlugosc ${pub.length}, prefiks 0x${pub[0]?.toString(16)}).`,
+    );
   }
-  const jwk = {
-    kty: "EC",
-    crv: "P-256",
-    x: encodeBase64Url(pub.slice(1, 33)),
-    y: encodeBase64Url(pub.slice(33, 65)),
-    d: trimmed,
-  };
-  return await webpush.importVapidKeys(
-    { publicKey: { ...jwk, key_ops: ["verify"] }, privateKey: { ...jwk, key_ops: ["sign"] } },
-    { extractable: false },
-  );
+
+  const dBytes = decodeBase64Url(d);
+  if (dBytes.length !== 32) {
+    throw new Error(
+      `VAPID_PRIVATE_KEY po zdekodowaniu ma ${dBytes.length} bajtow zamiast 32. ` +
+        "Sprawdz, czy nie wklejasz klucza w formacie PEM/PKCS8 albo z dodatkowymi znakami.",
+    );
+  }
+
+  const x = encodeBase64Url(pub.slice(1, 33));
+  const y = encodeBase64Url(pub.slice(33, 65));
+
+  // KLUCZOWE: publiczny BEZ `d`, prywatny Z `d`. Bez key_ops — biblioteka
+  // ustawia je sama zgodnie z przeznaczeniem klucza.
+  const publicKey = { kty: "EC", crv: "P-256", x, y, ext: true };
+  const privateKey = { kty: "EC", crv: "P-256", x, y, d, ext: true };
+
+  // extractable: true jest wymagane — ApplicationServer eksportuje klucz
+  // publiczny przy budowaniu naglowka VAPID.
+  return await webpush.importVapidKeys({ publicKey, privateKey }, { extractable: true });
 }
 
 function decodeBase64Url(value: string): Uint8Array {
@@ -194,6 +234,25 @@ Deno.serve(async (req) => {
   } else {
     try {
       const vapidKeys = await importVapidKeys(vapidPrivateKey);
+
+      // Weryfikacja, czy klucz prywatny NAPRAWDE nalezy do tej samej pary
+      // co VAPID_PUBLIC_KEY. Bez tego rozjechana para objawia sie dopiero
+      // bledem 403 od Apple przy kazdej wysylce.
+      try {
+        const derivedPublic = await webpush.exportApplicationServerKey(vapidKeys);
+        diagnostics.vapidKeysMatch = derivedPublic === VAPID_PUBLIC_KEY;
+        if (derivedPublic !== VAPID_PUBLIC_KEY) {
+          errors.push(
+            "web: klucz prywatny NIE pasuje do VAPID_PUBLIC_KEY. " +
+              `Z prywatnego wychodzi publiczny: ${derivedPublic}`,
+          );
+        }
+      } catch (err) {
+        diagnostics.vapidKeysMatch = `nie udalo sie sprawdzic: ${
+          err instanceof Error ? err.message : String(err)
+        }`;
+      }
+
       const appServer = await webpush.ApplicationServer.new({
         contactInformation: vapidSubject,
         vapidKeys,
@@ -210,10 +269,25 @@ Deno.serve(async (req) => {
         s.endpoint.includes("web.push.apple.com"),
       ).length;
 
+      // Deep link: klikniecie w powiadomienie ma otworzyc KONKRETNY
+      // raport, a nie ekran startowy. Sciezke czyta service worker
+      // w handlerze notificationclick (public/sw.js).
+      //
+      // MUSI byc sciezka WZGLEDNA zaczynajaca sie od "/" — pelny URL
+      // z domena wyprowadza clients.openWindow() poza scope PWA i iOS
+      // otwiera link w Safari zamiast w appce.
+      //
+      // >>> PODMIEN "/raporty/" NA SWOJA PRAWDZIWA TRASE <<<
+      //   app/raporty/[id].tsx        -> `/raporty/${buildId}`
+      //   app/(tabs)/raporty/[id].tsx -> `/raporty/${buildId}`  (grupa
+      //                                  "(tabs)" NIE wchodzi do URL-a)
+      //   app/budowa/[id]/raport.tsx  -> `/budowa/${buildId}/raport`
+      const reportUrl = `/raporty/${buildId}?date=${encodeURIComponent(date)}`;
+
       const payload = JSON.stringify({
         title,
         body: bodyText,
-        data: { buildId, date, url: "/" },
+        data: { buildId, date, url: reportUrl },
       });
 
       const staleIds: number[] = [];
@@ -225,18 +299,42 @@ Deno.serve(async (req) => {
                 endpoint: s.endpoint,
                 keys: { p256dh: s.p256dh, auth: s.auth },
               });
-              await subscriber.pushTextMessage(payload, {});
+              // PushMessageOptions ma pola WYMAGANE (topic/ttl/urgency) —
+              // puste `{}` nie przechodzi typowania. Urgency.High = Apple
+              // ma dostarczyć od razu, a nie zbierać do paczki.
+              await subscriber.pushTextMessage(payload, {
+                urgency: webpush.Urgency.High,
+                ttl: 60 * 60 * 12, // 12 h — po tym czasie raport i tak nieaktualny
+                // topic: kolejny push o tej samej budowie ZASTĘPUJE
+                // poprzedni w kolejce push service. Musi być base64url,
+                // maks. 32 znaki — stąd sam buildId, bez znaków spoza [A-Za-z0-9_-].
+                topic: `raport${buildId}`,
+              });
               sentWeb += 1;
             } catch (err: unknown) {
               // 404/410 = subskrypcja martwa (odinstalowana PWA,
               // wyczyszczone dane) — sprzątamy.
-              if (err instanceof webpush.PushMessageError && err.isGone()) {
+              // UWAGA: isGone() istnieje dopiero od @negrel/webpush 0.5.x.
+              // Sprawdzamy defensywnie (a nie samym instanceof), bo przy
+              // innej wersji pakietu instanceof po cichu przestaje łapać
+              // i martwe subskrypcje zostawałyby w bazie na zawsze.
+              const status =
+                (err as { response?: { status?: number } })?.response?.status ??
+                (err as { statusCode?: number })?.statusCode;
+
+              const gone =
+                status === 404 ||
+                status === 410 ||
+                (typeof (err as { isGone?: () => boolean })?.isGone === "function" &&
+                  (err as { isGone: () => boolean }).isGone());
+
+              if (gone) {
                 staleIds.push(s.id);
                 return;
               }
+
               // KAŻDY inny błąd (400 BadJwtToken, 403 zły VAPID, 413 za
               // duży payload) musi być widoczny, a nie połknięty.
-              const status = (err as { response?: { status?: number } })?.response?.status;
               errors.push(
                 `web-send[${s.endpoint.slice(0, 45)}…] ${status ?? "?"}: ${
                   err instanceof Error ? err.message : String(err)

@@ -71,6 +71,7 @@ import {
   type BuildMaterialLotRow,
   type BuildMaterialReturnRow,
 } from "@/lib/data/build-materials";
+import { generateReportClientNote } from "@/lib/data/ai-summary";
 import {
   listReports,
   submitDailyReport,
@@ -188,6 +189,12 @@ export type SavedReport = {
   // Notatka brygadzisty do tego raportu (Decyzja B) — jedna, dowolna,
   // czysto informacyjna, patrz draftNote niżej.
   note?: string;
+  // Oczyszczona wersja notatki dla klienta (Gemini, generowana na żądanie
+  // Admina) — to, i tylko to, może trafić do portalu klienta; `note`
+  // wyżej zostaje wyłącznie wewnętrzne. Patrz
+  // supabase/functions/generate-report-note oraz 063_portal_klienta_
+  // podsumowanie_ai.sql.
+  clientNote?: string | null;
 };
 
 import {
@@ -252,6 +259,7 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
     kmCost: row.kmCost != null ? Number(row.kmCost) : undefined,
     submittedByProfileId: row.submittedByProfileId,
     note: row.note ?? undefined,
+    clientNote: row.clientNote ?? null,
   };
 }
 
@@ -2472,6 +2480,16 @@ function useAppDataState(
       },
     );
   };
+  // Generuje (Gemini) oczyszczoną, neutralną wersję notatki brygadzisty
+  // TEGO JEDNEGO raportu, przeznaczoną wyłącznie do portalu klienta —
+  // patrz supabase/functions/generate-report-note. Surowy report.note
+  // zostaje niezmieniony (widoczny tylko Adminowi w ReportCard).
+  const generateReportClientNoteAction = async (reportId: string) => {
+    const numericId = Number(reportId);
+    if (Number.isNaN(numericId)) return;
+    await generateReportClientNote(numericId);
+    await queryClient.invalidateQueries({ queryKey: ["reports", "list"] });
+  };
   // Zamyka budowę i zapisuje snapshot finalnego rozliczenia (godziny,
   // materiały plan/zużycie, koszty dodatkowe). Wymaga, żeby wszystkie
   // raporty tej budowy były już zatwierdzone — inaczej rozliczenie
@@ -2625,6 +2643,7 @@ function useAppDataState(
     startNewReport,
     getReportDefaults,
     approveReport,
+    generateReportClientNoteAction,
     closeBuild,
     reopenBuild,
     updateBuildPhotosUrl,

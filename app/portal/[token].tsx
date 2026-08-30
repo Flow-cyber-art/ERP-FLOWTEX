@@ -708,11 +708,29 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
   );
 }
 
-function NotesCard({ notes }: { notes: PublicBuildView["notes"] }) {
-  if (notes.length === 0) return null;
+function NotesCard({
+  notes,
+  aiSummary,
+}: {
+  notes: PublicBuildView["notes"];
+  aiSummary: PublicBuildView["aiSummary"];
+}) {
+  if (notes.length === 0 && !aiSummary) return null;
   return (
     <Card>
       <CardHeader title="Ostatnie aktualizacje" />
+      {aiSummary && (
+        <View
+          style={{
+            paddingHorizontal: 20,
+            paddingTop: 16,
+            paddingBottom: notes.length > 0 ? 10 : 16,
+          }}
+        >
+          <Text style={{ color: PC.txt, fontSize: 14, lineHeight: 21 }}>{aiSummary}</Text>
+        </View>
+      )}
+      {notes.length > 0 && (
       <View style={{ paddingHorizontal: 20, paddingVertical: 6 }}>
         {notes.map((n, i) => (
           <View
@@ -750,6 +768,7 @@ function NotesCard({ notes }: { notes: PublicBuildView["notes"] }) {
           </View>
         ))}
       </View>
+      )}
     </Card>
   );
 }
@@ -1067,7 +1086,7 @@ export default function PublicBuildPortal() {
 
         <View style={{ flex: isWide ? 1 : undefined }}>
           <PhotosCard view={view} />
-          <NotesCard notes={view.notes} />
+          <NotesCard notes={view.notes} aiSummary={view.aiSummary} />
           <TechCard view={view} />
 
           {view.contractValue != null && (

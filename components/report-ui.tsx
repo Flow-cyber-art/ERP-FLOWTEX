@@ -1139,6 +1139,11 @@ export type ReportCardData = {
   // Notatka brygadzisty do tego raportu (Decyzja B) — jedna, dowolna,
   // czysto informacyjna.
   note?: string;
+  // Oczyszczona wersja tej notatki dla klienta (Gemini) — patrz
+  // supabase/functions/generate-report-note. null = wygenerowana, ale
+  // Gemini uznało notatkę za niepokazywalną klientowi (same skargi/brak
+  // treści); undefined = jeszcze nie generowana.
+  clientNote?: string | null;
 };
 
 // Jedna karta raportu dziennego, używana zarówno w globalnej skrzynce
@@ -1328,6 +1333,8 @@ const ReportCard = ({
   onToggle,
   onApprove,
   showBuildInfo = true,
+  onGenerateClientNote,
+  generatingClientNote = false,
 }: {
   report: ReportCardData;
   build?: Build;
@@ -1338,6 +1345,11 @@ const ReportCard = ({
   onToggle: () => void;
   onApprove: () => void;
   showBuildInfo?: boolean;
+  // Obecność tego callbacku decyduje o pokazaniu sekcji "dla klienta" —
+  // przekazywany tylko z widoku Admina (builds-screen.tsx), nie z "Moje
+  // raporty" brygadzisty, który tej karty w ogóle nie widzi z przyciskiem.
+  onGenerateClientNote?: () => void;
+  generatingClientNote?: boolean;
 }) => {
   const approved = report.status === "approved";
   const planned = assignments.filter((a) => a.buildId === build?.id);
@@ -1660,6 +1672,56 @@ const ReportCard = ({
               <Text style={{ color: COLORS.foreground, fontSize: 13, marginTop: 6 }}>
                 {report.note}
               </Text>
+            </View>
+          )}
+
+          {onGenerateClientNote && report.note && (
+            <View
+              style={{
+                marginTop: 12,
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                borderStyle: "dashed",
+              }}
+            >
+              <Text
+                style={{ color: COLORS.muted, fontSize: 11, fontWeight: "800" }}
+                className="uppercase"
+              >
+                Notatka dla klienta (AI)
+              </Text>
+              {report.clientNote === undefined ? (
+                <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
+                  Jeszcze nie wygenerowano — klient nie zobaczy notatki tego dnia, dopóki nie
+                  utworzysz oczyszczonej wersji.
+                </Text>
+              ) : report.clientNote === null ? (
+                <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
+                  Wygenerowano, ale notatka nie zawierała nic nadającego się do pokazania klientowi
+                  — ten dzień nie pojawi się w portalu.
+                </Text>
+              ) : (
+                <Text style={{ color: COLORS.foreground, fontSize: 13, marginTop: 6 }}>
+                  {report.clientNote}
+                </Text>
+              )}
+              <View style={{ marginTop: 10 }}>
+                <Button
+                  label={
+                    generatingClientNote
+                      ? "Generowanie…"
+                      : report.clientNote !== undefined
+                        ? "Wygeneruj ponownie"
+                        : "Wygeneruj notatkę dla klienta"
+                  }
+                  secondary
+                  disabled={generatingClientNote}
+                  onPress={onGenerateClientNote}
+                />
+              </View>
             </View>
           )}
 

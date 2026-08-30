@@ -17,10 +17,15 @@ export type PublicPortalSettings = {
   showContractValueToClient: boolean;
   showPhotosToClient: boolean;
   showNotesToClient: boolean;
+  // Zbiorcze podsumowanie AI całej budowy (Gemini) — patrz
+  // supabase/functions/generate-client-summary i
+  // 063_portal_klienta_podsumowanie_ai.sql. null = jeszcze niewygenerowane.
+  aiClientSummary: string | null;
+  aiClientSummaryGeneratedAt: string | null;
 };
 
 const SETTINGS_SELECT =
-  "publicToken:public_token, publicAccessEnabled:public_access_enabled, publicPinHash:public_pin_hash, showContractValueToClient:show_contract_value_to_client, showPhotosToClient:show_photos_to_client, showNotesToClient:show_notes_to_client";
+  "publicToken:public_token, publicAccessEnabled:public_access_enabled, publicPinHash:public_pin_hash, showContractValueToClient:show_contract_value_to_client, showPhotosToClient:show_photos_to_client, showNotesToClient:show_notes_to_client, aiClientSummary:ai_client_summary, aiClientSummaryGeneratedAt:ai_client_summary_generated_at";
 
 export async function getPublicPortalSettings(buildId: number): Promise<PublicPortalSettings> {
   const { data, error } = await supabase
@@ -36,6 +41,8 @@ export async function getPublicPortalSettings(buildId: number): Promise<PublicPo
     showContractValueToClient: boolean;
     showPhotosToClient: boolean;
     showNotesToClient: boolean;
+    aiClientSummary: string | null;
+    aiClientSummaryGeneratedAt: string | null;
   };
   return {
     publicToken: row.publicToken,
@@ -44,6 +51,8 @@ export async function getPublicPortalSettings(buildId: number): Promise<PublicPo
     showContractValueToClient: row.showContractValueToClient,
     showPhotosToClient: row.showPhotosToClient,
     showNotesToClient: row.showNotesToClient,
+    aiClientSummary: row.aiClientSummary,
+    aiClientSummaryGeneratedAt: row.aiClientSummaryGeneratedAt,
   };
 }
 
@@ -133,6 +142,9 @@ export type PublicBuildView = {
   // nie musi osobno sprawdzać flag, tylko renderować to, co przyszło.
   photos: PublicBuildPhoto[];
   notes: PublicBuildNote[];
+  // Zbiorcze podsumowanie AI całej budowy — pokazywane nad listą notatek
+  // dziennych, null gdy jeszcze niewygenerowane lub notatki wyłączone.
+  aiSummary: string | null;
   lastUpdateDate: string | null;
   photosUrl: string | null;
   contractValue: string | null;

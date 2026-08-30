@@ -1,34 +1,32 @@
 // Powiadomienie push dla wszystkich Adminów o nowym/zaktualizowanym
 // raporcie dziennym — wołane fire-and-forget zaraz po udanym
-// `submitDailyReport` (patrz lib/offline-outbox.ts, flushOutbox), żeby
-// Admin dowiedział się "na bieżąco", że jest raport do sprawdzenia,
-// zamiast odkrywać to dopiero przy następnym otwarciu apki. Notatka dla
-// klienta i tak generuje się dopiero PRZY ZATWIERDZENIU (patrz
-// 063_portal_klienta_podsumowanie_ai.sql) — to push jest tym, co
-// przyspiesza dotarcie do tego momentu.
+// `submitDailyReport` (patrz lib/offline-outbox.ts, flushOutbox).
 //
-// Dwa niezależne kanały, bo Adminowie pracują z telefonów, na które nie
-// da się (jeszcze) zbudować natywnej appki bez konta Apple Developer:
+// Dwa niezależne kanały:
 //  - Expo Push (push_tokens, 067) — natywny build Android/iOS przez EAS.
 //  - Web Push (web_push_subscriptions, 068_web_push_ios_safari.sql) —
 //    Safari na iPhonie, appka dodana "Do ekranu głównego" (iOS 16.4+).
-// Wysyłamy do obu naraz; kto nie ma subskrypcji w danym kanale, po
-// prostu nic stamtąd nie dostanie.
 //
-// Wymaga (Supabase Dashboard -> Edge Functions -> Secrets) dla kanału
-// Web Push:
-//   VAPID_PRIVATE_KEY — wygenerowany RAZEM z VAPID_PUBLIC_KEY poniżej
-//     (para kluczy web-push.generateVAPIDKeys()) — muszą pasować do
-//     siebie, inaczej przeglądarki odrzucą wysyłkę.
-//   VAPID_SUBJECT — opcjonalnie, "mailto:ktos@flowtex.pl"; domyślnie
-//     "mailto:admin@flowtex.pl" jeśli sekret nie ustawiony.
-// Expo Push nie wymaga żadnego sekretu.
+// ZMIANA vs. poprzednia wersja (przyczyna "push nie działa na iOS"):
+//  1. `npm:web-push` NIE działa niezawodnie na Deno Deploy (opiera się na
+//     node:https / node:crypto i strumieniach Node). Zamienione na
+//     `jsr:@negrel/webpush`, które używa natywnego WebCrypto — to jest
+//     rekomendowana droga dla Supabase Edge Functions.
+//  2. Wszystkie błędy web push są teraz RAPORTOWANE w odpowiedzi
+//     (wcześniej brak sekretu VAPID_PRIVATE_KEY albo błąd 400/403 z
+//     Apple przechodził bezszelestnie i funkcja zwracała "sukces").
 //
-// Deploy: Supabase Dashboard -> Edge Functions -> Deploy new function ->
-// nazwa "send-report-notification" -> wklej ten plik -> Deploy.
+// Wymagane sekrety (Supabase Dashboard -> Edge Functions -> Secrets):
+//   VAPID_PRIVATE_KEY — klucz prywatny z tej samej pary co
+//     VAPID_PUBLIC_KEY poniżej (JWK "d" albo base64url raw).
+//   VAPID_SUBJECT — opcjonalnie, np. "mailto:ktos@flowtex.pl".
+//     MUSI zaczynać się od "mailto:" lub "https://" — inaczej Apple
+//     odrzuca żądanie błędem 400 BadJwtToken.
+//
+// Deploy: Supabase Dashboard -> Edge Functions -> send-report-notification.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import webpush from "npm:web-push@3.6.7";
+import * as webpush from "jsr:@negrel/webpush@0.3.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,9 +43,54 @@ function json(body: unknown, status = 200) {
 
 // Klucz publiczny VAPID — nie sekret, MUSI być identyczny z
 // app.config.ts (extra.vapidPublicKey), bo to jedna para kluczy.
-// Trzymany tu wprost (nie jako sekret) właśnie po to, żeby nie dało się
-// go przypadkiem rozjechać z tym po stronie klienta.
-const VAPID_PUBLIC_KEY = "BL6QFXgICW6_AXZAPTupcdpjYXE6UjCV_K7fliF5x7cQRGjFWlaCf_1pLI6YgvL_q0Ie4txSBFuX7rLSWi9S5vg";
+const VAPID_PUBLIC_KEY =
+  "BL6QFXgICW6_AXZAPTupcdpjYXE6UjCV_K7fliF5x7cQRGjFWlaCf_1pLI6YgvL_q0Ie4txSBFuX7rLSWi9S5vg";
+
+/**
+ * Klucz prywatny może być podany na dwa sposoby:
+ *  - jako pełny JWK w JSON (najwygodniejsze, gdy generujesz przez
+ *    `webpush.generateVapidKeys()` i robisz `exportVapidKeys`),
+ *  - jako sam parametr "d" w base64url (format z web-push CLI).
+ * Obsługujemy oba, żeby nie było zgadywania przy wklejaniu sekretu.
+ */
+async function importVapidKeys(privateKeyRaw: string) {
+  const trimmed = privateKeyRaw.trim();
+
+  if (trimmed.startsWith("{")) {
+    return await webpush.importVapidKeys(JSON.parse(trimmed), { extractable: false });
+  }
+
+  // Klucz publiczny (65 bajtów, 0x04 + X + Y) rozbijamy na współrzędne
+  // JWK, bo WebCrypto przyjmuje wyłącznie format JWK/PKCS8.
+  const pub = decodeBase64Url(VAPID_PUBLIC_KEY);
+  if (pub.length !== 65 || pub[0] !== 0x04) {
+    throw new Error("VAPID_PUBLIC_KEY nie jest poprawnym niezaskompresowanym punktem P-256.");
+  }
+  const jwk = {
+    kty: "EC",
+    crv: "P-256",
+    x: encodeBase64Url(pub.slice(1, 33)),
+    y: encodeBase64Url(pub.slice(33, 65)),
+    d: trimmed,
+  };
+  return await webpush.importVapidKeys(
+    { publicKey: { ...jwk, key_ops: ["verify"] }, privateKey: { ...jwk, key_ops: ["sign"] } },
+    { extractable: false },
+  );
+}
+
+function decodeBase64Url(value: string): Uint8Array {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
+  const withPadding = padded + "=".repeat((4 - (padded.length % 4)) % 4);
+  return Uint8Array.from(atob(withPadding), (c) => c.charCodeAt(0));
+}
+
+function encodeBase64Url(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -69,9 +112,6 @@ Deno.serve(async (req) => {
   const {
     data: { user },
   } = await callerClient.auth.getUser();
-  // Dowolny zalogowany użytkownik może wysłać raport (Brygadzista) — nie
-  // wymagamy roli Admin, bo to WŁAŚNIE brygadzista wywołuje tę funkcję po
-  // swoim zgłoszeniu.
   if (!user) return json({ error: "Nieprawidłowa sesja." }, 401);
 
   let body: Record<string, unknown>;
@@ -80,6 +120,9 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: "Nieprawidłowe body żądania." }, 400);
   }
+  // `debug: true` w body -> odpowiedź zawiera pełną diagnostykę kanału
+  // web push (ile subskrypcji, jakie błędy) zamiast samych liczników.
+  const debug = body.debug === true;
   const buildId = Number(body.buildId);
   const date = typeof body.date === "string" ? body.date : null;
   if (!buildId || !date) return json({ error: "Brak buildId lub date." }, 400);
@@ -92,12 +135,11 @@ Deno.serve(async (req) => {
     .eq("id", buildId)
     .maybeSingle();
 
-  const { data: adminProfiles } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("role", "Admin");
+  const { data: adminProfiles } = await admin.from("profiles").select("id").eq("role", "Admin");
   const adminIds = (adminProfiles ?? []).map((p: { id: string }) => p.id);
-  if (adminIds.length === 0) return json({ sentExpo: 0, sentWeb: 0 });
+  if (adminIds.length === 0) {
+    return json({ sentExpo: 0, sentWeb: 0, errors: ["brak profili z rolą Admin"] });
+  }
 
   const title = "Nowy raport dzienny";
   const buildLabel = build ? `${build.number} · ${build.name}` : `budowa #${buildId}`;
@@ -106,6 +148,7 @@ Deno.serve(async (req) => {
   let sentExpo = 0;
   let sentWeb = 0;
   const errors: string[] = [];
+  const diagnostics: Record<string, unknown> = { adminIds: adminIds.length };
 
   // --- Kanał 1: Expo Push (natywny build) ---
   try {
@@ -121,10 +164,9 @@ Deno.serve(async (req) => {
       data: { buildId, date },
       sound: "default",
     }));
-    // Expo Push API przyjmuje maks. 100 wiadomości na request.
     for (let i = 0; i < messages.length; i += 100) {
       const chunk = messages.slice(i, i + 100);
-      await fetch("https://exp.host/--/api/v2/push/send", {
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -133,6 +175,9 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify(chunk),
       });
+      if (!response.ok) {
+        errors.push(`expo ${response.status}: ${await response.text()}`);
+      }
     }
     sentExpo = tokens.length;
   } catch (err) {
@@ -140,59 +185,83 @@ Deno.serve(async (req) => {
   }
 
   // --- Kanał 2: Web Push (Safari na iPhonie) ---
-  // Wcześniej brak sekretu po prostu pomijał cały kanał BEZ ŻADNEJ
-  // informacji w odpowiedzi — funkcja zwracała sentWeb: 0 i zero błędów,
-  // co wygląda identycznie jak "nikt nie ma subskrypcji". Teraz zawsze
-  // wprost mówimy dlaczego kanał web nic nie wysłał.
   if (!vapidPrivateKey) {
-    errors.push("web: brak sekretu VAPID_PRIVATE_KEY w Edge Functions Secrets.");
+    // KLUCZOWE: wcześniej ten przypadek po cichu pomijał cały kanał i
+    // funkcja zwracała "sukces" z sentWeb: 0.
+    errors.push("web: brak sekretu VAPID_PRIVATE_KEY w Edge Functions");
+  } else if (!/^(mailto:|https:\/\/)/.test(vapidSubject)) {
+    errors.push(`web: VAPID_SUBJECT musi zaczynać się od mailto: lub https:// (jest "${vapidSubject}")`);
   } else {
     try {
-      webpush.setVapidDetails(vapidSubject, VAPID_PUBLIC_KEY, vapidPrivateKey);
+      const vapidKeys = await importVapidKeys(vapidPrivateKey);
+      const appServer = await webpush.ApplicationServer.new({
+        contactInformation: vapidSubject,
+        vapidKeys,
+      });
+
       const { data: subs, error: subsError } = await admin
         .from("web_push_subscriptions")
         .select("id, endpoint, p256dh, auth")
         .in("profile_id", adminIds);
-      if (subsError) errors.push(`web-select: ${subsError.message}`);
 
-      const payload = JSON.stringify({ title, body: bodyText, data: { buildId, date } });
+      if (subsError) errors.push(`web-select: ${subsError.message}`);
+      diagnostics.webSubscriptions = subs?.length ?? 0;
+      diagnostics.appleEndpoints = (subs ?? []).filter((s: { endpoint: string }) =>
+        s.endpoint.includes("web.push.apple.com"),
+      ).length;
+
+      const payload = JSON.stringify({
+        title,
+        body: bodyText,
+        data: { buildId, date, url: "/" },
+      });
+
       const staleIds: number[] = [];
       await Promise.all(
-        (subs ?? []).map(async (s: { id: number; endpoint: string; p256dh: string; auth: string }) => {
-          try {
-            await webpush.sendNotification(
-              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-              payload,
-            );
-            sentWeb += 1;
-          } catch (err: unknown) {
-            // 404/410 = subskrypcja martwa (użytkownik odinstalował PWA,
-            // wyczyścił dane przeglądarki) — sprzątamy, żeby nie próbować
-            // w nieskończoność za każdym kolejnym raportem. Wszystko inne
-            // (400 zły JWT, 401/403 zły klucz VAPID, 413 za duży payload)
-            // wcześniej ginęło bez śladu — teraz ląduje w `errors`.
-            const status = (err as { statusCode?: number })?.statusCode;
-            if (status === 404 || status === 410) {
-              staleIds.push(s.id);
-            } else {
-              const bodyErr = (err as { body?: string })?.body;
+        (subs ?? []).map(
+          async (s: { id: number; endpoint: string; p256dh: string; auth: string }) => {
+            try {
+              const subscriber = appServer.subscribe({
+                endpoint: s.endpoint,
+                keys: { p256dh: s.p256dh, auth: s.auth },
+              });
+              await subscriber.pushTextMessage(payload, {});
+              sentWeb += 1;
+            } catch (err: unknown) {
+              // 404/410 = subskrypcja martwa (odinstalowana PWA,
+              // wyczyszczone dane) — sprzątamy.
+              if (err instanceof webpush.PushMessageError && err.isGone()) {
+                staleIds.push(s.id);
+                return;
+              }
+              // KAŻDY inny błąd (400 BadJwtToken, 403 zły VAPID, 413 za
+              // duży payload) musi być widoczny, a nie połknięty.
+              const status = (err as { response?: { status?: number } })?.response?.status;
               errors.push(
-                `web-send ${status ?? "?"}: ${bodyErr ?? (err instanceof Error ? err.message : String(err))}`,
+                `web-send[${s.endpoint.slice(0, 45)}…] ${status ?? "?"}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
               );
             }
-          }
-        }),
+          },
+        ),
       );
+
       if (staleIds.length) {
         await admin.from("web_push_subscriptions").delete().in("id", staleIds);
+        diagnostics.removedStale = staleIds.length;
       }
     } catch (err) {
-      errors.push(`web: ${err instanceof Error ? err.message : String(err)}`);
+      errors.push(`web-init: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  // Nieudana wysyłka pushy NIGDY nie może zepsuć samego zapisu raportu
-  // (który już się udał, zanim ta funkcja została wywołana) — stąd
-  // zawsze 200, błędy tylko informacyjnie w odpowiedzi.
-  return json({ sentExpo, sentWeb, errors: errors.length ? errors : undefined });
+  // Nieudana wysyłka pushy NIGDY nie może zepsuć samego zapisu raportu —
+  // stąd zawsze 200, błędy tylko informacyjnie w odpowiedzi.
+  return json({
+    sentExpo,
+    sentWeb,
+    errors: errors.length ? errors : undefined,
+    diagnostics: debug ? diagnostics : undefined,
+  });
 });

@@ -1,7 +1,10 @@
 {
+  "id": "/",
   "name": "ERP FLOWTEX",
   "short_name": "ERP FLOWTEX",
   "description": "ERP-Flowtex — zarządzanie budowami, materiałami i raportami",
+  "lang": "pl",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

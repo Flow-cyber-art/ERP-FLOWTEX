@@ -89,42 +89,122 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// ---------------------------------------------------------------------
 // Web Push (Safari iOS 16.4+, patrz 068_web_push_ios_safari.sql i
 // lib/notifications/use-register-web-push.ts) — Admin dostaje
 // powiadomienie o nowym raporcie nawet gdy appka jest zamknięta.
-// Payload wysyłany przez send-report-notification to zwykły JSON
-// {title, body, data}.
+// Payload wysyłany przez send-report-notification to JSON
+// {title, body, data:{buildId, date, url}}.
+//
+// UWAGA iOS: KAŻDY push MUSI zakończyć się showNotification() wewnątrz
+// event.waitUntil(). Jeżeli handler choć raz nie pokaże powiadomienia,
+// WebKit może unieważnić subskrypcję (brak wsparcia dla silent push).
+// Dlatego poniżej nie ma ŻADNEJ ścieżki wyjścia bez notyfikacji.
+// ---------------------------------------------------------------------
 self.addEventListener("push", (event) => {
-  let payload = { title: "Nowy raport dzienny", body: "" };
+  const fallback = {
+    title: "Nowy raport dzienny",
+    body: "Otwórz aplikację, żeby zobaczyć szczegóły.",
+    data: {},
+  };
+
+  let payload = fallback;
   try {
-    if (event.data) payload = { ...payload, ...event.data.json() };
+    if (event.data) {
+      // Najpierw JSON, a gdy to nie JSON — czysty tekst jako body.
+      let parsed = null;
+      try {
+        parsed = event.data.json();
+      } catch {
+        const text = event.data.text();
+        parsed = text ? { body: text } : null;
+      }
+      if (parsed && typeof parsed === "object") {
+        payload = { ...fallback, ...parsed };
+      }
+    }
   } catch {
-    // Payload spoza JSON-a (nie powinno się zdarzyć z naszego serwera) —
-    // zostają wartości domyślne zamiast wywrócić handler.
+    // Cokolwiek by się nie stało — pokazujemy powiadomienie domyślne,
+    // bo brak notyfikacji na iOS = ryzyko utraty subskrypcji.
   }
+
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
+    self.registration.showNotification(payload.title || fallback.title, {
+      body: payload.body || "",
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
+      // tag + renotify: kolejny raport podmienia poprzednie powiadomienie
+      // zamiast budować stos kilkunastu wpisów na ekranie blokady.
+      tag: payload.tag || "raport",
+      renotify: true,
       data: payload.data ?? {},
     }),
   );
 });
 
 // Kliknięcie w powiadomienie: skup istniejącą kartę appki, jeśli jest
-// otwarta, zamiast zawsze otwierać nową.
+// otwarta, zamiast zawsze otwierać nową. Gdy payload niesie data.url —
+// nawiguj tam (np. prosto do raportu).
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+
   event.waitUntil(
     (async () => {
-      const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const clientsList = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
       const existing = clientsList.find((c) => "focus" in c);
       if (existing) {
-        existing.focus();
+        // navigate() bywa niedostępne/rzuca na iOS — focus jest
+        // ważniejszy niż deep link, więc nawigacja jest best-effort.
+        try {
+          if ("navigate" in existing && targetUrl) {
+            await existing.navigate(targetUrl);
+          }
+        } catch {
+          // ignorujemy — zostaje samo skupienie okna
+        }
+        await existing.focus();
         return;
       }
-      await self.clients.openWindow("/");
+      await self.clients.openWindow(targetUrl);
+    })(),
+  );
+});
+
+// iOS potrafi wygasić/odnowić subskrypcję bez udziału użytkownika.
+// Ten handler zapisuje nową subskrypcję od razu, bez czekania aż ktoś
+// otworzy Ustawienia i kliknie "Włącz powiadomienia" ponownie.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const applicationServerKey =
+          event.oldSubscription?.options?.applicationServerKey;
+        if (!applicationServerKey) return;
+        const fresh = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+        // Endpoint trafia do wszystkich otwartych klientów — appka
+        // dosyła go do Supabase przez register_web_push_subscription
+        // (patrz lib/pwa/registerServiceWorker.ts).
+        const clientsList = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        for (const client of clientsList) {
+          client.postMessage({
+            type: "PUSH_SUBSCRIPTION_CHANGED",
+            subscription: fresh.toJSON(),
+          });
+        }
+      } catch {
+        // Bez sesji użytkownika i tak nie zapiszemy — przy następnym
+        // otwarciu appki zrobi to useRegisterWebPush().
+      }
     })(),
   );
 });

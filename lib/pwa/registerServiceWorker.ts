@@ -1,64 +1,93 @@
-import { Platform } from "react-native";
-
 /**
- * Rejestruje service workera (public/sw.js → serwowany pod /sw.js) na
- * platformie web. Na natywnym iOS/Androidzie nie ma service workerów,
- * więc funkcja jest tam no-opem — bezpiecznie wołać ją zawsze, bez
- * osobnego sprawdzania platformy w miejscu wywołania.
+ * Rejestracja service workera PWA (public/sw.js).
+ *
+ * DLACZEGO OSOBNY MODUŁ: `navigator.serviceWorker.ready` NIE rejestruje
+ * niczego — czeka tylko na SW, który już jest aktywny i kontroluje tę
+ * stronę. Jeśli rejestracja nigdy nie nastąpiła (albo SW ma za wąski
+ * scope), `ready` wisi w NIESKOŃCZONOŚĆ i nie rzuca błędem. To najczęstsza
+ * przyczyna "push nie działa i nic się nie dzieje" na iOS.
  */
-export function registerServiceWorker() {
-  if (Platform.OS !== "web") return;
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
-    return;
-  }
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js")
-      .catch((err) => console.warn("[sw] rejestracja nie powiodła się:", err));
-  });
+
+const SW_URL = "/sw.js";
+const SW_SCOPE = "/";
+const READY_TIMEOUT_MS = 10_000;
+
+export function isServiceWorkerSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof navigator !== "undefined" &&
+    "serviceWorker" in navigator
+  );
 }
 
 /**
- * Wysyła do aktywnego service workera komunikat każący mu wyczyścić
- * cache statycznych assetów i CZEKA na potwierdzenie, że cache faktycznie
- * został wyczyszczony (przez MessageChannel, patrz public/sw.js), zanim
- * wywołujący zrobi window.location.reload().
- *
- * Wcześniej funkcja tylko wysyłała komunikat i wracała natychmiast, a
- * czyszczenie cache'a w SW działo się asynchronicznie w tle (wewnątrz
- * event.waitUntil) — reload wygrywał ten wyścig i strona ładowała się
- * z mieszanki starych (jeszcze niewyczyszczonych) i nowych assetów, co
- * potrafiło zgubić część skompilowanych klas Tailwind (np. ograniczenie
- * szerokości layoutu na desktopie). Timeout 2s to zabezpieczenie na
- * wypadek, gdyby SW nie odpowiedział (np. brak aktywnego workera).
- *
- * `navigator.serviceWorker.ready` samo w sobie NIE ma żadnego timeoutu —
- * to Promise, które wisi w nieskończoność, jeśli rejestracja SW nigdy nie
- * dojdzie do skutku (np. nieudany/przerwany install na słabszym
- * połączeniu). `.catch(() => null)` łapie tylko odrzucenie, nie
- * "zawieszenie" — bez osobnego wyścigu z timeoutem przycisk "Odśwież"
- * potrafił wyglądać na martwy (widoczny, klikalny, ale bez żadnego
- * efektu), bo cała funkcja czekała w nieskończoność na ten pierwszy krok.
+ * Rejestruje /sw.js (jeśli trzeba) i czeka na aktywny rejestr — z twardym
+ * timeoutem, żeby zamiast wiecznego zawieszenia dostać czytelny błąd.
  */
-export async function clearServiceWorkerCache() {
-  if (Platform.OS !== "web") return;
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
-    return;
+export async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
+  if (!isServiceWorkerSupported()) {
+    throw new Error("Ta przeglądarka nie obsługuje Service Workerów.");
   }
-  const registration = await Promise.race([
-    navigator.serviceWorker.ready.catch(() => null),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
-  ]);
-  const active = registration?.active;
-  if (!active) return;
+
+  const existing = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+  if (!existing) {
+    // sw.js MUSI leżeć w root'cie domeny — SW z podkatalogu nie obejmie
+    // scope "/" i push dla całej appki nie zadziała.
+    await navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE });
+  }
+
+  const ready = navigator.serviceWorker.ready;
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            "Service Worker nie aktywował się w 10 s. Sprawdź, czy /sw.js jest serwowany " +
+              "z roota domeny i czy strona działa po HTTPS.",
+          ),
+        ),
+      READY_TIMEOUT_MS,
+    );
+  });
+
+  return Promise.race([ready, timeout]);
+}
+
+/**
+ * Wołane raz przy starcie appki webowej (patrz app/_layout.tsx).
+ * Fire-and-forget: brak SW nie może zablokować renderu appki.
+ */
+export function registerServiceWorker(): void {
+  if (!isServiceWorkerSupported()) return;
+
+  ensureServiceWorkerRegistration().catch((err) => {
+    console.warn("[pwa] rejestracja service workera nie powiodła się:", err);
+  });
+}
+
+/** Wymuszenie aktywacji nowego SW (patrz useVersionCheck.ts). */
+export async function skipWaiting(): Promise<void> {
+  if (!isServiceWorkerSupported()) return;
+  const registration = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+  registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
+}
+
+/** Czyści cache statyczny i czeka na potwierdzenie z SW (patrz sw.js). */
+export async function clearServiceWorkerCache(): Promise<void> {
+  if (!isServiceWorkerSupported()) return;
+  const registration = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+  const target = registration?.active;
+  if (!target) return;
 
   await new Promise<void>((resolve) => {
     const channel = new MessageChannel();
-    const timeout = setTimeout(resolve, 2000);
-    channel.port1.onmessage = () => {
-      clearTimeout(timeout);
-      resolve();
+    const timer = setTimeout(resolve, 3_000);
+    channel.port1.onmessage = (event) => {
+      if (event.data?.type === "CACHE_CLEARED") {
+        clearTimeout(timer);
+        resolve();
+      }
     };
-    active.postMessage({ type: "CLEAR_CACHE" }, [channel.port2]);
+    target.postMessage({ type: "CLEAR_CACHE" }, [channel.port2]);
   });
 }

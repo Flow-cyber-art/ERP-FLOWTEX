@@ -1,58 +1,41 @@
 import { ScrollViewStyleReset } from "expo-router/html";
+import type { PropsWithChildren } from "react";
 
 /**
- * Ten plik podmienia domyslny root HTML generowany przez Expo Router
- * przy statycznym eksporcie webowym (`expo export -p web`).
+ * Statyczny shell HTML dla builda webowego (expo web output: "static").
+ * Renderowany TYLKO po stronie serwera przy exporcie — nie ma tu dostępu
+ * do DOM ani do window.
  *
- * Rozni sie od domyslnego szablonu dwoma rzeczami:
- *  1) viewport: dopisane `maximum-scale=1, user-scalable=no` (blokada
- *     pinch-zoom i double-tap zoom) oraz `viewport-fit=cover`, bez
- *     ktorego przegladarka nie zwraca prawdziwych env(safe-area-inset-*),
- *  2) inline <style> z tlem — zeby nie bylo bialego mignięcia przed
- *     wykonaniem JS-a i zeby pod aplikacja nie przeswitywala biel.
- *
- * <ScrollViewStyleReset /> ZOSTAJE. Probowalismy go usunac przy debugu
- * gapu — nie pomoglo, a bez niego <body> zaczyna scrollowac globalnie.
- *
- * Uwaga: ten komponent renderuje sie tylko raz, przy buildzie.
+ * Tu żyją meta-tagi wymagane przez iOS do zainstalowania appki jako PWA
+ * (bez nich `window.navigator.standalone` nie zrobi się true, a bez
+ * standalone iOS NIE udostępnia PushManagera).
  */
-export default function Root({ children }: { children: React.ReactNode }) {
+export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="pl">
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        {/* Bez tego przeglądarka pokazuje na karcie sam adres (np.
-            "erp.flowtex.pl") zamiast nazwy aplikacji — ten szablon
-            całkowicie podmienia domyślny <head> Expo Routera, który
-            normalnie wstawiłby <title> sam, więc trzeba go dopisać
-            ręcznie. */}
-        <title>ERP FLOWTEX</title>
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
         />
-        {/* PWA: pozwala zapisac aplikacje na pulpicie/ekranie glownym
-            i uruchamiac ja jako samodzielne okno bez paska adresu.
-            Ikony w public/icons/. */}
+
+        {/* Manifest — bez niego iOS nie potraktuje strony jako PWA. */}
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1B1B1D" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+        {/* iOS nie czyta manifestu tak jak Android — potrzebuje własnych
+            meta-tagów, żeby appka odpaliła się w trybie standalone. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Budowy" />
-        <ScrollViewStyleReset />
+        <meta name="apple-mobile-web-app-title" content="ERP FLOWTEX" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
 
-        {/* Tlo dokumentu wymuszone INLINE: global.css uzywa
-            var(--color-background), ktora ustawia dopiero ThemeProvider
-            w runtime — a ten <style> dziala juz przy pierwszym paint. */}
-        <style
-          dangerouslySetInnerHTML={{
-            __html:
-              "html,body,#root{background-color:#1B1B1D;}" +
-              "body{overscroll-behavior:none;}",
-          }}
-        />
+        <meta name="theme-color" content="#1B1B1D" />
+
+        <ScrollViewStyleReset />
       </head>
       <body>{children}</body>
     </html>

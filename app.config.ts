@@ -150,6 +150,12 @@ const config: ExpoConfig = {
     eas: {
       projectId: "7ef1583f-9529-4eb8-b84c-a2a1a00d19be",
     },
+    // Klucz PUBLICZNY VAPID (Web Push, Safari iOS 16.4+) — nie sekret,
+    // służy tylko do subskrypcji w przeglądarce (patrz
+    // lib/notifications/use-register-web-push.ts). Klucz prywatny żyje
+    // wyłącznie jako sekret Edge Function VAPID_PRIVATE_KEY.
+    vapidPublicKey:
+      "BL6QFXgICW6_AXZAPTupcdpjYXE6UjCV_K7fliF5x7cQRGjFWlaCf_1pLI6YgvL_q0Ie4txSBFuX7rLSWi9S5vg",
   },
 };
 

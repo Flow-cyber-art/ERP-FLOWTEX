@@ -7,13 +7,28 @@
 // 063_portal_klienta_podsumowanie_ai.sql) — to push jest tym, co
 // przyspiesza dotarcie do tego momentu.
 //
-// Bez sekretów zewnętrznych — Expo Push API jest publiczne i nie wymaga
-// klucza dla zwykłych (nie-FCM-v1) wysyłek.
+// Dwa niezależne kanały, bo Adminowie pracują z telefonów, na które nie
+// da się (jeszcze) zbudować natywnej appki bez konta Apple Developer:
+//  - Expo Push (push_tokens, 067) — natywny build Android/iOS przez EAS.
+//  - Web Push (web_push_subscriptions, 068_web_push_ios_safari.sql) —
+//    Safari na iPhonie, appka dodana "Do ekranu głównego" (iOS 16.4+).
+// Wysyłamy do obu naraz; kto nie ma subskrypcji w danym kanale, po
+// prostu nic stamtąd nie dostanie.
+//
+// Wymaga (Supabase Dashboard -> Edge Functions -> Secrets) dla kanału
+// Web Push:
+//   VAPID_PRIVATE_KEY — wygenerowany RAZEM z VAPID_PUBLIC_KEY poniżej
+//     (para kluczy web-push.generateVAPIDKeys()) — muszą pasować do
+//     siebie, inaczej przeglądarki odrzucą wysyłkę.
+//   VAPID_SUBJECT — opcjonalnie, "mailto:ktos@flowtex.pl"; domyślnie
+//     "mailto:admin@flowtex.pl" jeśli sekret nie ustawiony.
+// Expo Push nie wymaga żadnego sekretu.
 //
 // Deploy: Supabase Dashboard -> Edge Functions -> Deploy new function ->
 // nazwa "send-report-notification" -> wklej ten plik -> Deploy.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import webpush from "npm:web-push@3.6.7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +43,12 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// Klucz publiczny VAPID — nie sekret, MUSI być identyczny z
+// app.config.ts (extra.vapidPublicKey), bo to jedna para kluczy.
+// Trzymany tu wprost (nie jako sekret) właśnie po to, żeby nie dało się
+// go przypadkiem rozjechać z tym po stronie klienta.
+const VAPID_PUBLIC_KEY = "BL6QFXgICW6_AXZAPTupcdpjYXE6UjCV_K7fliF5x7cQRGjFWlaCf_1pLI6YgvL_q0Ie4txSBFuX7rLSWi9S5vg";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -39,6 +60,8 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
+  const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@flowtex.pl";
 
   const callerClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader } },
@@ -74,28 +97,30 @@ Deno.serve(async (req) => {
     .select("id")
     .eq("role", "Admin");
   const adminIds = (adminProfiles ?? []).map((p: { id: string }) => p.id);
-  if (adminIds.length === 0) return json({ sent: 0 });
-
-  const { data: tokenRows } = await admin
-    .from("push_tokens")
-    .select("token")
-    .in("profile_id", adminIds);
-  const tokens = [...new Set((tokenRows ?? []).map((r: { token: string }) => r.token))];
-  if (tokens.length === 0) return json({ sent: 0 });
+  if (adminIds.length === 0) return json({ sentExpo: 0, sentWeb: 0 });
 
   const title = "Nowy raport dzienny";
   const buildLabel = build ? `${build.number} · ${build.name}` : `budowa #${buildId}`;
   const bodyText = `${buildLabel} — ${date}. Sprawdź i zatwierdź, żeby klient zobaczył aktualizację.`;
 
-  const messages = tokens.map((to) => ({
-    to,
-    title,
-    body: bodyText,
-    data: { buildId, date },
-    sound: "default",
-  }));
+  let sentExpo = 0;
+  let sentWeb = 0;
+  const errors: string[] = [];
 
+  // --- Kanał 1: Expo Push (natywny build) ---
   try {
+    const { data: tokenRows } = await admin
+      .from("push_tokens")
+      .select("token")
+      .in("profile_id", adminIds);
+    const tokens = [...new Set((tokenRows ?? []).map((r: { token: string }) => r.token))];
+    const messages = tokens.map((to) => ({
+      to,
+      title,
+      body: bodyText,
+      data: { buildId, date },
+      sound: "default",
+    }));
     // Expo Push API przyjmuje maks. 100 wiadomości na request.
     for (let i = 0; i < messages.length; i += 100) {
       const chunk = messages.slice(i, i + 100);
@@ -109,11 +134,48 @@ Deno.serve(async (req) => {
         body: JSON.stringify(chunk),
       });
     }
-    return json({ sent: tokens.length });
+    sentExpo = tokens.length;
   } catch (err) {
-    // Nieudana wysyłka pushy NIGDY nie może zepsuć samego zapisu raportu
-    // (który już się udał, zanim ta funkcja została wywołana) — stąd 200
-    // z informacją o błędzie, nie 5xx.
-    return json({ sent: 0, error: err instanceof Error ? err.message : String(err) });
+    errors.push(`expo: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  // --- Kanał 2: Web Push (Safari na iPhonie) ---
+  if (vapidPrivateKey) {
+    try {
+      webpush.setVapidDetails(vapidSubject, VAPID_PUBLIC_KEY, vapidPrivateKey);
+      const { data: subs } = await admin
+        .from("web_push_subscriptions")
+        .select("id, endpoint, p256dh, auth")
+        .in("profile_id", adminIds);
+      const payload = JSON.stringify({ title, body: bodyText, data: { buildId, date } });
+      const staleIds: number[] = [];
+      await Promise.all(
+        (subs ?? []).map(async (s: { id: number; endpoint: string; p256dh: string; auth: string }) => {
+          try {
+            await webpush.sendNotification(
+              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+              payload,
+            );
+            sentWeb += 1;
+          } catch (err: unknown) {
+            // 404/410 = subskrypcja martwa (użytkownik odinstalował PWA,
+            // wyczyścił dane przeglądarki) — sprzątamy, żeby nie próbować
+            // w nieskończoność za każdym kolejnym raportem.
+            const status = (err as { statusCode?: number })?.statusCode;
+            if (status === 404 || status === 410) staleIds.push(s.id);
+          }
+        }),
+      );
+      if (staleIds.length) {
+        await admin.from("web_push_subscriptions").delete().in("id", staleIds);
+      }
+    } catch (err) {
+      errors.push(`web: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Nieudana wysyłka pushy NIGDY nie może zepsuć samego zapisu raportu
+  // (który już się udał, zanim ta funkcja została wywołana) — stąd
+  // zawsze 200, błędy tylko informacyjnie w odpowiedzi.
+  return json({ sentExpo, sentWeb, errors: errors.length ? errors : undefined });
 });

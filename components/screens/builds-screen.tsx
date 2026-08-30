@@ -569,20 +569,25 @@ export function BuildsScreen() {
             </Text>
           </Text>
         )}
-        <View style={{ marginTop: 12 }}>
-          <Button
-            label="Zapisz i dalej"
-            onPress={() =>
-              saveBuild(
-                { ...newBuild, plannedHoursPerDay: String(workdayHours) },
-                (createdId) => {
-                  setNewBuild(createEmptyNewBuild());
-                  setWizardBuildId(createdId);
-                  setWizardStep(2);
-                },
-              )
-            }
-          />
+        <View style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Button label="Anuluj" secondary onPress={closeWizard} />
+          </View>
+          <View style={{ flex: 2 }}>
+            <Button
+              label="Zapisz i dalej"
+              onPress={() =>
+                saveBuild(
+                  { ...newBuild, plannedHoursPerDay: String(workdayHours) },
+                  (createdId) => {
+                    setNewBuild(createEmptyNewBuild());
+                    setWizardBuildId(createdId);
+                    setWizardStep(2);
+                  },
+                )
+              }
+            />
+          </View>
         </View>
         </>
         )}

@@ -130,6 +130,13 @@ const config: ExpoConfig = {
           "Aplikacja potrzebuje dostępu do aparatu, żeby zrobić zdjęcia budowy.",
       },
     ],
+    [
+      "expo-notifications",
+      {
+        icon: "./assets/images/icon.png",
+        color: "#1B1B1D",
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

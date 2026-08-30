@@ -13,6 +13,7 @@ import {
   setShowPhotosToClient,
   type PublicPortalSettings,
 } from "@/lib/data/public-portal";
+import { generateClientSummary } from "@/lib/data/ai-summary";
 
 // Domyślnie strona portalu jest serwowana z tego samego originu co apka
 // (patrz vercel.json + app/portal/[token].tsx) — brak osobnej domeny do
@@ -29,6 +30,11 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
   const [pinEditing, setPinEditing] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [qrFullscreen, setQrFullscreen] = useState(false);
+  // Zbiorcze podsumowanie AI całej budowy (Gemini, na podstawie wszystkich
+  // zatwierdzonych raportów) — generowane na żądanie, niezależnie od
+  // notatek dziennych per raport (te generuje się osobno w ReportCard).
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   const refresh = () => {
     getPublicPortalSettings(buildId)
@@ -120,6 +126,21 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
       notify("Błąd", "Nie udało się zapisać PIN-u.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const generateSummary = async () => {
+    setGeneratingSummary(true);
+    setSummaryError(null);
+    try {
+      await generateClientSummary(buildId);
+      refresh();
+    } catch (error) {
+      setSummaryError(
+        error instanceof Error ? error.message : "Nie udało się wygenerować raportu z budowy.",
+      );
+    } finally {
+      setGeneratingSummary(false);
     }
   };
 
@@ -326,6 +347,62 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
                 secondary={!settings.showNotesToClient}
                 disabled={busy}
                 onPress={toggleNotes}
+              />
+            </View>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
+              Włączone: przy każdym zatwierdzeniu raportu AI automatycznie generuje neutralną
+              notatkę dla klienta (bez kwot i danych pracowników) z notatki brygadzisty — klient
+              widzi tylko notatkę z ostatniego dnia. Wyłączone: AI nic nie generuje, klient nie
+              widzi żadnych notatek dziennych.
+            </Text>
+          </View>
+
+          <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 14 }}>
+            <Text style={{ color: COLORS.foreground, fontWeight: "600" }}>
+              Raport z budowy (AI)
+            </Text>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
+              Skonsolidowane, neutralne podsumowanie postępu całej budowy — bez kwot i bez danych
+              pracowników — wygenerowane na podstawie wszystkich zatwierdzonych raportów. Pokazywane
+              w portalu razem z notatkami dziennymi, wyłącznie gdy „Udostępnij notatki klientowi” jest
+              włączone.
+            </Text>
+            {settings.aiClientSummary && (
+              <View
+                style={{
+                  marginTop: 10,
+                  backgroundColor: COLORS.background,
+                  borderRadius: 12,
+                  padding: 12,
+                }}
+              >
+                <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
+                  {settings.aiClientSummary}
+                </Text>
+                {settings.aiClientSummaryGeneratedAt && (
+                  <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 8 }}>
+                    Wygenerowano: {new Date(settings.aiClientSummaryGeneratedAt).toLocaleString("pl-PL")}
+                  </Text>
+                )}
+              </View>
+            )}
+            {summaryError && (
+              <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
+                {summaryError}
+              </Text>
+            )}
+            <View style={{ marginTop: 10 }}>
+              <Button
+                label={
+                  generatingSummary
+                    ? "Generowanie…"
+                    : settings.aiClientSummary
+                      ? "Wygeneruj ponownie raport z budowy AI"
+                      : "Wygeneruj raport z budowy AI"
+                }
+                secondary
+                disabled={generatingSummary}
+                onPress={generateSummary}
               />
             </View>
           </View>

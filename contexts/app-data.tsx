@@ -71,6 +71,7 @@ import {
   type BuildMaterialLotRow,
   type BuildMaterialReturnRow,
 } from "@/lib/data/build-materials";
+import { generateReportClientNote } from "@/lib/data/ai-summary";
 import {
   listReports,
   submitDailyReport,
@@ -188,6 +189,12 @@ export type SavedReport = {
   // Notatka brygadzisty do tego raportu (Decyzja B) — jedna, dowolna,
   // czysto informacyjna, patrz draftNote niżej.
   note?: string;
+  // Oczyszczona wersja notatki dla klienta (Gemini, generowana na żądanie
+  // Admina) — to, i tylko to, może trafić do portalu klienta; `note`
+  // wyżej zostaje wyłącznie wewnętrzne. Patrz
+  // supabase/functions/generate-report-note oraz 063_portal_klienta_
+  // podsumowanie_ai.sql.
+  clientNote?: string | null;
 };
 
 import {
@@ -252,6 +259,7 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
     kmCost: row.kmCost != null ? Number(row.kmCost) : undefined,
     submittedByProfileId: row.submittedByProfileId,
     note: row.note ?? undefined,
+    clientNote: row.clientNote ?? null,
   };
 }
 
@@ -2469,6 +2477,22 @@ function useAppDataState(
             error,
             "Zatwierdzenie zapisało się lokalnie, ale nie wysłało do serwera — spróbuj ponownie, gdy będzie sieć.",
           ),
+        // Notatka dla klienta (Gemini) jest AUTOMATYCZNA, nie ma osobnego
+        // przycisku — generowana od razu po zatwierdzeniu raportu. Edge
+        // Function sama sprawdza builds.show_notes_to_client i nic nie
+        // robi, gdy przełącznik "Udostępnij notatki klientowi" jest
+        // wyłączony dla tej budowy, więc nie trzeba tego warunku
+        // powtarzać tutaj. Best-effort: błąd Gemini (limit, przejściowa
+        // awaria) nie może zablokować ani cofnąć samego zatwierdzenia
+        // raportu, dlatego cichy catch — admin i tak widzi status notatki
+        // w ReportCard i może zatwierdzić ponownie po stronie Gemini.
+        onSuccess: () => {
+          generateReportClientNote(Number(reportId))
+            .catch(() => undefined)
+            .finally(() => {
+              queryClient.invalidateQueries({ queryKey: ["reports", "list"] });
+            });
+        },
       },
     );
   };

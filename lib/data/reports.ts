@@ -141,6 +141,7 @@ export type ReportRow = {
   kmCost: string | null;
   submittedByProfileId: string | null;
   note: string | null;
+  clientNote: string | null;
   builds: { number: string; name: string } | null;
   report_materials: { materialId: number; usedQuantity: string; cost: string; reason: string | null }[];
   report_people: { employeeId: number; start: string; end: string }[];
@@ -156,6 +157,7 @@ export type ReportRow = {
 const REPORT_SELECT = `
   id, buildId, date, status, adminComment, updatedAt, km, kmRateApplied, kmCost,
   submittedByProfileId, note,
+  clientNote:client_note,
   builds ( number, name ),
   report_materials ( materialId, usedQuantity, cost, reason ),
   report_people ( employeeId, start, end ),

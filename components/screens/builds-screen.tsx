@@ -2693,6 +2693,7 @@ export function BuildsScreen() {
                     }
                     onApprove={() => approveReport(report.id)}
                     showBuildInfo={false}
+                    showClientNoteStatus
                   />
                 ))
               )}

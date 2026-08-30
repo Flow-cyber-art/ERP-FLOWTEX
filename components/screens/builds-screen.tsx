@@ -373,12 +373,6 @@ export function BuildsScreen() {
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
         <WizardStepper steps={WIZARD_STEPS} current={wizardStep} />
-        <Pressable
-          onPress={closeWizard}
-          style={{ alignSelf: "flex-end", marginTop: -10, marginBottom: 10 }}
-        >
-          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>Anuluj</Text>
-        </Pressable>
         {wizardStep === 1 && (
         <>
         <Field

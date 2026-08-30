@@ -22,17 +22,37 @@ function isWebPushSupported(): boolean {
   );
 }
 
+function sameApplicationServerKey(
+  subscription: PushSubscription,
+  expectedRaw: Uint8Array,
+): boolean {
+  const current = subscription.options?.applicationServerKey;
+  if (!current) return false;
+  const currentBytes = new Uint8Array(current);
+  if (currentBytes.length !== expectedRaw.length) return false;
+  return currentBytes.every((byte, i) => byte === expectedRaw[i]);
+}
+
 async function subscribeAndRegister(): Promise<void> {
   const vapidPublicKey = Constants.expoConfig?.extra?.vapidPublicKey as string | undefined;
   if (!vapidPublicKey) {
     throw new Error("Brak klucza VAPID w konfiguracji appki (extra.vapidPublicKey).");
   }
+  const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
   const registration = await navigator.serviceWorker.ready;
   let subscription = await registration.pushManager.getSubscription();
+  // Subskrypcja z POPRZEDNIEJ pary kluczy VAPID (np. po regeneracji
+  // klucza) jest martwa dla nowego klucza prywatnego po stronie serwera
+  // — bez tego sprawdzenia appka uznałaby "mam subskrypcję" i nigdy nie
+  // spróbowałaby utworzyć nowej, mimo że serwer i tak odrzuci wysyłkę.
+  if (subscription && !sameApplicationServerKey(subscription, applicationServerKey)) {
+    await subscription.unsubscribe();
+    subscription = null;
+  }
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
+      applicationServerKey: applicationServerKey as BufferSource,
     });
   }
   await registerWebPushSubscription(subscription.toJSON() as {

@@ -44,12 +44,6 @@ export const batchSourceEnum = pgEnum("batch_source", [
   "zwrot",
 ]);
 
-export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
-  "wydanie",
-  "zuzycie",
-  "zwrot",
-  "korekta",
-]);
 
 export const orderStatusEnum = pgEnum("order_status", [
   "do realizacji",
@@ -295,13 +289,22 @@ export const buildMaterialLots = pgTable("build_material_lots", {
 });
 
 /* ============================================================
- * AUDYT I DZIENNIK RUCHÓW (STOCK MOVEMENTS) — istnieje w bazie, ale
- * nie jest jeszcze używany przez żadną ścieżkę w kodzie klienta/serwera.
+ * AUDYT I DZIENNIK RUCHÓW (STOCK MOVEMENTS) — od
+ * 079_ksiega_ruchow_przyjecie_zuzycie.sql zasilana przez przyjęcie
+ * (fn_add_material_batch_ext, receive_order) i zużycie
+ * (fn_consume_build_lot_fifo) po stronie funkcji SQL; zwrot/utylizacja/
+ * transfer/ręczny wybór partii jeszcze nie wpisują tu nic (do dopięcia
+ * w kolejnych krokach). Nieużywana wprost przez kod klienta/serwera w TS
+ * — dziś to czysto backendowy dziennik, bez ekranu.
  * ============================================================ */
 
 export const stockMovements = pgTable("stock_movements", {
   id: serial("id").primaryKey(),
-  type: stockMovementTypeEnum("type").notNull(),
+  // DP2 (079_ksiega_ruchow_przyjecie_zuzycie.sql): był enum bez wartości
+  // na przyjęcie — text + CHECK w bazie
+  // ('przyjecie'|'wydanie'|'zuzycie'|'zwrot'|'korekta'), łatwiej rozszerzyć
+  // o kolejne typy ruchu bez migracji enuma.
+  type: text("type").notNull(),
   materialId: integer("materialId")
     .notNull()
     .references(() => materials.id, { onDelete: "restrict" }),
@@ -321,6 +324,10 @@ export const stockMovements = pgTable("stock_movements", {
   createdByUserId: integer("createdByUserId").references(() => users.id, {
     onDelete: "set null",
   }),
+  // DP2: `users` (integer id, sprzed Supabase Auth) nigdy nie jest
+  // zasilana — realna tożsamość aktora to `profiles.id` (uuid =
+  // auth.uid()), jak w `technologies.createdBy` powyżej.
+  createdByProfileId: text("createdByProfileId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

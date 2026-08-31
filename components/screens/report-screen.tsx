@@ -39,6 +39,7 @@ export function ReportScreen() {
     personEnd,
     timePicker,
     draftPeople,
+    addAllEmployeesToDraft,
     draftExtraCosts,
     draftKm,
     draftNote,
@@ -60,8 +61,9 @@ export function ReportScreen() {
     activeBuild,
     buildAssignments,
     buildMaterialPlans,
-    buildStageCompletions,
-    setStageCompleted,
+    buildStageStatuses,
+    completeBuildStage,
+    reopenBuildStage,
     saveDailyReport,
     getReportDefaults,
     addPersonToDraft,
@@ -538,19 +540,21 @@ export function ReportScreen() {
             {/* Etapy technologii (Faza 6) — rozwijana lista, materiały etapu
                 z pełnego planu (nie tylko już dostarczone), plan vs
                 zużyto dzisiaj. Zakończenie etapu Brygadzista potwierdza
-                checkboxem (build_stage_completions, supabase/sql/071_...)
-                niezależnie od procentowego rozliczenia materiału — Portal
-                Klienta pokazuje wtedy dla etapu 100% i przechodzi na
-                kolejny (patrz get_public_build). Rząd nadal rozwija się po
-                dotknięciu paska z nazwą etapu. */}
+                checkboxem — insert/delete w `build_stage_status`
+                (lib/data/build-stages.ts, tabela istniała od Fazy 6, ale
+                nigdy nie miała UI do klikania), niezależnie od
+                procentowego rozliczenia materiału. Portal Klienta
+                pokazuje wtedy dla etapu 100% i przechodzi na kolejny
+                (patrz get_public_build, supabase/sql/072_...). Rząd
+                nadal rozwija się po dotknięciu paska z nazwą etapu. */}
             {stageOrder.length > 0 && (
               <View className="border-t border-border p-4">
                 <Text className="text-xs text-muted uppercase mb-2">Technologia</Text>
                 {stageOrder.map((stageName) => {
                   const stagePlan = planByStage.get(stageName) ?? [];
                   const isCollapsed = collapsedStages[stageName] ?? true;
-                  const isStageCompleted = buildStageCompletions.some(
-                    (c) => c.buildId === Number(activeBuild?.id) && c.stageName === stageName,
+                  const isStageCompleted = buildStageStatuses.some(
+                    (s) => s.buildId === Number(activeBuild?.id) && s.stageName === stageName,
                   );
                   return (
                     <View
@@ -582,7 +586,11 @@ export function ReportScreen() {
                           disabled={reportApproved || !activeBuild}
                           onPress={() => {
                             if (!activeBuild) return;
-                            setStageCompleted(activeBuild.id, stageName, !isStageCompleted);
+                            if (isStageCompleted) {
+                              reopenBuildStage(activeBuild.id, stageName);
+                            } else {
+                              completeBuildStage(activeBuild.id, stageName);
+                            }
                           }}
                           hitSlop={8}
                           style={{
@@ -1146,30 +1154,51 @@ export function ReportScreen() {
               </View>
 
               {!reportApproved && (
-                <Pressable
-                  onPress={addPersonToDraft}
-                  style={({ pressed }) => ({
-                    borderWidth: 1,
-                    borderColor: COLORS.primary,
-                    borderRadius: 12,
-                    paddingVertical: 13,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    opacity: pressed ? 0.7 : 1,
-                    marginTop: 10,
-                  })}
-                >
-                  <MaterialIcons
-                    name="add-circle-outline"
-                    size={20}
-                    color={COLORS.primary}
-                  />
-                  <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
-                    Dodaj osobę
-                  </Text>
-                </Pressable>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                  <Pressable
+                    onPress={addPersonToDraft}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      borderWidth: 1,
+                      borderColor: COLORS.primary,
+                      borderRadius: 12,
+                      paddingVertical: 13,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <MaterialIcons
+                      name="add-circle-outline"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                    <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
+                      Dodaj osobę
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={addAllEmployeesToDraft}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      backgroundColor: COLORS.primary,
+                      borderRadius: 12,
+                      paddingVertical: 13,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <MaterialIcons name="groups" size={20} color={COLORS.background} />
+                    <Text style={{ color: COLORS.background, fontWeight: "700" }}>
+                      Dodaj wszystkich
+                    </Text>
+                  </Pressable>
+                </View>
               )}
             </View>
           </View>

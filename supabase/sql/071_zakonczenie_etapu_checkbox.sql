@@ -5,33 +5,20 @@
 -- etap nigdy nie pokazywał 100%, jeśli zużycie było mniejsze/większe niż
 -- plan (90% czy 110% zużytego materiału nie dawało "zakończone").
 --
--- Dodajemy `build_stage_completions`: Brygadzista odznacza checkboxem w
--- raporcie, że dany etap technologii jest zakończony, niezależnie od
--- tego ile realnie zeszło materiału. Portal Klienta pokazuje wtedy dla
--- tego etapu 100% i przechodzi na kolejny etap (X/N), a procent z
--- materiałów zostaje tylko dla etapów jeszcze nieodznaczonych.
+-- Tabela `build_stage_status` na to istnieje od Fazy 6
+-- (010_faza6_raport_dzienny.sql) — jeden wiersz = jeden zakończony etap
+-- — ale nigdy nie miała UI do klikania, więc 057_..._etapy_z_materialow.sql
+-- przestał jej używać w get_public_build na rzecz czystego wyliczenia z
+-- materiału. Teraz report-screen.tsx (Brygadzista) dostaje checkbox
+-- zapisujący/kasujący wiersz w tej tabeli (lib/data/build-stages.ts:
+-- completeBuildStage/reopenBuildStage), więc wracamy do honorowania jej
+-- w Portalu Klienta jako NADPISANIA procentu materiałowego: zaznaczony
+-- etap = zawsze 100%, niezaznaczony = jak dotąd (średnia zużycia).
 --
 -- Uruchom PO 070_portal_klienta_procent_etapu_dopasowanie_po_nazwie.sql.
 -- Bezpieczne do wielokrotnego wklejenia. Jak uruchomić: Supabase
 -- Dashboard -> SQL Editor -> wklej całość -> Run.
 -- ============================================================
-
-create table if not exists build_stage_completions (
-  build_id integer not null references builds(id) on delete cascade,
-  stage_name text not null,
-  completed_at timestamptz not null default now(),
-  completed_by text,
-  primary key (build_id, stage_name)
-);
-
-alter table build_stage_completions enable row level security;
-
-drop policy if exists "build_stage_completions_all" on build_stage_completions;
-create policy "build_stage_completions_all"
-  on build_stage_completions
-  for all
-  using (true)
-  with check (true);
 
 create or replace function get_public_build(p_token uuid, p_pin text default null)
 returns json
@@ -100,8 +87,8 @@ begin
     v_progress := least(round((coalesce(v_days_elapsed, 0)::numeric / nullif(v_build."durationDays", 0)) * 100), 100);
   end if;
 
-  -- Procent KAŻDEGO etapu: 100% jeśli Brygadzista odznaczył go jako
-  -- zakończony (build_stage_completions), inaczej średnia z
+  -- Procent KAŻDEGO etapu: 100% jeśli Brygadzista odznaczył go checkboxem
+  -- jako zakończony (build_stage_status), inaczej średnia z
   -- min(zużyto/plan, 1) po materiałach tego etapu (jak w 070).
   select json_agg(
     json_build_object('name', s.stage_name, 'percent', round(s.percent)) order by s.min_id
@@ -112,7 +99,7 @@ begin
       p.stage_name,
       min(p.id) as min_id,
       case
-        when c.stage_name is not null then 100
+        when bss.stage_name is not null then 100
         else avg(least(coalesce(u.used_qty, 0) / p.planned_quantity, 1)) * 100
       end as percent
     from build_material_plan p
@@ -129,10 +116,10 @@ begin
           where normalize_material_name(m.name) = normalize_material_name(p.material_name)
           limit 1)
       )
-    left join build_stage_completions c
-      on c.build_id = v_build.id and c.stage_name = p.stage_name
+    left join build_stage_status bss
+      on bss.build_id = v_build.id and bss.stage_name = p.stage_name
     where p.build_id = v_build.id and p.planned_quantity > 0
-    group by p.stage_name, c.stage_name
+    group by p.stage_name, bss.stage_name
   ) s;
 
   v_expected_progress := least((coalesce(v_days_elapsed, 0)::numeric / nullif(v_build."durationDays", 0)) * 100, 100);

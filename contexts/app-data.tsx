@@ -18,10 +18,7 @@ import {
   updateBuildBasicInfo as updateBuildBasicInfoRemote,
   updateBuildLaborPlan as updateBuildLaborPlanRemote,
   updateBuildPhotosUrl as updateBuildPhotosUrlRemote,
-  listBuildStageCompletions,
-  setBuildStageCompleted as setBuildStageCompletedRemote,
   type CloseBuildReturnItem,
-  type BuildStageCompletionRow,
 } from "@/lib/data/builds";
 import {
   adjustMaterialStock as adjustMaterialStockRemote,
@@ -609,18 +606,6 @@ function useAppDataState(
     enabled: tabDataEnabled(["builds", "report", "settlement"]),
   });
   const buildMaterialPlans = (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[];
-  // Etapy odznaczone przez Brygadzistę jako zakończone (checkbox w
-  // raporcie) — niezależnie od realnego zużycia materiału, portal Klienta
-  // pokazuje dla takiego etapu 100% (patrz supabase/sql/071_...).
-  const buildStageCompletionsQuery = useQuery({
-    queryKey: ["buildStageCompletions", "list"],
-    queryFn: listBuildStageCompletions,
-    retry: 1,
-    refetchOnWindowFocus: false,
-    staleTime: Infinity,
-    enabled: tabDataEnabled(["builds", "report", "settlement"]),
-  });
-  const buildStageCompletions = (buildStageCompletionsQuery.data ?? []) as BuildStageCompletionRow[];
   // Zamówienia jako nagłówek+pozycje (Faza 3) — dla WSZYSTKICH budów naraz,
   // filtrowane po buildId w UI, ten sam wzorzec co plan materiałowy wyżej.
   // Budowy (generowanie/przyjęcie z planu) i Zamówienia (lista/przyjęcie).
@@ -1012,10 +997,6 @@ function useAppDataState(
   const updateBuildPhotosUrlMutation = useMutation({
     mutationFn: (vars: { buildId: number; photosUrl: string }) =>
       updateBuildPhotosUrlRemote(vars.buildId, vars.photosUrl),
-  });
-  const setBuildStageCompletedMutation = useMutation({
-    mutationFn: (vars: { buildId: number; stageName: string; completed: boolean; completedBy?: string | null }) =>
-      setBuildStageCompletedRemote(vars.buildId, vars.stageName, vars.completed, vars.completedBy),
   });
   const assignTechnologyMutation = useMutation({
     mutationFn: (vars: { buildId: number; technologyId: number; areaM2: number }) =>
@@ -2445,6 +2426,49 @@ function useAppDataState(
     // wymagać nowego, świadomego wyboru.
     setSelectedEmployeeId("");
   };
+  // Dodaje od razu WSZYSTKICH pracowników (spoza już dodanych) z aktualnie
+  // ustawionymi godzinami OD/DO — żeby przy całej brygadzie pracującej te
+  // same godziny nie trzeba było dodawać każdej osoby osobno.
+  const addAllEmployeesToDraft = () => {
+    if (!personStart || !personEnd) return;
+    const [sh, sm] = personStart.split(":").map(Number);
+    const [eh, em] = personEnd.split(":").map(Number);
+    if (
+      !Number.isFinite(sh) ||
+      !Number.isFinite(sm) ||
+      !Number.isFinite(eh) ||
+      !Number.isFinite(em) ||
+      eh * 60 + em <= sh * 60 + sm
+    ) {
+      notify(
+        "Nieprawidłowy czas",
+        "Godzina końca musi być późniejsza niż godzina rozpoczęcia.",
+      );
+      return;
+    }
+    const alreadyAdded = new Set(draftPeople.map((person) => person.employeeId));
+    const toAdd = employees.filter((employee) => !alreadyAdded.has(employee.id));
+    if (toAdd.length === 0) {
+      notify(
+        "Brak osób do dodania",
+        "Wszyscy pracownicy są już w koszyku raportu.",
+      );
+      return;
+    }
+    setDraftPeople([
+      ...draftPeople,
+      ...toAdd.map((employee) => ({
+        employeeId: employee.id,
+        start: personStart,
+        end: personEnd,
+      })),
+    ]);
+    AsyncStorage.setItem(
+      "lastPersonTime",
+      JSON.stringify({ start: personStart, end: personEnd }),
+    );
+    setSelectedEmployeeId("");
+  };
   // Usunięcie pomyłkowo dodanej osoby z koszyka raportu (np. zły
   // pracownik albo złe godziny) — analogiczne "✕" jak przy materiałach
   // pomocniczych (removeFromDraft).
@@ -2614,25 +2638,6 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać linku do zdjęć.");
     }
   };
-  // Brygadzista odznacza checkboxem zakończenie etapu technologii —
-  // niezależnie od procentu zużycia materiału (patrz komentarz przy
-  // buildStageCompletionsQuery). Odznaczenie (completed=false) cofa
-  // zakończenie, gdyby brygadzista kliknął przez pomyłkę.
-  const setStageCompleted = async (buildId: string, stageName: string, completed: boolean) => {
-    const numericId = Number(buildId);
-    if (Number.isNaN(numericId)) return;
-    try {
-      await setBuildStageCompletedMutation.mutateAsync({
-        buildId: numericId,
-        stageName,
-        completed,
-        completedBy: myProfileId ?? null,
-      });
-      await queryClient.invalidateQueries({ queryKey: ["buildStageCompletions", "list"] });
-    } catch (error) {
-      reportMutationError(error, "Nie udało się zapisać zakończenia etapu.");
-    }
-  };
   return {
     tab,
     devRole,
@@ -2652,7 +2657,6 @@ function useAppDataState(
     buildTechnologySnapshots: (buildTechnologySnapshotsQuery.data ??
       []) as BuildTechnologySnapshotRow[],
     buildMaterialPlans,
-    buildStageCompletions,
     assignBuildTechnology,
     buildOrders: (buildOrdersQuery.data ?? []) as BuildOrderRow[],
     generateOrderFromPlan,
@@ -2703,6 +2707,7 @@ function useAppDataState(
     personEnd,
     timePicker,
     draftPeople,
+    addAllEmployeesToDraft,
     draftExtraCosts,
     draftKm,
     draftNote,
@@ -2737,7 +2742,6 @@ function useAppDataState(
     closeBuild,
     reopenBuild,
     updateBuildPhotosUrl,
-    setStageCompleted,
     setEmployees,
     setTimeEntries,
     setHrSaved,

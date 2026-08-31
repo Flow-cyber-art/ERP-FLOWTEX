@@ -1612,6 +1612,19 @@ export function BuildsScreen() {
                     const cost = plannedCostFor(row);
                     return sum + (cost ?? 0);
                   }, 0);
+                  // Realnie przypisana partia (z "MATERIAŁY DODATKOWE" wyżej
+                  // w kodzie, tu wyłączona z tamtej sekcji, patrz
+                  // extraAssignments) dopasowana po nazwie do pozycji planu —
+                  // żeby ilość faktycznie przypisana z magazynu nie zniknęła
+                  // po rozdzieleniu tych dwóch list.
+                  const assignedByMaterialName = new Map<string, (typeof assignments)[number]>();
+                  for (const a of assignments) {
+                    if (a.buildId !== b.id) continue;
+                    const name = materials.find((m) => m.id === a.materialId)?.name
+                      ?.trim()
+                      .toLowerCase();
+                    if (name) assignedByMaterialName.set(name, a);
+                  }
                   return (
                     <View style={{ marginTop: 10 }}>
                       {stageOrder.map((stageName) => (
@@ -1623,25 +1636,35 @@ export function BuildsScreen() {
                           </Text>
                           {planByStage[stageName].map((row) => {
                             const cost = plannedCostFor(row);
+                            const assigned = assignedByMaterialName.get(
+                              row.materialName.trim().toLowerCase(),
+                            );
                             return (
-                              <View
-                                key={row.id}
-                                style={{
-                                  flexDirection: "row",
-                                  justifyContent: "space-between",
-                                  marginTop: 3,
-                                }}
-                              >
-                                <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
-                                  {row.materialName}
-                                </Text>
-                                <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                                  {row.consumptionPerM2} {row.unit}/m² ·{" "}
-                                  <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
-                                    {row.plannedQuantity} {row.unit}
+                              <View key={row.id} style={{ marginTop: 3 }}>
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                  }}
+                                >
+                                  <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                                    {row.materialName}
                                   </Text>
-                                  {cost !== null && ` · ${formatPLN(cost)}`}
-                                </Text>
+                                  <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                                    {row.consumptionPerM2} {row.unit}/m² ·{" "}
+                                    <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
+                                      {row.plannedQuantity} {row.unit}
+                                    </Text>
+                                    {cost !== null && ` · ${formatPLN(cost)}`}
+                                  </Text>
+                                </View>
+                                {assigned && (
+                                  <Text
+                                    style={{ color: COLORS.success, fontSize: 11, textAlign: "right" }}
+                                  >
+                                    przypisano z magazynu: {assigned.planned} {row.unit}
+                                  </Text>
+                                )}
                               </View>
                             );
                           })}
@@ -2037,6 +2060,23 @@ export function BuildsScreen() {
               const buildAssignments = assignments.filter(
                 (a) => a.buildId === b.id,
               );
+              // Materiały technologiczne (z planu, patrz sekcja TECHNOLOGIA
+              // niżej) dopasowane po nazwie — ten sam wzorzec co w raporcie
+              // brygadzisty (report-screen.tsx: stageNameByMaterialName/
+              // pomocniczeAssignments). Bez tego rozdzielenia "MATERIAŁY
+              // DODATKOWE" pokazywało też materiały z planu technologii,
+              // mimo że mają już swoją sekcję wyżej.
+              const planMaterialNames = new Set(
+                buildMaterialPlans
+                  .filter((p) => p.buildId === Number(b.id))
+                  .map((p) => p.materialName.trim().toLowerCase()),
+              );
+              const extraAssignments = buildAssignments.filter((a) => {
+                const name = materials.find((m) => m.id === a.materialId)?.name
+                  ?.trim()
+                  .toLowerCase();
+                return !name || !planMaterialNames.has(name);
+              });
               const isAssigning = assignBuildId === b.id;
               const selectedBatch = warehouseBatches.find(
                 (wb) => String(wb.id) === selectedBatchId,
@@ -2072,9 +2112,9 @@ export function BuildsScreen() {
                     >
                       <Text style={{ color: COLORS.muted, fontSize: 11 }}>
                         MATERIAŁY DODATKOWE
-                        {buildAssignments.length > 0 ? ` (${buildAssignments.length})` : ""}
+                        {extraAssignments.length > 0 ? ` (${extraAssignments.length})` : ""}
                       </Text>
-                      {buildAssignments.length > 0 && (
+                      {extraAssignments.length > 0 && (
                         <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
                           {expandedExtraMaterialsBuildId === b.id ? "▲" : "▼"}
                         </Text>
@@ -2329,7 +2369,7 @@ export function BuildsScreen() {
                   )}
 
                   {expandedExtraMaterialsBuildId === b.id &&
-                    buildAssignments.map((a) => {
+                    extraAssignments.map((a) => {
                     const material = materials.find((m) => m.id === a.materialId);
                     const key = `${b.id}-${a.materialId}`;
                     const isOpen = expandedAssignmentKey === key;

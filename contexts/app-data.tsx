@@ -1313,7 +1313,7 @@ function useAppDataState(
         (pendingByMaterialId.get(o.materialId) ?? 0) + o.quantity,
       );
     }
-    for (const bo of buildOrders) {
+    for (const bo of (buildOrdersQuery.data ?? []) as BuildOrderRow[]) {
       if (bo.status === "przyjęte" || bo.status === "anulowane") continue;
       for (const item of bo.order_items) {
         if (!item.linkedMaterialId) continue;
@@ -1327,7 +1327,7 @@ function useAppDataState(
     return materials.filter(
       (m) => m.stock + (pendingByMaterialId.get(m.id) ?? 0) < m.min,
     );
-  }, [materials, orders, buildOrders]);
+  }, [materials, orders, buildOrdersQuery.data]);
   // Ręczny wybór partii (Faza 5) — admin wybiera KONKRETNĄ partię
   // (wyszukiwarka pokazuje różne daty/ceny tej samej pozycji, patrz
   // warehouseBatches) i ile z niej trafia na budowę, zamiast tylko

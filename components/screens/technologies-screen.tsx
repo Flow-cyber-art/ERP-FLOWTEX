@@ -12,6 +12,7 @@ import {
 import {
   Button,
   COLORS,
+  confirmAction,
   Field,
   QuantityStepper,
   ScreenHeader,
@@ -300,34 +301,57 @@ export function TechnologiesScreen() {
       setLoadError('Grubość "od" nie może być większa niż "do".');
       return;
     }
-    setBusy(true);
-    setLoadError(null);
-    try {
-      const newId = await saveTechnology(editingSourceId, code.trim(), name.trim(), payload);
-      // Firma/grubość to metadane, nie część receptury (patrz komentarz
-      // przy company/thicknessMinMm/thicknessMaxMm w lib/data/technologies.ts)
-      // — zapisywane osobnym wywołaniem na ŚWIEŻO utworzonej wersji
-      // (newId), nie na editingSourceId (ten zaraz zostanie zdezaktywowany).
-      await updateTechnologyMeta(
-        newId,
-        company.trim() || null,
-        thicknessMinMm ? Number(thicknessMinMm) : null,
-        effectiveThicknessMaxMm ? Number(effectiveThicknessMaxMm) : null,
+    const persist = async () => {
+      setBusy(true);
+      setLoadError(null);
+      try {
+        const newId = await saveTechnology(editingSourceId, code.trim(), name.trim(), payload);
+        // Firma/grubość to metadane, nie część receptury (patrz komentarz
+        // przy company/thicknessMinMm/thicknessMaxMm w lib/data/technologies.ts)
+        // — zapisywane osobnym wywołaniem na ŚWIEŻO utworzonej wersji
+        // (newId), nie na editingSourceId (ten zaraz zostanie zdezaktywowany).
+        await updateTechnologyMeta(
+          newId,
+          company.trim() || null,
+          thicknessMinMm ? Number(thicknessMinMm) : null,
+          effectiveThicknessMaxMm ? Number(effectiveThicknessMaxMm) : null,
+        );
+        setEditorOpen(false);
+        reload();
+        // Ten ekran ma własną, niezależną listę (listAllTechnologies +
+        // reload() wyżej) — bez tego appka (m.in. picker przypisywania
+        // technologii do budowy w Budowach) korzysta z osobnego,
+        // cache'owanego zapytania React Query (`useAppData().technologies`,
+        // staleTime: Infinity), które realtime i tak w końcu odświeży, ale
+        // nie natychmiast w tej samej sesji.
+        await queryClient.invalidateQueries({ queryKey: ["technologies"] });
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : "Błąd.");
+      } finally {
+        setBusy(false);
+      }
+    };
+    // Materiał bez "Powiązanego materiału magazynowego" (opcjonalne pole
+    // w formularzu materiału) idzie dalej w łańcuchu (plan budowy →
+    // zamówienie → przyjęcie dostawy) po zawodnym dopasowaniu po nazwie
+    // zamiast po jednoznacznym ID — źródło niejednego "materiał #4"/
+    // duplikatu w magazynie. Nie blokujemy zapisu (czasem receptura
+    // powstaje na materiał, którego jeszcze nie ma w magazynie), tylko
+    // ostrzegamy i dajemy jawnie potwierdzić.
+    const unlinkedCount = payload.reduce(
+      (sum, stage) => sum + stage.materials.filter((m) => !m.linkedMaterialId).length,
+      0,
+    );
+    if (unlinkedCount > 0) {
+      confirmAction(
+        "Materiały bez powiązania z magazynem",
+        `${unlinkedCount} ${unlinkedCount === 1 ? "materiał w recepturze nie jest powiązany" : "materiałów w recepturze nie jest powiązanych"} z konkretnym materiałem w magazynie (pole "Powiązany materiał magazynowy" przy materiale). Dalej w łańcuchu (plan budowy, zamówienie, przyjęcie dostawy) taki materiał dopasowuje się po nazwie — literówka albo inna nazwa w magazynie może utworzyć duplikat zamiast dopisać do istniejącego materiału.\n\nZapisać mimo to?`,
+        "Zapisz mimo to",
+        persist,
       );
-      setEditorOpen(false);
-      reload();
-      // Ten ekran ma własną, niezależną listę (listAllTechnologies +
-      // reload() wyżej) — bez tego appka (m.in. picker przypisywania
-      // technologii do budowy w Budowach) korzysta z osobnego,
-      // cache'owanego zapytania React Query (`useAppData().technologies`,
-      // staleTime: Infinity), które realtime i tak w końcu odświeży, ale
-      // nie natychmiast w tej samej sesji.
-      await queryClient.invalidateQueries({ queryKey: ["technologies"] });
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Błąd.");
-    } finally {
-      setBusy(false);
+      return;
     }
+    await persist();
   };
 
   const updateStage = (key: string, patch: Partial<DraftStage>) =>

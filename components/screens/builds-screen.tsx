@@ -256,9 +256,14 @@ export function BuildsScreen() {
   // o budowę (setSelectedBuildId dzieje się przy otwarciu).
   const [assignBuildId, setAssignBuildId] = useState<string | null>(null);
   // Filtr w wyszukiwarce partii przy przypisywaniu materiału do budowy —
-  // pokazuje tylko materiały, których ta budowa jeszcze w ogóle nie ma
-  // (żadnej partii), żeby szybko widzieć, czego jeszcze brakuje, zamiast
-  // przewijać całą listę magazynu wymieszaną z tym, co już przypisane.
+  // chowa partie już dodane do BIEŻĄCEJ listy roboczej (draftAssignments),
+  // żeby nie dodać tej samej partii drugi raz przez pomyłkę w jednej
+  // sesji przypisywania. CELOWO nie patrzy na to, czy budowa MIAŁA już
+  // KIEDYKOLWIEK jakieś przypisanie tego materiału (budowy traktujemy
+  // jak pod-magazyny — kolejna partia tego samego materiału na tę samą
+  // budowę to normalny, częsty przypadek, np. dokładka po wyczerpaniu
+  // pierwszej dostawy), inaczej materiał z choćby jednym przypisaniem
+  // znikał z pickera na dobre, mimo wolnej reszty w magazynie.
   const [onlyUnassignedInPicker, setOnlyUnassignedInPicker] = useState(false);
   // Wiersz materiału dodatkowego jest klikalny i rozwija swoje szczegóły
   // (cena, wartość) — jeden naraz, ten sam wzorzec co reszta akordeonów
@@ -1625,6 +1630,20 @@ export function BuildsScreen() {
                       .toLowerCase();
                     if (name) assignedByMaterialName.set(name, a);
                   }
+                  // Ten sam materiał potrafi wystąpić w KILKU etapach tej
+                  // samej receptury (np. ten sam klej w warstwie zasadniczej
+                  // i zamykającej) — `assigned` powyżej to jedna, ZSUMOWANA
+                  // ilość na cały materiał (build_materials nie ma podziału
+                  // per etap), więc pokazanie jej przy KAŻDYM wystąpieniu
+                  // sugerowałoby błędnie, że tyle poszło na KAŻDY etap z
+                  // osobna. Pokazujemy adnotację tylko RAZ na materiał, z
+                  // dopiskiem gdy dotyczy więcej niż jednego etapu.
+                  const materialOccurrences = new Map<string, number>();
+                  for (const row of plan) {
+                    const key = row.materialName.trim().toLowerCase();
+                    materialOccurrences.set(key, (materialOccurrences.get(key) ?? 0) + 1);
+                  }
+                  const annotatedMaterialNames = new Set<string>();
                   return (
                     <View style={{ marginTop: 10 }}>
                       {stageOrder.map((stageName) => (
@@ -1636,9 +1655,12 @@ export function BuildsScreen() {
                           </Text>
                           {planByStage[stageName].map((row) => {
                             const cost = plannedCostFor(row);
-                            const assigned = assignedByMaterialName.get(
-                              row.materialName.trim().toLowerCase(),
-                            );
+                            const nameKey = row.materialName.trim().toLowerCase();
+                            const assigned = assignedByMaterialName.get(nameKey);
+                            const usedInMultipleStages = (materialOccurrences.get(nameKey) ?? 0) > 1;
+                            const showAnnotation =
+                              assigned && !annotatedMaterialNames.has(nameKey);
+                            if (showAnnotation) annotatedMaterialNames.add(nameKey);
                             return (
                               <View key={row.id} style={{ marginTop: 3 }}>
                                 <View
@@ -1658,11 +1680,11 @@ export function BuildsScreen() {
                                     {cost !== null && ` · ${formatPLN(cost)}`}
                                   </Text>
                                 </View>
-                                {assigned && (
+                                {showAnnotation && (
                                   <Text
                                     style={{ color: COLORS.success, fontSize: 11, textAlign: "right" }}
                                   >
-                                    przypisano z magazynu: {assigned.planned} {row.unit}
+                                    przypisano z magazynu{usedInMultipleStages ? " (łącznie, wszystkie etapy)" : ""}: {assigned.planned} {row.unit}
                                   </Text>
                                 )}
                               </View>
@@ -2230,7 +2252,7 @@ export function BuildsScreen() {
                                 marginLeft: 6,
                               }}
                             >
-                              Tylko nieprzypisane do tej budowy
+                              Ukryj partie już dodane do listy
                             </Text>
                           </Pressable>
                           <ScrollView style={{ maxHeight: 260 }}>
@@ -2248,10 +2270,10 @@ export function BuildsScreen() {
                                   .includes(pickerQuery.toLowerCase()),
                               )
                               .filter(
-                                ({ material }) =>
+                                ({ batch }) =>
                                   !onlyUnassignedInPicker ||
-                                  !buildAssignments.some(
-                                    (a) => a.materialId === material!.id,
+                                  !draftAssignments.some(
+                                    (d) => d.batchId === String(batch.id),
                                   ),
                               )
                               .sort((x, y) => x.material!.name.localeCompare(y.material!.name))

@@ -724,7 +724,7 @@ export function TechnologiesScreen() {
                               </View>
                             </View>
                           </View>
-                          {materials.length > 0 && (
+                          {(
                             <View style={{ marginTop: 10 }}>
                               <Text className="text-xs text-muted uppercase mb-2">
                                 Powiązany materiał magazynowy (opcjonalnie)
@@ -1091,6 +1091,12 @@ export function TechnologiesScreen() {
                   </Pressable>
                 );
               })}
+              {materials.length === 0 && (
+                <Text style={{ color: COLORS.muted, fontSize: 12, paddingVertical: 10 }}>
+                  Brak materiałów w magazynie — dodaj materiał w zakładce Magazyn, żeby móc go tu
+                  powiązać.
+                </Text>
+              )}
             </ScrollView>
             <View style={{ marginTop: 12 }}>
               <Button label="Zamknij" secondary onPress={() => setMaterialPicker(null)} />

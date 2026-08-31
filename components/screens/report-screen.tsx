@@ -586,9 +586,9 @@ export function ReportScreen() {
                           }}
                           hitSlop={8}
                           style={{
-                            width: 24,
-                            height: 24,
-                            borderRadius: 6,
+                            width: 21,
+                            height: 21,
+                            borderRadius: 5,
                             borderWidth: 2,
                             borderColor: isStageCompleted ? COLORS.primary : COLORS.border,
                             backgroundColor: isStageCompleted ? COLORS.primary : "transparent",
@@ -597,7 +597,7 @@ export function ReportScreen() {
                           }}
                         >
                           {isStageCompleted && (
-                            <MaterialIcons name="check" size={16} color={COLORS.background} />
+                            <MaterialIcons name="check" size={14} color={COLORS.background} />
                           )}
                         </Pressable>
                       </Pressable>

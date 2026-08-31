@@ -290,17 +290,35 @@ export function OrdersScreen() {
   }, [shortages, orders, batchedOrderIds]);
 
   const brakiCount = rows.filter((r) => r.status === "brak").length;
+
+  // Zamknięcie budowy archiwizuje JEJ zamówienia (nie liczą się już jako
+  // aktywne w tym ekranie) — materiał, który z tej budowy wrócił na
+  // magazyn, to osobna sprawa (stan `materials.stock`) i zostaje aktywny
+  // niezależnie od statusu zamówienia. Zamówienia budów zamkniętych nadal
+  // istnieją w bazie (historia), tylko nie zaśmiecają aktywnego widoku ani
+  // liczników poniżej.
+  const closedBuildIds = new Set(
+    builds.filter((b) => b.status === "zamknięta").map((b) => b.id),
+  );
+  const activeBuildOrders = buildOrders.filter(
+    (o) => !closedBuildIds.has(String(o.buildId)),
+  );
+  const archivedBuildOrders = buildOrders.filter((o) =>
+    closedBuildIds.has(String(o.buildId)),
+  );
+
   // Liczniki wliczają też zamówienia wygenerowane z planu technologii
   // budowy (buildOrders, sekcja "Zamówienia z planu budów" niżej) —
   // wcześniej liczyły wyłącznie zamówienia magazynowe (orders), więc
   // przyjęcie dostawy z zamówienia wygenerowanego z technologii nie
-  // ruszało licznika "Dostarczone".
+  // ruszało licznika "Dostarczone". Zamówienia zarchiwizowanych
+  // (zamkniętych) budów są pominięte — patrz activeBuildOrders wyżej.
   const wDrodzeCount =
     orders.filter((o) => o.status === "do realizacji" || o.status === "zamówione").length +
-    buildOrders.filter((o) => o.status === "robocze" || o.status === "zamówione").length;
+    activeBuildOrders.filter((o) => o.status === "robocze" || o.status === "zamówione").length;
   const dostarczoneCount =
     orders.filter((o) => o.status === "dostarczone").length +
-    buildOrders.filter((o) => o.status === "przyjęte").length;
+    activeBuildOrders.filter((o) => o.status === "przyjęte").length;
 
   const visibleRows = rows.filter((r) => {
     if (filter === "braki") return r.status === "brak";
@@ -608,10 +626,10 @@ export function OrdersScreen() {
           karty budowy przyciskiem "+ Z planu", ale statusy i przyjęcie
           dostawy obsługujemy tu, w jednym miejscu ze wszystkimi
           zamówieniami, zamiast rozproszone po poszczególnych budowach. */}
-      {buildOrders.length > 0 && (
+      {activeBuildOrders.length > 0 && (
         <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
-          <DetailSection label="Zamówienia z planu budów" count={buildOrders.length} style={{ marginTop: 0 }}>
-          {buildOrders.map((order) => {
+          <DetailSection label="Zamówienia z planu budów" count={activeBuildOrders.length} style={{ marginTop: 0 }}>
+          {activeBuildOrders.map((order) => {
             const build = builds.find((b) => b.id === String(order.buildId));
             const isReceiving = buildOrderReceivingId === order.id;
             return (

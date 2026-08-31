@@ -1272,9 +1272,21 @@ function useAppDataState(
   };
   const shortages = useMemo(() => {
     const needed = new Map<string, number>();
-    assignments.forEach((a) =>
-      needed.set(a.materialId, (needed.get(a.materialId) || 0) + a.planned),
+    // Liczymy zapotrzebowanie TYLKO z budów, które są jeszcze aktywne —
+    // zamknięta budowa nie ma już nic do "domówienia": jej zamówienia
+    // trafiają do archiwum (patrz activeOrders/archivedOrders niżej), więc
+    // nie powinna też dalej dokładać się do wspólnej puli `needed` tego
+    // licznika. Bez tego filtra suma rosła bezzwrotnie z każdą kolejną,
+    // nawet dawno zakończoną budową, i dawała fałszywe "braki" mimo że
+    // materiał fizycznie wrócił na magazyn po zamknięciu budowy.
+    const activeBuildIds = new Set(
+      builds.filter((b) => b.status !== "zamknięta").map((b) => b.id),
     );
+    assignments
+      .filter((a) => activeBuildIds.has(a.buildId))
+      .forEach((a) =>
+        needed.set(a.materialId, (needed.get(a.materialId) || 0) + a.planned),
+      );
     // Materiał technologiczny (występuje w JAKIMKOLWIEK planie materiałowym
     // budowy, build_material_plan.linkedMaterialId) ma już swój dokładny
     // mechanizm śledzenia "ile jeszcze trzeba zamówić" — fn_build_plan_remaining,
@@ -1307,7 +1319,7 @@ function useAppDataState(
             dismissedShortages[row.material.id] >= row.missing
           ),
       );
-  }, [materials, assignments, buildMaterialPlans, dismissedShortages]);
+  }, [materials, assignments, builds, buildMaterialPlans, dismissedShortages]);
   // Materiały poniżej własnego stanu minimalnego (m.min, patrz + Dodaj
   // materiał w warehouse-screen.tsx) — inny sygnał niż `shortages`
   // powyżej (tam "brakuje do planu budów", tu "trzeba dokupić, żeby

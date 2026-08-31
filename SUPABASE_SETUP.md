@@ -232,6 +232,33 @@ brak wiersza = w trakcie/nierozpoczęty, rozstrzyga to samo UI); zapis
 wprost z klienta (insert/delete), bez RPC — RLS pozwala Adminowi i
 Brygadziście, tak jak `submit_daily_report`.
 
+## 5c. Podsumowania AI dla Portalu Klienta (Gemini)
+
+Dwie Edge Functions generują tekst dla klienta na podstawie surowych
+danych/notatek brygadzisty, zawsze przepisany na neutralny, profesjonalny
+ton (bez kwot, cen, nazwisk pracowników):
+
+- **`generate-client-summary`** — zbiorcze podsumowanie całej budowy z
+  WSZYSTKICH zatwierdzonych raportów; wołane z przycisku "Wygeneruj
+  raport z budowy AI" w Portalu Klienta (gdy Admin włączył "Klient może
+  wygenerować raport AI" dla danej budowy).
+- **`generate-report-note`** — oczyszczona notatka JEDNEGO raportu
+  dziennego; wołane automatycznie przy zatwierdzeniu raportu przez
+  Admina (gdy włączone "Udostępnij notatki klientowi").
+
+Wdrożenie: Supabase Dashboard → **Edge Functions → Deploy a new
+function** → nazwa dokładnie jak w tytule pliku → wklej zawartość
+[`supabase/functions/generate-client-summary/index.ts`](./supabase/functions/generate-client-summary/index.ts)
+/
+[`supabase/functions/generate-report-note/index.ts`](./supabase/functions/generate-report-note/index.ts)
+→ Deploy.
+
+**Wymagany sekret** (obie funkcje): **Edge Functions → (nazwa funkcji) →
+Settings → Secrets → `GEMINI_API_KEY`** — klucz z Google AI Studio
+(https://aistudio.google.com/apikey). Bez tego sekretu obie funkcje
+zwracają czytelny błąd zamiast się wywalać po cichu. Model wywoływany
+przez obie funkcje: `gemini-2.5-flash`.
+
 ## 6. Co jest zaimplementowane
 
 `lib/data/*.ts` — warstwa danych (cały serwer Express/tRPC —

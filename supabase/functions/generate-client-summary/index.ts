@@ -48,6 +48,11 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// "gemini-3.6-flash" (poprzednia wartość) nie jest realną nazwą modelu w
+// katalogu Google — każde wywołanie kończyło się błędem 404 z Gemini API.
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_TIMEOUT_MS = 20_000;
+
 const SYSTEM_PROMPT = `Jesteś kierownikiem budowy piszącym krótkie, rzeczowe podsumowanie postępu prac dla zleceniodawcy (klienta), na podstawie wewnętrznych notatek brygadzisty i zestawienia zużytych materiałów/etapów.
 
 Zasady:
@@ -196,7 +201,7 @@ Napisz podsumowanie postępu prac dla klienta.`;
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -205,6 +210,7 @@ Napisz podsumowanie postępu prac dla klienta.`;
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: { temperature: 0.4 },
         }),
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
       },
     );
     const data = await res.json();

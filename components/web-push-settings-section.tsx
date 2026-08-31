@@ -5,6 +5,17 @@ import { Button, COLORS, notify } from "@/components/report-ui";
 import { requestWebPushPermission } from "@/lib/notifications/use-register-web-push";
 import { useInstallPrompt } from "@/lib/pwa/use-install-prompt";
 
+// Instrukcja "dodaj do ekranu głównego" ma sens WYŁĄCZNIE na iOS Safari —
+// tam PushManager nie istnieje bez trybu standalone (patrz
+// use-register-web-push.ts). Na Chrome/Edge desktop czy Androidzie ta
+// sama treść jest po prostu nie na temat (myląca — patrz zgłoszenie
+// "widzę to mimo że appka już jest dodana do ekranu", bo na Chrome
+// dodanie do ekranu nie jest w ogóle wymagane do działania powiadomień).
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iP(hone|ad|od)/.test(navigator.userAgent);
+}
+
 // Przycisk "Włącz powiadomienia" (Web Push, Safari na iPhonie) — MUSI
 // być osobnym przyciskiem klikanym ręcznie, nie automatyczną prośbą przy
 // starcie appki. Powód: `Notification.requestPermission()` wywołane bez
@@ -19,10 +30,12 @@ export function WebPushSettingsSection() {
   const { canInstall, installed, promptInstall } = useInstallPrompt();
   const [installBusy, setInstallBusy] = useState(false);
 
-  useEffect(() => {
+  const readPermission = () => {
     if (Platform.OS !== "web" || typeof Notification === "undefined") return;
     setStatus(Notification.permission);
-  }, []);
+  };
+
+  useEffect(readPermission, []);
 
   if (Platform.OS !== "web") return null;
 
@@ -63,9 +76,11 @@ export function WebPushSettingsSection() {
       </Text>
       <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
         Dostaniesz powiadomienie na tym urządzeniu, gdy brygadzista wyśle nowy raport dzienny.
-        Na iPhonie musisz najpierw dodać tę stronę &quot;Do ekranu głównego&quot; (Safari →
-        Udostępnij) i otwierać ją z tej ikonki — z poziomu zwykłej karty przeglądarki to nie
-        zadziała.
+        {isIOS()
+          ? " Na iPhonie musisz najpierw dodać tę stronę \"Do ekranu głównego\" (Safari → " +
+            "Udostępnij) i otwierać ją z tej ikonki — z poziomu zwykłej karty przeglądarki to " +
+            "nie zadziała."
+          : ""}
       </Text>
       {canInstall && !installed && (
         <View
@@ -99,9 +114,18 @@ export function WebPushSettingsSection() {
             ✓ Powiadomienia włączone na tym urządzeniu
           </Text>
         ) : status === "denied" ? (
-          <Text style={{ color: COLORS.danger, fontSize: 12 }}>
-            Zablokowane — włącz ręcznie w Ustawieniach systemowych → Powiadomienia dla tej appki.
-          </Text>
+          <View>
+            <Text style={{ color: COLORS.danger, fontSize: 12 }}>
+              {isIOS()
+                ? "Zablokowane — włącz ręcznie w Ustawieniach systemowych → Powiadomienia dla tej appki."
+                : "Zablokowane w przeglądarce dla tej strony. Kliknij ikonkę kłódki/ustawień " +
+                  "przy adresie strony → Uprawnienia strony (Site settings) → Powiadomienia → " +
+                  "Zezwalaj, potem wróć tutaj i sprawdź ponownie."}
+            </Text>
+            <View style={{ marginTop: 8 }}>
+              <Button label="Sprawdź ponownie" secondary onPress={readPermission} />
+            </View>
+          </View>
         ) : (
           <Button
             label={busy ? "Włączanie…" : "Włącz powiadomienia"}

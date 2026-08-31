@@ -53,6 +53,11 @@ export type CreateOrderInput = {
   // fallback 5 po stronie bazy. Bez znaczenia dla zamówień materiału już
   // istniejącego w magazynie (materiał ma już swój `min`).
   newMaterialMin?: number;
+  // Indeks materiałowy NOWEGO materiału (materialId brak) — bez tego
+  // receive_material_order nadawał automatyczny indeks 'FLOW-' || id
+  // zamówienia (patrz 074_indeks_nowego_materialu_w_zamowieniu.sql).
+  // Puste = ten sam fallback po stronie bazy.
+  newMaterialIndex?: string;
 };
 
 export async function createOrder(input: CreateOrderInput): Promise<void> {
@@ -63,6 +68,7 @@ export async function createOrder(input: CreateOrderInput): Promise<void> {
     unit: input.unit,
     batchId: input.batchId ?? null,
     new_material_min: input.materialId ? null : (input.newMaterialMin ?? null),
+    new_material_index: input.materialId ? null : (input.newMaterialIndex?.trim() || null),
     status: "do realizacji" satisfies OrderStatus,
   });
   if (error) throw new Error(error.message);

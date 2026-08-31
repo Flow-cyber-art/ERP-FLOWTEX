@@ -82,11 +82,17 @@ export function OrdersScreen() {
   // wstawiał sztywne 5 dla każdego nowego materiału (patrz
   // 065_stan_minimalny_nowego_materialu.sql).
   const [orderMinStock, setOrderMinStock] = useState("");
+  // Indeks materiałowy NOWEGO materiału — bez tego przyjęcie dostawy
+  // nadawało automatyczny, nic nie mówiący indeks (patrz
+  // 074_indeks_nowego_materialu_w_zamowieniu.sql). Opcjonalny — puste
+  // pole = ten sam fallback co dotąd.
+  const [orderMaterialIndex, setOrderMaterialIndex] = useState("");
   const orderMaterialName = orderMaterialNameRaw;
   const setOrderMaterialName = (name: string) => {
     setOrderMaterialNameRaw(name);
     setOrderConfirmedNewMaterial(false);
     setOrderMinStock("");
+    setOrderMaterialIndex("");
   };
   // Koszyk zamówienia ręcznego ("Zamów materiał spoza listy") — pozycje
   // zbierane lokalnie, zanim cokolwiek trafi do bazy. Dopiero finalne
@@ -117,12 +123,15 @@ export function OrdersScreen() {
         materialId: matched?.id,
         newMaterialMin:
           !matched && orderMinStock.trim() ? Number(orderMinStock) : undefined,
+        newMaterialIndex:
+          !matched && orderMaterialIndex.trim() ? orderMaterialIndex.trim() : undefined,
       },
     ]);
     setOrderMaterialName("");
     setOrderQuantity("");
     setOrderUnit("szt.");
     setOrderMinStock("");
+    setOrderMaterialIndex("");
   };
   // Jawne potwierdzenie "materiału nie ma na liście, dodaj go jako nowy" —
   // pokazywane w UI tylko gdy wpisana nazwa nie ma jednoznacznego
@@ -482,6 +491,18 @@ export function OrdersScreen() {
                 value={orderUnit}
                 onChangeText={setOrderUnit}
                 style={{ marginTop: 8 }}
+              />
+            </View>
+          )}
+          {!exactMaterialMatch && orderConfirmedNewMaterial && (
+            <View style={{ marginTop: 10 }}>
+              <Text className="text-xs text-muted uppercase mb-2">
+                Indeks materiałowy (opcjonalnie)
+              </Text>
+              <Field
+                placeholder="np. kod z cennika dostawcy — bez tego indeks nada się automatycznie"
+                value={orderMaterialIndex}
+                onChangeText={setOrderMaterialIndex}
               />
             </View>
           )}

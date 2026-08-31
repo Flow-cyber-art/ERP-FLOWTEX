@@ -1295,10 +1295,39 @@ function useAppDataState(
   // powyżej (tam "brakuje do planu budów", tu "trzeba dokupić, żeby
   // magazyn nie zszedł poniżej ustalonego poziomu"). Ten sam warunek co
   // podświetlenie stanu na czerwono na liście materiałów.
-  const belowMinimumMaterials = useMemo(
-    () => materials.filter((m) => m.stock <= m.min),
-    [materials],
-  );
+  //
+  // Materiał znika z tej listy TYLKO gdy suma ilości z aktywnych
+  // (nieprzyjętych/nieanulowanych) zamówień — licząc oba równoległe
+  // systemy: stary `material_orders` (`orders` niżej) i nowy `orders`/
+  // build-order z wizarda technologii (`buildOrders`) — pokrywa CAŁY
+  // brakujący dystans (min - stock). Zamówienie mniejsze niż brak nie
+  // gasi alertu (świadomie: admin ma widzieć, że mimo zamówienia i tak
+  // czegoś zabraknie), tylko zamówienie z zapasem lub dokładnie
+  // pokrywające brak.
+  const belowMinimumMaterials = useMemo(() => {
+    const pendingByMaterialId = new Map<string, number>();
+    for (const o of orders) {
+      if (o.status === "dostarczone" || !o.materialId) continue;
+      pendingByMaterialId.set(
+        o.materialId,
+        (pendingByMaterialId.get(o.materialId) ?? 0) + o.quantity,
+      );
+    }
+    for (const bo of buildOrders) {
+      if (bo.status === "przyjęte" || bo.status === "anulowane") continue;
+      for (const item of bo.order_items) {
+        if (!item.linkedMaterialId) continue;
+        const key = String(item.linkedMaterialId);
+        pendingByMaterialId.set(
+          key,
+          (pendingByMaterialId.get(key) ?? 0) + Number(item.orderedQuantity),
+        );
+      }
+    }
+    return materials.filter(
+      (m) => m.stock + (pendingByMaterialId.get(m.id) ?? 0) < m.min,
+    );
+  }, [materials, orders, buildOrders]);
   // Ręczny wybór partii (Faza 5) — admin wybiera KONKRETNĄ partię
   // (wyszukiwarka pokazuje różne daty/ceny tej samej pozycji, patrz
   // warehouseBatches) i ile z niej trafia na budowę, zamiast tylko

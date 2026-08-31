@@ -655,13 +655,13 @@ export function OrdersScreen() {
                     </View>
                     {order.status === "robocze" && editingBuildOrderItemId === item.id ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <View style={{ width: 90 }}>
-                          <QuantityStepper
-                            value={buildOrderQtyDraft}
-                            onChangeText={setBuildOrderQtyDraft}
-                          />
-                        </View>
+                        <QuantityStepper
+                          value={buildOrderQtyDraft}
+                          onChangeText={setBuildOrderQtyDraft}
+                          unit={item.unit}
+                        />
                         <Pressable
+                          hitSlop={8}
                           onPress={async () => {
                             const qty = Number(buildOrderQtyDraft);
                             if (qty > 0) await updateOrderItemQuantity(item.id, qty);

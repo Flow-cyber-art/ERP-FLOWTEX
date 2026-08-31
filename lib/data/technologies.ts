@@ -3,10 +3,15 @@ import { supabase } from "@/lib/supabase";
 /**
  * Warstwa danych dla technologii (receptur posadzek) — Faza 1 modułu
  * Technologia. Zapis idzie zawsze przez RPC `save_technology` (patrz
- * supabase/sql/005_faza1_technologie.sql): "edycja" nigdy nie nadpisuje
- * istniejącej technologii, zawsze tworzy nową wersję tej samej rodziny
- * (`code`) i dezaktywuje poprzednią — dzięki temu budowa, która już ma
- * przypisaną technologię, nigdy nie widzi późniejszej zmiany receptury.
+ * supabase/sql/005_faza1_technologie.sql, zaktualizowane w
+ * 073_edycja_technologii_bez_nowej_wersji.sql): dopóki technologia nie
+ * jest jeszcze przypisana do ŻADNEJ budowy, "edycja" nadpisuje ją W
+ * MIEJSCU (ten sam id, ta sama wersja) — dopiero od momentu, gdy jakaś
+ * budowa ją przejmie (assign_technology_to_build zamraża wtedy snapshot
+ * w build_technology_snapshot), kolejna edycja zaczyna tworzyć nową
+ * wersję tej samej rodziny (`code`) i dezaktywować poprzednią, żeby
+ * budowa z już przypisaną recepturą nigdy nie zobaczyła późniejszej
+ * zmiany.
  */
 
 export type TechnologyMaterialRow = {

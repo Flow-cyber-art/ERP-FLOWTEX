@@ -102,6 +102,7 @@ function HomeScreenInner() {
     setWarehouseView,
     belowMinimumMaterials,
     orders,
+    buildOrders,
     shortages,
     reportsPendingApprovalCount,
     reportsNeedingFixCount,
@@ -113,6 +114,12 @@ function HomeScreenInner() {
   // tym, co faktycznie widać po wejściu w zakładkę). Bez tego materiał,
   // który dopiero co spadł do zera, nie podświetlał w ogóle Zamówień —
   // widać go było wyłącznie po wejściu w sam ekran.
+  //
+  // + zamówienia wygenerowane wizardem z planu technologii budowy
+  // (buildOrders, status "robocze") — osobny system od `orders` powyżej
+  // (material_orders/braki), więc bez tego liczenia zamówienie utworzone
+  // przyciskiem "+ Z planu"/w wizardzie zakładania budowy nie podbijało w
+  // ogóle badge'a na ikonie Zamówień, mimo że realnie czeka na przejrzenie.
   const pendingOrdersCount =
     orders.filter((o) => o.status === "do realizacji").length +
     shortages.filter(
@@ -120,7 +127,8 @@ function HomeScreenInner() {
         !orders.some(
           (o) => o.materialId === row.material.id && o.status !== "dostarczone",
         ),
-    ).length;
+    ).length +
+    buildOrders.filter((o) => o.status === "robocze").length;
   // Nie używamy useWindowDimensions() bezpośrednio: przy statycznym eksporcie
   // (`expo export -p web`) ten hook potrafi po hydratacji zwrócić nieaktualną
   // wartość i "obudzić się" dopiero po realnym evencie resize (np. otwarcie/

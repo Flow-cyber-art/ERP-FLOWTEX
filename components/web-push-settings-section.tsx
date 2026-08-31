@@ -3,6 +3,7 @@ import { Platform, Text, View } from "react-native";
 
 import { Button, COLORS, notify } from "@/components/report-ui";
 import { requestWebPushPermission } from "@/lib/notifications/use-register-web-push";
+import { useInstallPrompt } from "@/lib/pwa/use-install-prompt";
 
 // Przycisk "Włącz powiadomienia" (Web Push, Safari na iPhonie) — MUSI
 // być osobnym przyciskiem klikanym ręcznie, nie automatyczną prośbą przy
@@ -15,6 +16,8 @@ import { requestWebPushPermission } from "@/lib/notifications/use-register-web-p
 export function WebPushSettingsSection() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<"unknown" | "granted" | "default" | "denied">("unknown");
+  const { canInstall, installed, promptInstall } = useInstallPrompt();
+  const [installBusy, setInstallBusy] = useState(false);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof Notification === "undefined") return;
@@ -22,6 +25,21 @@ export function WebPushSettingsSection() {
   }, []);
 
   if (Platform.OS !== "web") return null;
+
+  const install = async () => {
+    setInstallBusy(true);
+    try {
+      const accepted = await promptInstall();
+      if (accepted) {
+        notify(
+          "Aplikacja zainstalowana",
+          "Otwieraj ją teraz z ikonki na pulpicie/ekranie głównym — powiadomienia będą działać stabilniej.",
+        );
+      }
+    } finally {
+      setInstallBusy(false);
+    }
+  };
 
   const enable = async () => {
     setBusy(true);
@@ -49,6 +67,32 @@ export function WebPushSettingsSection() {
         Udostępnij) i otwierać ją z tej ikonki — z poziomu zwykłej karty przeglądarki to nie
         zadziała.
       </Text>
+      {canInstall && !installed && (
+        <View
+          style={{
+            marginTop: 10,
+            backgroundColor: COLORS.background,
+            borderRadius: 10,
+            padding: 12,
+          }}
+        >
+          <Text style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "600" }}>
+            Zainstaluj aplikację na pulpicie/ekranie głównym
+          </Text>
+          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 4 }}>
+            Powiadomienia działają stabilniej z ikonki zainstalowanej appki niż z karty
+            przeglądarki.
+          </Text>
+          <View style={{ marginTop: 8 }}>
+            <Button
+              label={installBusy ? "Instalowanie…" : "Zainstaluj aplikację"}
+              secondary
+              disabled={installBusy}
+              onPress={install}
+            />
+          </View>
+        </View>
+      )}
       <View style={{ marginTop: 10 }}>
         {status === "granted" ? (
           <Text style={{ color: COLORS.success, fontSize: 12, fontWeight: "700" }}>

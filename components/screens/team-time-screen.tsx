@@ -11,14 +11,28 @@ import { useAppData } from "@/contexts/app-data";
 import { LeavePendingApprovals } from "@/components/screens/leave-screen";
 
 export function TeamTimeScreen() {
-  const { builds, employees, timeEntries } = useAppData();
+  const { builds, employees, timeEntries, myEmployeeId } = useAppData();
+
+  // Brygadzista ma tu widzieć nie tylko czas swoich Pracowników, ale też
+  // WŁASNY (dopisuje siebie do "osób pracujących" w raporcie dziennym,
+  // patrz addPersonToDraft — to generuje jego własny time_entries).
+  // Wcześniej lista (domyślna i w pickerze) obejmowała wyłącznie rolę
+  // "Pracownik", więc własne wpisy brygadzisty nigdy się tu nie
+  // pojawiały, mimo że realnie istnieją w bazie.
+  const selectableEmployees = useMemo(
+    () =>
+      employees.filter(
+        (employee) => employee.role === "Pracownik" || employee.id === myEmployeeId,
+      ),
+    [employees, myEmployeeId],
+  );
 
   const [teamPeriod, setTeamPeriod] = useState<
     "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
   >("Dzień");
   const [supervisedEmployeeIds, setSupervisedEmployeeIds] = useState(() =>
     employees
-      .filter((employee) => employee.role === "Pracownik")
+      .filter((employee) => employee.role === "Pracownik" || employee.id === myEmployeeId)
       .map((employee) => employee.id),
   );
   const [supervisorPickerOpen, setSupervisorPickerOpen] = useState(false);
@@ -102,9 +116,7 @@ export function TeamTimeScreen() {
               padding: 10,
             }}
           >
-            {employees
-              .filter((employee) => employee.role === "Pracownik")
-              .map((employee) => (
+            {selectableEmployees.map((employee) => (
                 <Pressable
                   key={employee.id}
                   onPress={() => {

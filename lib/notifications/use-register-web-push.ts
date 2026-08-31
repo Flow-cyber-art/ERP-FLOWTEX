@@ -26,7 +26,7 @@ function getVapidPublicKey(): string | undefined {
  * dodanej do ekranu głównego (standalone). W zwykłej karcie Safari tego
  * API po prostu nie ma — stąd osobna diagnoza dla użytkownika.
  */
-function isStandalone(): boolean {
+export function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
   const iosStandalone = (window.navigator as { standalone?: boolean }).standalone === true;
   const displayMode =

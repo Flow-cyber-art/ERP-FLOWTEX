@@ -1275,6 +1275,23 @@ function useAppDataState(
     assignments.forEach((a) =>
       needed.set(a.materialId, (needed.get(a.materialId) || 0) + a.planned),
     );
+    // Materiał technologiczny (występuje w JAKIMKOLWIEK planie materiałowym
+    // budowy, build_material_plan.linkedMaterialId) ma już swój dokładny
+    // mechanizm śledzenia "ile jeszcze trzeba zamówić" — fn_build_plan_remaining,
+    // liczone na porównaniu planu z sumą order_items. Ten prosty licznik
+    // "planned - stock" dawał dla takich materiałów fałszywy alarm: po
+    // odbiorze dostawy z wizarda CAŁA ilość w 100% trafia na budowę
+    // (build_material_lots), stock w magazynie ogólnym wraca do 0 —
+    // "planned" (= to, co dostarczono) minus "stock" (= 0) zawsze wychodzi
+    // jako "brakuje tyle, ile właśnie przyjechało", mimo że materiał
+    // fizycznie już jest na budowie, gotowy do zużycia. Ten licznik
+    // zostaje więc wyłącznie dla materiałów "dodatkowych" (spoza planu
+    // technologii, przypisywanych ręcznie z wolnego magazynu).
+    const technologyMaterialIds = new Set(
+      buildMaterialPlans
+        .filter((p) => p.linkedMaterialId)
+        .map((p) => String(p.linkedMaterialId)),
+    );
     return materials
       .map((m) => ({
         material: m,
@@ -1284,12 +1301,13 @@ function useAppDataState(
       .filter(
         (row) =>
           row.missing > 0 &&
+          !technologyMaterialIds.has(row.material.id) &&
           !(
             dismissedShortages[row.material.id] !== undefined &&
             dismissedShortages[row.material.id] >= row.missing
           ),
       );
-  }, [materials, assignments, dismissedShortages]);
+  }, [materials, assignments, buildMaterialPlans, dismissedShortages]);
   // Materiały poniżej własnego stanu minimalnego (m.min, patrz + Dodaj
   // materiał w warehouse-screen.tsx) — inny sygnał niż `shortages`
   // powyżej (tam "brakuje do planu budów", tu "trzeba dokupić, żeby

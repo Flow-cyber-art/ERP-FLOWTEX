@@ -43,12 +43,21 @@ export function WarehouseScreen() {
   // podpowiadane przy dopasowaniu nazwy (materials pozostaje pełną listą),
   // tylko nie zaśmiecają widoku do codziennej pracy.
   const [showArchivedMaterials, setShowArchivedMaterials] = useState(false);
-  // Filtr "przypisania do budowy" — czy dany materiał ma choć jedną
-  // partię przypisaną do JAKIEJKOLWIEK budowy (niekoniecznie konkretnej —
-  // to widok zarządzania materiałami, nie pojedynczej budowy, patrz
-  // odpowiednik per-budowa w builds-screen.tsx). "Nieprzypisane" pomaga
-  // szybko znaleźć materiały leżące w magazynie, których jeszcze nikt
-  // nigdzie nie użył.
+  // Filtr "przypisania do budowy". Budowy traktujemy jak pod-magazyny:
+  // materiał może mieć CZĘŚĆ ilości przypisaną do budowy i CZĘŚĆ nadal
+  // wolną w głównym magazynie naraz (np. partia 5 szt., 2 poszły na
+  // budowę, 3 zostały wolne) — to NIE jest stan wykluczający się.
+  // "Nieprzypisane" = materiał ma jeszcze wolną ilość w magazynie
+  // (materials.stock > 0 — suma NIEZUŻYTYCH partii, fn_recalc_material w
+  // supabase/sql/001_rpc_functions.sql; ilość przypisana do budowy
+  // przechodzi do build_material_lots i przestaje liczyć się do stock).
+  // Wcześniej filtr patrzył tylko na to, czy materiał ma CHOĆ JEDNO
+  // przypisanie gdziekolwiek — więc materiał przypisany częściowo do
+  // jednej budowy znikał z "Nieprzypisane" całkowicie, mimo wolnej reszty
+  // wciąż leżącej w magazynie. "Przypisane" zostaje bez zmian (ma choć
+  // jedną partię przypisaną do jakiejkolwiek budowy) — to osobne pytanie
+  // ("czy ten materiał jest gdziekolwiek w użyciu"), nie sprzeczne z
+  // jednoczesnym "ma wolną ilość".
   const [assignmentFilter, setAssignmentFilter] = useState<
     "all" | "assigned" | "unassigned"
   >("all");
@@ -67,8 +76,8 @@ export function WarehouseScreen() {
         )
         .filter((m) => {
           if (assignmentFilter === "all") return true;
-          const isAssigned = assignedMaterialIds.has(m.id);
-          return assignmentFilter === "assigned" ? isAssigned : !isAssigned;
+          if (assignmentFilter === "assigned") return assignedMaterialIds.has(m.id);
+          return m.stock > 0;
         }),
     [materials, query, showArchivedMaterials, assignmentFilter, assignedMaterialIds],
   );

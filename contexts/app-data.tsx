@@ -1299,11 +1299,27 @@ function useAppDataState(
     // fizycznie już jest na budowie, gotowy do zużycia. Ten licznik
     // zostaje więc wyłącznie dla materiałów "dodatkowych" (spoza planu
     // technologii, przypisywanych ręcznie z wolnego magazynu).
-    const technologyMaterialIds = new Set(
-      buildMaterialPlans
-        .filter((p) => p.linkedMaterialId)
-        .map((p) => String(p.linkedMaterialId)),
-    );
+    // linkedMaterialId na build_material_plan prawie zawsze jest NULL —
+    // technologia jest definiowana zanim materiał fizycznie istnieje w
+    // magazynie, więc dopasowanie do rzeczywistego materiału odbywa się
+    // po nazwie (ten sam wzorzec co resolveMaterialIdForPlanRow w
+    // settlement-screen.tsx). Samo poleganie na linkedMaterialId sprawiało,
+    // że ten wyjątek prawie nigdy się nie uruchamiał i materiały
+    // technologiczne — mimo dostarczenia na budowę — wciąż wpadały na
+    // listę "Braki" z fałszywym alarmem opisanym wyżej.
+    const technologyMaterialIds = new Set<string>();
+    buildMaterialPlans
+      .filter((p) => activeBuildIds.has(String(p.buildId)))
+      .forEach((p) => {
+        if (p.linkedMaterialId) {
+          technologyMaterialIds.add(String(p.linkedMaterialId));
+          return;
+        }
+        const name = normalizeMaterialName(p.materialName);
+        if (!name) return;
+        const match = materials.find((m) => normalizeMaterialName(m.name) === name);
+        if (match) technologyMaterialIds.add(match.id);
+      });
     return materials
       .map((m) => ({
         material: m,

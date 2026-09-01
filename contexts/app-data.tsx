@@ -106,6 +106,7 @@ import {
   type BuildStageStatusRow,
 } from "@/lib/data/build-stages";
 import {
+  applyOrderItemFreeStock as applyOrderItemFreeStockRemote,
   cancelBuildOrder as cancelBuildOrderRemote,
   deleteBuildOrder as deleteBuildOrderRemote,
   generateOrderFromPlan as generateOrderFromPlanRemote,
@@ -1105,6 +1106,10 @@ function useAppDataState(
     mutationFn: (vars: { itemId: number; orderedQuantity: number }) =>
       updateOrderItemQuantityRemote(vars.itemId, vars.orderedQuantity),
   });
+  const applyOrderItemFreeStockMutation = useMutation({
+    mutationFn: (vars: { itemId: number; orderedQuantity: number }) =>
+      applyOrderItemFreeStockRemote(vars.itemId, vars.orderedQuantity),
+  });
   const markBuildOrderOrderedMutation = useMutation({
     mutationFn: (vars: { orderId: number }) => markBuildOrderOrderedRemote(vars.orderId),
   });
@@ -1760,6 +1765,21 @@ function useAppDataState(
       await invalidate("buildOrders");
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać ilości zamawianej.");
+    }
+  };
+  // Klik "Tak, odejmij" na podpowiedzi "Na magazynie (wolne)" — musi
+  // wyzerować available_free_quantity razem ze zmianą ordered_quantity,
+  // inaczej podpowiedź (i przycisk) zostają widoczne po kliknięciu i da
+  // się odjąć tę samą wolną ilość wielokrotnie, aż do zera.
+  const applyOrderItemFreeStock = async (itemId: number, orderedQuantity: number) => {
+    try {
+      await applyOrderItemFreeStockMutation.mutateAsync({
+        itemId,
+        orderedQuantity: Math.max(0, orderedQuantity),
+      });
+      await invalidate("buildOrders");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się uwzględnić wolnego stanu magazynu.");
     }
   };
   const markBuildOrderOrdered = async (orderId: number) => {
@@ -2740,6 +2760,7 @@ function useAppDataState(
     buildOrders: (buildOrdersQuery.data ?? []) as BuildOrderRow[],
     generateOrderFromPlan,
     updateOrderItemQuantity,
+    applyOrderItemFreeStock,
     markBuildOrderOrdered,
     cancelBuildOrder,
     deleteBuildOrder,

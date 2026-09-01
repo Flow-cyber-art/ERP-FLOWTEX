@@ -80,6 +80,24 @@ export async function updateOrderItemQuantity(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Zastosowanie podpowiedzi "Na magazynie (wolne) — uwzględnić?": pomniejsza
+ * ordered_quantity I ZERUJE available_free_quantity w jednym update. Bez
+ * zerowania tego drugiego pola podpowiedź (i przycisk "Tak, odejmij")
+ * zostawały widoczne po kliknięciu — dało się kliknąć wielokrotnie i za
+ * każdym razem odjąć tę samą "wolną" ilość jeszcze raz, aż do zera.
+ */
+export async function applyOrderItemFreeStock(
+  itemId: number,
+  orderedQuantity: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("order_items")
+    .update({ ordered_quantity: orderedQuantity, available_free_quantity: 0 })
+    .eq("id", itemId);
+  if (error) throw new Error(error.message);
+}
+
 export async function markBuildOrderOrdered(orderId: number): Promise<void> {
   const { error } = await supabase
     .from("orders")

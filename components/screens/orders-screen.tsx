@@ -56,6 +56,7 @@ export function OrdersScreen() {
     builds,
     buildOrders,
     updateOrderItemQuantity,
+    applyOrderItemFreeStock,
     markBuildOrderOrdered,
     cancelBuildOrder,
     deleteBuildOrder,
@@ -703,7 +704,7 @@ export function OrdersScreen() {
                                   0,
                                   Number(item.orderedQuantity) - Number(item.availableFreeQuantity),
                                 );
-                                await updateOrderItemQuantity(item.id, newQty);
+                                await applyOrderItemFreeStock(item.id, newQty);
                               }}
                             >
                               <Text

@@ -683,13 +683,42 @@ export function OrdersScreen() {
                       <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
                         {item.materialName}
                       </Text>
-                      {/* Faza 3b: część planu pokryta wolnym magazynem
-                          (nieprzypisanym do żadnej budowy) — już odjęta
-                          od ilości zamawianej po prawej. */}
+                      {/* Faza 3b: część planu, którą pokryłby wolny
+                          magazyn (nieprzypisany do żadnej budowy) — TYLKO
+                          informacja, ilość zamawiana po prawej jej NIE
+                          uwzględnia automatycznie. Budowa to podmagazyn —
+                          po co zamawiać to, co już mamy — ale decyduje
+                          Admin, nie system (mogło być zarezerwowane pod
+                          inną budowę mentalnie). */}
                       {Number(item.availableFreeQuantity) > 0 && (
-                        <Text style={{ color: COLORS.success, fontSize: 10, marginTop: 2 }}>
-                          Na magazynie (wolne): {item.availableFreeQuantity} {item.unit}
-                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+                          <Text style={{ color: COLORS.success, fontSize: 10 }}>
+                            Na magazynie (wolne): {item.availableFreeQuantity} {item.unit} — uwzględnić?
+                          </Text>
+                          {order.status === "robocze" && editingBuildOrderItemId !== item.id && (
+                            <Pressable
+                              hitSlop={8}
+                              onPress={async () => {
+                                const newQty = Math.max(
+                                  0,
+                                  Number(item.orderedQuantity) - Number(item.availableFreeQuantity),
+                                );
+                                await updateOrderItemQuantity(item.id, newQty);
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: COLORS.success,
+                                  fontSize: 10,
+                                  fontWeight: "700",
+                                  textDecorationLine: "underline",
+                                }}
+                              >
+                                Tak, odejmij
+                              </Text>
+                            </Pressable>
+                          )}
+                        </View>
                       )}
                     </View>
                     {order.status === "robocze" && editingBuildOrderItemId === item.id ? (

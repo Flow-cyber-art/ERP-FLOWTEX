@@ -386,6 +386,9 @@ export function SettlementScreen() {
                     Plan
                   </Text>
                   <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
+                    Przypisano
+                  </Text>
+                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
                     Zużyto
                   </Text>
                   <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
@@ -402,6 +405,9 @@ export function SettlementScreen() {
                     </Text>
                     <Text style={{ flex: 1, color: COLORS.muted, fontSize: 12, textAlign: "right" }}>
                       {item.plan} {item.unit}
+                    </Text>
+                    <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
+                      {item.przypisano}
                     </Text>
                     <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
                       {item.zuzyto}

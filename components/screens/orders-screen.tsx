@@ -724,6 +724,15 @@ export function OrdersScreen() {
                         </View>
                       )}
                     </View>
+                    {order.status === "przyjęte" && (
+                      <Text
+                        style={{ color: COLORS.muted, fontSize: 11, width: 64, textAlign: "right" }}
+                      >
+                        {item.receivedUnitPrice != null
+                          ? `${Number(item.receivedUnitPrice).toFixed(2)} zł`
+                          : "—"}
+                      </Text>
+                    )}
                     {order.status === "robocze" && editingBuildOrderItemId === item.id ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <QuantityStepper
@@ -745,29 +754,21 @@ export function OrdersScreen() {
                         </Pressable>
                       </View>
                     ) : (
-                      <View style={{ alignItems: "flex-end" }}>
-                        {order.status === "przyjęte" &&
-                          item.receivedUnitPrice != null && (
-                            <Text style={{ color: COLORS.muted, fontSize: 10 }}>
-                              cena zakupu: {Number(item.receivedUnitPrice).toFixed(2)} zł/
-                              {item.unit}
-                            </Text>
-                          )}
-                        <Pressable
-                          disabled={order.status !== "robocze"}
-                          onPress={() => {
-                            setEditingBuildOrderItemId(item.id);
-                            setBuildOrderQtyDraft(item.orderedQuantity);
-                          }}
-                        >
-                          <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                            {order.status === "przyjęte"
-                              ? item.receivedQuantity
-                              : item.orderedQuantity}{" "}
-                            {item.unit}
-                          </Text>
-                        </Pressable>
-                      </View>
+                      <Pressable
+                        disabled={order.status !== "robocze"}
+                        onPress={() => {
+                          setEditingBuildOrderItemId(item.id);
+                          setBuildOrderQtyDraft(item.orderedQuantity);
+                        }}
+                        style={{ marginLeft: 8 }}
+                      >
+                        <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                          {order.status === "przyjęte"
+                            ? item.receivedQuantity
+                            : item.orderedQuantity}{" "}
+                          {item.unit}
+                        </Text>
+                      </Pressable>
                     )}
                   </View>
                 ))}

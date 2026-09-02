@@ -81,21 +81,23 @@ export async function updateOrderItemQuantity(
 }
 
 /**
- * Zastosowanie podpowiedzi "Na magazynie (wolne) — uwzględnić?": pomniejsza
- * ordered_quantity I ZERUJE available_free_quantity w jednym update. Bez
- * zerowania tego drugiego pola podpowiedź (i przycisk "Tak, odejmij")
- * zostawały widoczne po kliknięciu — dało się kliknąć wielokrotnie i za
- * każdym razem odjąć tę samą "wolną" ilość jeszcze raz, aż do zera.
+ * Zastosowanie podpowiedzi "Na magazynie (wolne) — uwzględnić?" — RPC
+ * (supabase/sql/088_przypisz_wolny_magazyn_do_budowy.sql), NIE goły
+ * update. Dobiera partie z magazynu głównego metodą FIFO i REALNIE
+ * przenosi je na podmagazyn budowy (build_material_lots +
+ * build_materials.planned) w tej samej transakcji, w której pomniejsza
+ * ordered_quantity i zeruje available_free_quantity — inaczej "Plan" w
+ * Rozliczeniu budowy rozjeżdżałby się z "Przypisano" o tę ilość, dopóki
+ * ktoś ręcznie nie użyłby osobnego "+ Przypisz materiał". Zwraca
+ * faktycznie przypisaną ilość (może być mniejsza niż podpowiedź, jeśli
+ * w międzyczasie ktoś inny zabrał ten materiał z magazynu).
  */
-export async function applyOrderItemFreeStock(
-  itemId: number,
-  orderedQuantity: number,
-): Promise<void> {
-  const { error } = await supabase
-    .from("order_items")
-    .update({ ordered_quantity: orderedQuantity, available_free_quantity: 0 })
-    .eq("id", itemId);
+export async function applyOrderItemFreeStock(itemId: number): Promise<number> {
+  const { data, error } = await supabase.rpc("apply_order_item_free_stock", {
+    p_order_item_id: itemId,
+  });
   if (error) throw new Error(error.message);
+  return Number(data ?? 0);
 }
 
 export async function markBuildOrderOrdered(orderId: number): Promise<void> {

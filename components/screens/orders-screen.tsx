@@ -159,6 +159,13 @@ export function OrdersScreen() {
     number | null
   >(null);
   const [buildOrderQtyDraft, setBuildOrderQtyDraft] = useState("");
+  // Master checkbox "Uwzględnij stany magazynowe dla wszystkich pozycji" —
+  // stosuje applyOrderItemFreeStock kolejno do każdej pozycji zamówienia z
+  // niezerowym availableFreeQuantity. Id zamówienia w trakcie stosowania,
+  // żeby zablokować drugi klik, dopóki pierwszy się nie zakończy.
+  const [applyingAllFreeStockOrderId, setApplyingAllFreeStockOrderId] = useState<
+    number | null
+  >(null);
 
   const [manualFormOpen, setManualFormOpen] = useState(false);
   // Podpowiedzi z magazynu podczas wpisywania nazwy w formularzu "Zamów
@@ -672,6 +679,49 @@ export function OrdersScreen() {
                   />
                 </View>
 
+                {order.status === "robocze" &&
+                  order.order_items.some((item) => Number(item.availableFreeQuantity) > 0) && (
+                    <Pressable
+                      disabled={applyingAllFreeStockOrderId === order.id}
+                      onPress={async () => {
+                        setApplyingAllFreeStockOrderId(order.id);
+                        try {
+                          for (const item of order.order_items) {
+                            if (Number(item.availableFreeQuantity) > 0) {
+                              await applyOrderItemFreeStock(item.id);
+                            }
+                          }
+                        } finally {
+                          setApplyingAllFreeStockOrderId(null);
+                        }
+                      }}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        marginTop: 10,
+                        paddingVertical: 4,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 5,
+                          borderWidth: 1,
+                          borderColor: COLORS.border,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      />
+                      <Text style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "600" }}>
+                        {applyingAllFreeStockOrderId === order.id
+                          ? "Uwzględniam…"
+                          : "Uwzględnij stany magazynowe dla wszystkich pozycji"}
+                      </Text>
+                    </Pressable>
+                  )}
+
                 {order.order_items.map((item) => (
                   <View
                     key={item.id}
@@ -694,34 +744,28 @@ export function OrdersScreen() {
                           Admin, nie system (mogło być zarezerwowane pod
                           inną budowę mentalnie). */}
                       {Number(item.availableFreeQuantity) > 0 && (
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+                        <Pressable
+                          disabled={
+                            order.status !== "robocze" ||
+                            editingBuildOrderItemId === item.id ||
+                            applyingAllFreeStockOrderId === order.id
+                          }
+                          onPress={() => applyOrderItemFreeStock(item.id)}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}
+                        >
+                          <View
+                            style={{
+                              width: 14,
+                              height: 14,
+                              borderRadius: 4,
+                              borderWidth: 1,
+                              borderColor: COLORS.success,
+                            }}
+                          />
                           <Text style={{ color: COLORS.success, fontSize: 10 }}>
                             Na magazynie (wolne): {item.availableFreeQuantity} {item.unit} — uwzględnić?
                           </Text>
-                          {order.status === "robocze" && editingBuildOrderItemId !== item.id && (
-                            <Pressable
-                              hitSlop={8}
-                              onPress={async () => {
-                                const newQty = Math.max(
-                                  0,
-                                  Number(item.orderedQuantity) - Number(item.availableFreeQuantity),
-                                );
-                                await applyOrderItemFreeStock(item.id, newQty);
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  color: COLORS.success,
-                                  fontSize: 10,
-                                  fontWeight: "700",
-                                  textDecorationLine: "underline",
-                                }}
-                              >
-                                Tak, odejmij
-                              </Text>
-                            </Pressable>
-                          )}
-                        </View>
+                        </Pressable>
                       )}
                     </View>
                     {order.status === "przyjęte" && (
@@ -773,30 +817,67 @@ export function OrdersScreen() {
                   </View>
                 ))}
 
+                {order.status === "robocze" &&
+                  order.order_items.every((item) => Number(item.orderedQuantity) <= 0) && (
+                    <View
+                      style={{
+                        marginTop: 10,
+                        padding: 8,
+                        borderRadius: 8,
+                        backgroundColor: COLORS.background,
+                        borderWidth: 1,
+                        borderColor: COLORS.success,
+                      }}
+                    >
+                      <Text style={{ color: COLORS.success, fontSize: 11, fontWeight: "600" }}>
+                        Cały plan pokrywa magazyn — nie musisz nic zamawiać.
+                      </Text>
+                    </View>
+                  )}
+
                 {order.status === "robocze" && (
                   <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Button
-                        label="Złożono u dostawcy"
-                        fullWidth
-                        onPress={() => markBuildOrderOrdered(order.id)}
-                      />
-                    </View>
-                    <Pressable
-                      onPress={() =>
-                        confirmAction(
-                          "Anulować zamówienie?",
-                          `${order.orderNumber} zostanie oznaczone jako anulowane.`,
-                          "Anuluj zamówienie",
-                          () => cancelBuildOrder(order.id),
-                        )
-                      }
-                      style={{ justifyContent: "center", paddingHorizontal: 10 }}
-                    >
-                      <Text style={{ color: COLORS.danger, fontSize: 12, fontWeight: "700" }}>
-                        Anuluj
-                      </Text>
-                    </Pressable>
+                    {order.order_items.every((item) => Number(item.orderedQuantity) <= 0) ? (
+                      <View style={{ flex: 1 }}>
+                        <Button
+                          label="Anuluj to zamówienie"
+                          fullWidth
+                          onPress={() =>
+                            confirmAction(
+                              "Anulować zamówienie?",
+                              `${order.orderNumber} zostanie oznaczone jako anulowane — cały plan pokrywa magazyn.`,
+                              "Anuluj zamówienie",
+                              () => cancelBuildOrder(order.id),
+                            )
+                          }
+                        />
+                      </View>
+                    ) : (
+                      <>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label="Złożono u dostawcy"
+                            fullWidth
+                            onPress={() => markBuildOrderOrdered(order.id)}
+                          />
+                        </View>
+                        <Pressable
+                          onPress={() =>
+                            confirmAction(
+                              "Anulować zamówienie?",
+                              `${order.orderNumber} zostanie oznaczone jako anulowane.`,
+                              "Anuluj zamówienie",
+                              () => cancelBuildOrder(order.id),
+                            )
+                          }
+                          style={{ justifyContent: "center", paddingHorizontal: 10 }}
+                        >
+                          <Text style={{ color: COLORS.danger, fontSize: 12, fontWeight: "700" }}>
+                            Anuluj
+                          </Text>
+                        </Pressable>
+                      </>
+                    )}
                   </View>
                 )}
 

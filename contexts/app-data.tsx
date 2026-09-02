@@ -1107,8 +1107,7 @@ function useAppDataState(
       updateOrderItemQuantityRemote(vars.itemId, vars.orderedQuantity),
   });
   const applyOrderItemFreeStockMutation = useMutation({
-    mutationFn: (vars: { itemId: number; orderedQuantity: number }) =>
-      applyOrderItemFreeStockRemote(vars.itemId, vars.orderedQuantity),
+    mutationFn: (vars: { itemId: number }) => applyOrderItemFreeStockRemote(vars.itemId),
   });
   const markBuildOrderOrderedMutation = useMutation({
     mutationFn: (vars: { orderId: number }) => markBuildOrderOrderedRemote(vars.orderId),
@@ -1767,17 +1766,22 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać ilości zamawianej.");
     }
   };
-  // Klik "Tak, odejmij" na podpowiedzi "Na magazynie (wolne)" — musi
-  // wyzerować available_free_quantity razem ze zmianą ordered_quantity,
-  // inaczej podpowiedź (i przycisk) zostają widoczne po kliknięciu i da
-  // się odjąć tę samą wolną ilość wielokrotnie, aż do zera.
-  const applyOrderItemFreeStock = async (itemId: number, orderedQuantity: number) => {
+  // Zaznaczenie checkboxa "Na magazynie (wolne)" przy pozycji zamówienia —
+  // RPC dobiera partie FIFO i REALNIE przenosi je na podmagazyn budowy
+  // (build_material_lots/build_materials.planned), a dopiero potem
+  // pomniejsza ordered_quantity i zeruje available_free_quantity — patrz
+  // applyOrderItemFreeStock w lib/data/build-orders.ts. Bez tego "Plan" w
+  // Rozliczeniu budowy rozjeżdżałby się z "Przypisano".
+  const applyOrderItemFreeStock = async (itemId: number) => {
     try {
-      await applyOrderItemFreeStockMutation.mutateAsync({
-        itemId,
-        orderedQuantity: Math.max(0, orderedQuantity),
-      });
-      await invalidate("buildOrders");
+      await applyOrderItemFreeStockMutation.mutateAsync({ itemId });
+      await Promise.all([
+        invalidate("buildOrders"),
+        invalidate("buildMaterials"),
+        invalidate("materials"),
+        invalidate("warehouseBatches"),
+        invalidate("buildMaterialLots"),
+      ]);
     } catch (error) {
       reportMutationError(error, "Nie udało się uwzględnić wolnego stanu magazynu.");
     }

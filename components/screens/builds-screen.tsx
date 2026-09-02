@@ -1853,7 +1853,7 @@ export function BuildsScreen() {
                           </Text>
                           {order.status === "przyjęte" && (
                             <Text
-                              className="text-muted text-[11px] w-16 text-right lg:text-left mr-3 lg:mr-10"
+                              className="text-muted text-[11px] w-16 text-right mr-3 lg:mr-10"
                             >
                               {item.receivedUnitPrice != null
                                 ? `${Number(item.receivedUnitPrice).toFixed(2)} zł`
@@ -1887,7 +1887,7 @@ export function BuildsScreen() {
                                 setEditingOrderItemId(item.id);
                                 setOrderQtyDraft(item.orderedQuantity);
                               }}
-                              style={{ marginLeft: 8 }}
+                              style={{ minWidth: 90, alignItems: "flex-end" }}
                             >
                               <Text style={{ color: COLORS.muted, fontSize: 12 }}>
                                 {order.status === "przyjęte"

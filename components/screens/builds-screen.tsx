@@ -3328,7 +3328,7 @@ export function BuildsScreen() {
                     <>
                       <Button
                         label="Zamknij i rozlicz budowę"
-                        danger
+                        secondary
                         fullWidth
                         disabled={pendingCount > 0}
                         onPress={() => {

@@ -366,11 +366,6 @@ const Button = ({
   label,
   onPress,
   secondary = false,
-  // Akcja zamykająca/nieodwracalna (np. "Zamknij i rozlicz budowę") — inny
-  // kolor niż zwykłe primary/secondary, żeby wizualnie odróżnić od reszty
-  // akcji na karcie, w tym od jedynego akcentu pomarańczowego (Button bez
-  // żadnego z tych dwóch flagów).
-  danger = false,
   fullWidth = false,
   disabled = false,
   // Ikona z MaterialIcons (ta sama biblioteka co IconBadge/reszta apki),
@@ -382,7 +377,6 @@ const Button = ({
   label: string;
   onPress: () => void;
   secondary?: boolean;
-  danger?: boolean;
   fullWidth?: boolean;
   disabled?: boolean;
   icon?: keyof typeof MaterialIcons.glyphMap;
@@ -392,7 +386,7 @@ const Button = ({
     disabled={disabled}
     hitSlop={8}
     style={({ pressed }) => ({
-      backgroundColor: danger ? COLORS.danger : secondary ? COLORS.surface : COLORS.primary,
+      backgroundColor: secondary ? COLORS.surface : COLORS.primary,
       borderWidth: secondary ? 1 : 0,
       borderColor: COLORS.border,
       borderRadius: 12,

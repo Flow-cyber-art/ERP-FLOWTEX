@@ -732,42 +732,51 @@ export function OrdersScreen() {
                       marginTop: 6,
                     }}
                   >
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
-                        {item.materialName}
-                      </Text>
-                      {/* Faza 3b: część planu, którą pokryłby wolny
-                          magazyn (nieprzypisany do żadnej budowy) — TYLKO
-                          informacja, ilość zamawiana po prawej jej NIE
-                          uwzględnia automatycznie. Budowa to podmagazyn —
-                          po co zamawiać to, co już mamy — ale decyduje
-                          Admin, nie system (mogło być zarezerwowane pod
-                          inną budowę mentalnie). */}
-                      {Number(item.availableFreeQuantity) > 0 && (
-                        <Pressable
-                          disabled={
-                            order.status !== "robocze" ||
-                            editingBuildOrderItemId === item.id ||
-                            applyingAllFreeStockOrderId === order.id
-                          }
-                          onPress={() => applyOrderItemFreeStock(item.id)}
-                          style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}
-                        >
-                          <View
-                            style={{
-                              width: 14,
-                              height: 14,
-                              borderRadius: 4,
-                              borderWidth: 1,
-                              borderColor: COLORS.success,
-                            }}
-                          />
-                          <Text style={{ color: COLORS.success, fontSize: 10 }}>
-                            Na magazynie (wolne): {item.availableFreeQuantity} {item.unit} — uwzględnić?
+                    {/* Faza 3b: część planu, którą pokryłby wolny magazyn
+                        (nieprzypisany do żadnej budowy) — TYLKO informacja,
+                        ilość zamawiana po prawej jej NIE uwzględnia
+                        automatycznie. Budowa to podmagazyn — po co zamawiać
+                        to, co już mamy — ale decyduje Admin, nie system
+                        (mogło być zarezerwowane pod inną budowę mentalnie).
+                        Checkbox obejmuje CAŁY wiersz (nazwa + komunikat) —
+                        osobny Pressable od edycji ilości po prawej, żeby
+                        nie zagnieżdżać dotykalnych elementów jeden w
+                        drugim. */}
+                    {Number(item.availableFreeQuantity) > 0 ? (
+                      <Pressable
+                        disabled={
+                          order.status !== "robocze" ||
+                          editingBuildOrderItemId === item.id ||
+                          applyingAllFreeStockOrderId === order.id
+                        }
+                        onPress={() => applyOrderItemFreeStock(item.id)}
+                        style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}
+                      >
+                        <View
+                          style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: 4,
+                            borderWidth: 1,
+                            borderColor: COLORS.success,
+                          }}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                            {item.materialName}
                           </Text>
-                        </Pressable>
-                      )}
-                    </View>
+                          <Text style={{ color: COLORS.success, fontSize: 10, marginTop: 2 }}>
+                            Na magazynie: {item.availableFreeQuantity} {item.unit} — pobrać?
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ) : (
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                          {item.materialName}
+                        </Text>
+                      </View>
+                    )}
                     {order.status === "przyjęte" && (
                       <Text
                         className="text-muted text-[11px] w-16 text-right mr-3 lg:mr-10"

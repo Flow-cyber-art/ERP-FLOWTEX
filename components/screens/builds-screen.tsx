@@ -1872,17 +1872,29 @@ export function BuildsScreen() {
                               </Pressable>
                             </View>
                           ) : (
-                            <Pressable
-                              disabled={order.status !== "robocze"}
-                              onPress={() => {
-                                setEditingOrderItemId(item.id);
-                                setOrderQtyDraft(item.orderedQuantity);
-                              }}
-                            >
-                              <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                                {item.orderedQuantity} {item.unit}
-                              </Text>
-                            </Pressable>
+                            <View style={{ alignItems: "flex-end" }}>
+                              {order.status === "przyjęte" &&
+                                item.receivedUnitPrice != null && (
+                                  <Text style={{ color: COLORS.muted, fontSize: 10 }}>
+                                    cena zakupu: {Number(item.receivedUnitPrice).toFixed(2)} zł/
+                                    {item.unit}
+                                  </Text>
+                                )}
+                              <Pressable
+                                disabled={order.status !== "robocze"}
+                                onPress={() => {
+                                  setEditingOrderItemId(item.id);
+                                  setOrderQtyDraft(item.orderedQuantity);
+                                }}
+                              >
+                                <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                                  {order.status === "przyjęte"
+                                    ? item.receivedQuantity
+                                    : item.orderedQuantity}{" "}
+                                  {item.unit}
+                                </Text>
+                              </Pressable>
+                            </View>
                           )}
                         </View>
                       ))}

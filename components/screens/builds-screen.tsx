@@ -169,6 +169,14 @@ export function BuildsScreen() {
   // rozwijana pojedynczo, żeby po rozwinięciu było dużo miejsca na
   // materiały/koszty/raporty zamiast upychania wszystkiego naraz.
   const [expandedBuildId, setExpandedBuildId] = useState<string | null>(null);
+  // Redesign karty budowy: Materiały dodatkowe/Portal klienta/Zdjęcia/
+  // Raporty zwinięte razem pod jednym nagłówkiem, żeby na starcie nie
+  // zabierały uwagi — te sekcje same w sobie mają już własne akordeony
+  // (np. Raporty), ten toggle jest jeden poziom wyżej i chowa/pokazuje
+  // wszystkie cztery naraz.
+  const [buildExtrasExpandedId, setBuildExtrasExpandedId] = useState<
+    string | null
+  >(null);
   // Edycja linku do zdjęć (Google Drive itp.) — jeden ekran edycji na
   // raz, wg tego samego wzorca co edycja stawki w admin-screen.tsx.
   const [editingPhotosBuildId, setEditingPhotosBuildId] = useState<
@@ -1103,10 +1111,23 @@ export function BuildsScreen() {
               style={{
                 borderTopWidth: 1,
                 borderTopColor: COLORS.border,
-                padding: 18,
-                paddingTop: 16,
+                padding: 14,
+                paddingTop: 14,
               }}
             >
+          {/* Karta 1/4 (redesign): dane budowy — klient/kontrakt, termin,
+              brygada. Reszta zawartości (Technologia/Zamówienia/"Reszta")
+              to kolejne, wizualnie odrębne karty niżej, zamiast jednego
+              ciągłego bloku. */}
+          <View
+            style={{
+              backgroundColor: COLORS.background,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+              padding: 14,
+            }}
+          >
           {(() => {
             const isEditingBasicInfo = editingBasicInfoBuildId === b.id;
             return (
@@ -1411,6 +1432,7 @@ export function BuildsScreen() {
                 </View>
               );
             })()}
+          </View>
           {/* Technologia (Faza 2) — plan materiałowy = m² budowy × zużycie
               z receptury, zamrożony w momencie przypisania (patrz
               build_technology_snapshot). Późniejsza zmiana/nowa wersja
@@ -1435,10 +1457,12 @@ export function BuildsScreen() {
             return (
               <View
                 style={{
-                  marginTop: 12,
-                  paddingTop: 12,
-                  borderTopWidth: 1,
-                  borderTopColor: COLORS.border,
+                  marginTop: 14,
+                  backgroundColor: COLORS.background,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  padding: 14,
                 }}
               >
                 <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}>
@@ -1510,7 +1534,7 @@ export function BuildsScreen() {
                     }}
                     style={{ marginTop: 8 }}
                   >
-                    <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                    <Text style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "700", textDecorationLine: "underline" }}>
                       Zmień technologię
                     </Text>
                   </Pressable>
@@ -1644,12 +1668,28 @@ export function BuildsScreen() {
                     materialOccurrences.set(key, (materialOccurrences.get(key) ?? 0) + 1);
                   }
                   const annotatedMaterialNames = new Set<string>();
+                  // Tabela Materiał/Ilość zamiast stackowanych etykiet —
+                  // dawka (consumptionPerM2) celowo pominięta (redesign),
+                  // warstwa zostaje pogrubionym nagłówkiem grupy nad
+                  // wierszami, nie osobną kolumną.
                   return (
                     <View style={{ marginTop: 10 }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          paddingBottom: 6,
+                          borderBottomWidth: 1,
+                          borderBottomColor: COLORS.border,
+                        }}
+                      >
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>Materiał</Text>
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>Ilość</Text>
+                      </View>
                       {stageOrder.map((stageName) => (
-                        <View key={stageName} style={{ marginBottom: 8 }}>
+                        <View key={stageName} style={{ marginTop: 10 }}>
                           <Text
-                            style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700" }}
+                            style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700", marginBottom: 4 }}
                           >
                             {stageName.toUpperCase()}
                           </Text>
@@ -1662,23 +1702,29 @@ export function BuildsScreen() {
                               assigned && !annotatedMaterialNames.has(nameKey);
                             if (showAnnotation) annotatedMaterialNames.add(nameKey);
                             return (
-                              <View key={row.id} style={{ marginTop: 3 }}>
+                              <View key={row.id} style={{ marginTop: 6 }}>
                                 <View
                                   style={{
                                     flexDirection: "row",
                                     justifyContent: "space-between",
+                                    alignItems: "center",
                                   }}
                                 >
-                                  <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
+                                  <Text
+                                    style={{ color: COLORS.foreground, fontSize: 13, flex: 1, marginRight: 8 }}
+                                  >
                                     {row.materialName}
                                   </Text>
-                                  <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                                    {row.consumptionPerM2} {row.unit}/m² ·{" "}
-                                    <Text style={{ color: COLORS.primary, fontWeight: "700" }}>
+                                  <View style={{ alignItems: "flex-end" }}>
+                                    <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
                                       {row.plannedQuantity} {row.unit}
                                     </Text>
-                                    {cost !== null && ` · ${formatPLN(cost)}`}
-                                  </Text>
+                                    {cost !== null && (
+                                      <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                                        {formatPLN(cost)}
+                                      </Text>
+                                    )}
+                                  </View>
                                 </View>
                                 {showAnnotation && (
                                   <Text
@@ -1740,10 +1786,12 @@ export function BuildsScreen() {
             return (
               <View
                 style={{
-                  marginTop: 12,
-                  paddingTop: 12,
-                  borderTopWidth: 1,
-                  borderTopColor: COLORS.border,
+                  marginTop: 14,
+                  backgroundColor: COLORS.background,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  padding: 14,
                 }}
               >
                 <View
@@ -1770,7 +1818,7 @@ export function BuildsScreen() {
                         }
                       }}
                     >
-                      <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+                      <Text style={{ color: COLORS.foreground, fontSize: 13, fontWeight: "700" }}>
                         {orderGenerating === b.id ? "Generuję…" : "+ Z planu"}
                       </Text>
                     </Pressable>
@@ -1798,7 +1846,7 @@ export function BuildsScreen() {
                       key={order.id}
                       style={{
                         marginTop: 10,
-                        backgroundColor: COLORS.background,
+                        backgroundColor: COLORS.surface,
                         borderRadius: 10,
                         padding: 10,
                       }}
@@ -2083,6 +2131,41 @@ export function BuildsScreen() {
             );
           })()}
 
+          {/* "Reszta" — Materiały dodatkowe/Portal klienta/Zdjęcia/Raporty
+              zwinięte razem pod jednym nagłówkiem (redesign karty budowy):
+              te sekcje nie zabierają uwagi na starcie, ale są kliknięcie od
+              dostępu. Zawartość każdej z nich niżej bez zmian — tylko
+              dodatkowy warunek buildExtrasExpandedId spinający widoczność
+              całej czwórki naraz. */}
+          <View
+            style={{
+              marginTop: 14,
+              backgroundColor: COLORS.background,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+              padding: 14,
+            }}
+          >
+            <Pressable
+              onPress={() =>
+                setBuildExtrasExpandedId(buildExtrasExpandedId === b.id ? null : b.id)
+              }
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "600" }}>
+                Materiały dodatkowe, portal klienta, zdjęcia, raporty
+              </Text>
+              <Text style={{ color: COLORS.muted, fontSize: 16, fontWeight: "700" }}>
+                {buildExtrasExpandedId === b.id ? "▲" : "▼"}
+              </Text>
+            </Pressable>
+            {buildExtrasExpandedId === b.id && (
+              <>
           {/* Materiały dodatkowe (pomocnicze, spoza planu technologii) —
               dawniej globalny przycisk "+ Przypisz materiał" nad listą
               budów (z ręcznym wyborem budowy) i lista przypisanych
@@ -2992,6 +3075,9 @@ export function BuildsScreen() {
               )}
             </View>
           )}
+              </>
+            )}
+          </View>
 
           {!isClosed &&
             (() => {
@@ -3242,7 +3328,8 @@ export function BuildsScreen() {
                     <>
                       <Button
                         label="Zamknij i rozlicz budowę"
-                        secondary
+                        danger
+                        fullWidth
                         disabled={pendingCount > 0}
                         onPress={() => {
                           const proceed = () => {

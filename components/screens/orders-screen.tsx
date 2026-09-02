@@ -726,6 +726,7 @@ export function OrdersScreen() {
                     </View>
                     {order.status === "przyjęte" && (
                       <Text
+                        className="mr-3 lg:mr-10"
                         style={{ color: COLORS.muted, fontSize: 11, width: 64, textAlign: "right" }}
                       >
                         {item.receivedUnitPrice != null

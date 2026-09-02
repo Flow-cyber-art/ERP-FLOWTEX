@@ -35,6 +35,7 @@ type Row = {
   orderId?: string;
   orderQuantity?: number;
   unit: string;
+  receivedUnitPrice?: number;
 };
 
 const capitalizeFirst = (v: string) =>
@@ -289,6 +290,7 @@ export function OrdersScreen() {
         orderId: o.id,
         orderQuantity: o.quantity,
         unit: o.unit,
+        receivedUnitPrice: o.receivedUnitPrice,
       }));
 
     const order = { brak: 0, "do realizacji": 1, zamówione: 2, dostarczone: 3 };
@@ -766,6 +768,15 @@ export function OrdersScreen() {
                         </Pressable>
                       )}
                     </View>
+                    {order.status === "przyjęte" && (
+                      <Text
+                        className="text-muted text-[11px] w-16 text-right mr-3 lg:mr-10"
+                      >
+                        {item.receivedUnitPrice != null
+                          ? `${Number(item.receivedUnitPrice).toFixed(2)} zł`
+                          : "—"}
+                      </Text>
+                    )}
                     {order.status === "robocze" && editingBuildOrderItemId === item.id ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <QuantityStepper
@@ -793,9 +804,13 @@ export function OrdersScreen() {
                           setEditingBuildOrderItemId(item.id);
                           setBuildOrderQtyDraft(item.orderedQuantity);
                         }}
+                        style={{ minWidth: 90, alignItems: "flex-end" }}
                       >
                         <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                          {item.orderedQuantity} {item.unit}
+                          {order.status === "przyjęte"
+                            ? item.receivedQuantity
+                            : item.orderedQuantity}{" "}
+                          {item.unit}
                         </Text>
                       </Pressable>
                     )}
@@ -1150,7 +1165,11 @@ export function OrdersScreen() {
                       >
                         {item.materialName} ·{" "}
                         {item.status === "dostarczone"
-                          ? `przyjęto ${item.receivedQuantity} ${item.unit}`
+                          ? `${
+                              item.receivedUnitPrice != null
+                                ? `cena zakupu: ${item.receivedUnitPrice.toFixed(2)} zł/${item.unit} · `
+                                : ""
+                            }przyjęto ${item.receivedQuantity} ${item.unit}`
                           : `${item.quantity} ${item.unit}`}
                       </Text>
                       {item.status === "zamówione" && !isReceivingItem && (
@@ -1466,6 +1485,16 @@ export function OrdersScreen() {
                   <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
                     {row.name}
                   </Text>
+                  {row.status === "dostarczone" &&
+                    row.receivedUnitPrice != null && (
+                      <Text
+                        className="text-xs text-muted mt-0.5"
+                        numberOfLines={1}
+                      >
+                        cena zakupu: {row.receivedUnitPrice.toFixed(2)} zł/
+                        {row.unit}
+                      </Text>
+                    )}
                   <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>
                     {row.qtyLabel} · {row.metaLabel}
                   </Text>

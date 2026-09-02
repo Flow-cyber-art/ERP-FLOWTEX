@@ -1851,6 +1851,15 @@ export function BuildsScreen() {
                           <Text style={{ color: COLORS.foreground, fontSize: 12, flex: 1 }}>
                             {item.materialName}
                           </Text>
+                          {order.status === "przyjęte" && (
+                            <Text
+                              className="text-muted text-[11px] w-16 text-right mr-3 lg:mr-10"
+                            >
+                              {item.receivedUnitPrice != null
+                                ? `${Number(item.receivedUnitPrice).toFixed(2)} zł`
+                                : "—"}
+                            </Text>
+                          )}
                           {order.status === "robocze" && editingOrderItemId === item.id ? (
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                               <QuantityStepper
@@ -1878,9 +1887,13 @@ export function BuildsScreen() {
                                 setEditingOrderItemId(item.id);
                                 setOrderQtyDraft(item.orderedQuantity);
                               }}
+                              style={{ minWidth: 90, alignItems: "flex-end" }}
                             >
                               <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                                {item.orderedQuantity} {item.unit}
+                                {order.status === "przyjęte"
+                                  ? item.receivedQuantity
+                                  : item.orderedQuantity}{" "}
+                                {item.unit}
                               </Text>
                             </Pressable>
                           )}

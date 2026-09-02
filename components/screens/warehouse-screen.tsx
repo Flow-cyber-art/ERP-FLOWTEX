@@ -30,7 +30,7 @@ export function WarehouseScreen() {
   const {
     materials,
     warehouseBatches,
-    assignments,
+    buildMaterialLots,
     saveMaterial,
     updateMaterialPrice,
     updateMaterialStock,
@@ -51,19 +51,24 @@ export function WarehouseScreen() {
   // (materials.stock > 0 — suma NIEZUŻYTYCH partii, fn_recalc_material w
   // supabase/sql/001_rpc_functions.sql; ilość przypisana do budowy
   // przechodzi do build_material_lots i przestaje liczyć się do stock).
-  // Wcześniej filtr patrzył tylko na to, czy materiał ma CHOĆ JEDNO
-  // przypisanie gdziekolwiek — więc materiał przypisany częściowo do
-  // jednej budowy znikał z "Nieprzypisane" całkowicie, mimo wolnej reszty
-  // wciąż leżącej w magazynie. "Przypisane" zostaje bez zmian (ma choć
-  // jedną partię przypisaną do jakiejkolwiek budowy) — to osobne pytanie
-  // ("czy ten materiał jest gdziekolwiek w użyciu"), nie sprzeczne z
-  // jednoczesnym "ma wolną ilość".
+  // "Przypisane" patrzy na build_material_lots (partie FIZYCZNIE leżące
+  // dziś w podmagazynie jakiejś budowy), NIE na build_materials —
+  // build_materials to trwały, historyczny rekord (planned/used/koszt do
+  // rozliczeń), który zostaje na zawsze nawet po zwrocie/zamknięciu
+  // budowy. Filtrowanie po build_materials pokazywało materiał jako
+  // "Przypisany" na zawsze, mimo że po zamknięciu budowy realnie wrócił
+  // do magazynu głównego i nie ma już żadnej partii na żadnej budowie.
   const [assignmentFilter, setAssignmentFilter] = useState<
     "all" | "assigned" | "unassigned"
   >("all");
   const assignedMaterialIds = useMemo(
-    () => new Set(assignments.map((a) => a.materialId)),
-    [assignments],
+    () =>
+      new Set(
+        buildMaterialLots
+          .filter((l) => Number(l.quantity) > 0)
+          .map((l) => String(l.materialId)),
+      ),
+    [buildMaterialLots],
   );
   const [showMaterial, setShowMaterial] = useState(false);
   const [newMaterial, setNewMaterial] = useState<NewMaterialInput>(EMPTY_NEW_MATERIAL);

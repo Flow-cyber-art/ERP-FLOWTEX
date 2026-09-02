@@ -366,16 +366,32 @@ export function WarehouseScreen() {
                 {!m.active ? " · zarchiwizowany" : ""}
               </Text>
               <Text className="text-xs text-muted mt-0.5">
-                {m.index} · {m.unit} · min {m.min} · śr.{" "}
-                {formatPLN(m.unitPrice || 0)}/{m.unit}
+                {m.index}
                 {batchCount > 1 ? ` · ${batchCount} partie` : ""}
               </Text>
             </View>
-            <Text
-              className={`text-lg font-bold ${m.stock <= m.min ? "text-warning" : "text-foreground"}`}
-            >
-              {m.stock}
-            </Text>
+            {/* Metadane w stałej kolumnie zamiast jednej zbitej linijki ze
+                zmienną długością — łatwiej porównać min/cenę między
+                pozycjami, bo są zawsze w tym samym miejscu. */}
+            <View className="items-end pr-3">
+              <Text className="text-xs text-muted">
+                min {m.min} {m.unit}
+              </Text>
+              <Text className="text-xs text-muted mt-0.5">
+                {formatPLN(m.unitPrice || 0)}/{m.unit}
+              </Text>
+            </View>
+            <View className="items-end" style={{ minWidth: 44 }}>
+              {/* Pomarańczowy = konkretny sygnał "stan na/poniżej minimum",
+                  nie dekoracja — standardowy kolor, gdy stan jest OK. */}
+              <Text
+                className="text-lg font-bold"
+                style={{ color: m.stock <= m.min ? COLORS.primary : COLORS.foreground }}
+              >
+                {m.stock}
+              </Text>
+              <Text className="text-xs text-muted">{m.unit}</Text>
+            </View>
           </Pressable>
           {editingId === m.id && (
             <View className="px-4 pb-4">

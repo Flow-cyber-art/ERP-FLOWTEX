@@ -972,36 +972,71 @@ export function TechnologiesScreen() {
                       : ""}
                   </Text>
                 </View>
-                <Pressable onPress={() => startEdit(active)} style={{ marginRight: 14 }}>
-                  <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
+                <Pressable
+                  onPress={() => startEdit(active)}
+                  style={{
+                    backgroundColor: COLORS.primary,
+                    borderRadius: 8,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    marginRight: 10,
+                  }}
+                >
+                  <Text style={{ color: COLORS.background, fontWeight: "700", fontSize: 12 }}>
                     Edytuj
                   </Text>
                 </Pressable>
-                <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "700" }}>
-                  {expandedId === active.id ? "Zwiń" : "Szczegóły"}
+                <Text style={{ color: COLORS.muted, fontSize: 16, fontWeight: "700" }}>
+                  {expandedId === active.id ? "▲" : "▼"}
                 </Text>
               </Pressable>
               {expandedId === active.id && (
                 <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+                  {/* Tabela Warstwa/Materiał/Dawka zamiast stackowanych
+                      etykiet — warstwa pokazana tylko przy pierwszym
+                      wierszu grupy (jak scalona komórka), reszta wierszy
+                      tej samej warstwy zostaje pusta w tej kolumnie. */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      paddingBottom: 6,
+                      borderBottomWidth: 1,
+                      borderBottomColor: COLORS.border,
+                    }}
+                  >
+                    <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11 }}>Warstwa</Text>
+                    <Text style={{ flex: 2, color: COLORS.muted, fontSize: 11 }}>Materiał</Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
+                      Dawka
+                    </Text>
+                  </View>
                   {[...active.technology_stages]
                     .sort((a, b) => a.orderIndex - b.orderIndex)
-                    .map((s) => (
-                      <View key={s.id} style={{ marginBottom: 10 }}>
-                        <Text
-                          style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}
+                    .map((s) =>
+                      s.technology_materials.map((m, mi) => (
+                        <View
+                          key={m.id}
+                          style={{ flexDirection: "row", alignItems: "center", paddingVertical: 6 }}
                         >
-                          {s.name}
-                        </Text>
-                        {s.technology_materials.map((m) => (
-                          <Text
-                            key={m.id}
-                            style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}
-                          >
-                            {m.materialName} — {m.consumptionPerM2} {m.unit}/m²
+                          <Text style={{ flex: 1, color: COLORS.muted, fontSize: 12 }}>
+                            {mi === 0 ? s.name : ""}
                           </Text>
-                        ))}
-                      </View>
-                    ))}
+                          <Text style={{ flex: 2, color: COLORS.foreground, fontSize: 12 }}>
+                            {m.materialName}
+                          </Text>
+                          <Text
+                            style={{
+                              color: COLORS.foreground,
+                              fontWeight: "700",
+                              fontSize: 12,
+                              textAlign: "right",
+                            }}
+                          >
+                            {m.consumptionPerM2} {m.unit}/m²
+                          </Text>
+                        </View>
+                      )),
+                    )}
                 </View>
               )}
             </View>

@@ -86,150 +86,24 @@ function AdminSettingsSection() {
   return (
     <>
       {/* Dniówka, stawka za km i PIN zamknięcia budowy — jedna grupa
-          parametrów rozliczeniowych firmy, jeden pod drugim (dawniej
-          dniówka+km obok siebie w rzędzie — na mobile "Widok Brygadzisty"
-          nad nimi wizualnie rozbijał tę grupę na dwie części). */}
-      <Pressable
-        onPress={() => {
-          setWorkdayOpen(!workdayOpen);
-          setKmRateOpen(false);
-        }}
-        className="bg-surface border border-border rounded-2xl overflow-hidden mb-3"
-        style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
-      >
-        <IconBadge name="schedule" size={18} />
-        <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-          <Text style={{ color: COLORS.muted, fontSize: 11 }}>DNIÓWKA</Text>
-          <Text
-            style={{
-              color: COLORS.foreground,
-              fontWeight: "700",
-              fontSize: 15,
-              marginTop: 2,
-            }}
-            numberOfLines={1}
-          >
-            {workdayHours} h / dzień
-          </Text>
-        </View>
-        <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
-          {workdayOpen ? "Zwiń" : "Zmień"}
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={() => {
-          setKmRateOpen(!kmRateOpen);
-          setWorkdayOpen(false);
-        }}
-        className="bg-surface border border-border rounded-2xl overflow-hidden mb-3"
-        style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
-      >
-        <IconBadge name="directions-car" size={18} />
-        <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-          <Text style={{ color: COLORS.muted, fontSize: 11 }}>STAWKA ZA KM</Text>
-          <Text
-            style={{
-              color: COLORS.foreground,
-              fontWeight: "700",
-              fontSize: 15,
-              marginTop: 2,
-            }}
-            numberOfLines={1}
-          >
-            {kmRate.toFixed(2)} zł/km
-          </Text>
-        </View>
-        <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
-          {kmRateOpen ? "Zwiń" : "Zmień"}
-        </Text>
-      </Pressable>
-
-      {workdayOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
-          <Text className="text-xs text-muted uppercase mb-2">Dniówka (godz./dzień)</Text>
-          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-            <QuantityStepper
-              value={workdayHoursInput}
-              onChangeText={setWorkdayHoursInput}
-            />
-            <Text style={{ color: COLORS.muted }}>h / dzień</Text>
-          </View>
-          <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Button
-                label="Anuluj"
-                secondary
-                onPress={() => {
-                  setWorkdayHoursInput(String(workdayHours));
-                  setWorkdayOpen(false);
-                }}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                label="Zapisz"
-                onPress={() => {
-                  saveWorkdayHours();
-                  setWorkdayOpen(false);
-                }}
-              />
-            </View>
-          </View>
-        </View>
-      )}
-
-      {kmRateOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
-          <Text className="text-xs text-muted uppercase mb-2">Stawka za km</Text>
-          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-            <QuantityStepper
-              value={kmRateInput}
-              onChangeText={setKmRateInput}
-              step={0.5}
-            />
-            <Text style={{ color: COLORS.muted }}>zł / km</Text>
-          </View>
-          <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Button
-                label="Anuluj"
-                secondary
-                onPress={() => {
-                  setKmRateInput(kmRate ? String(kmRate) : "");
-                  setKmRateOpen(false);
-                }}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                label="Zapisz"
-                onPress={async () => {
-                  const value = Number(kmRateInput.replace(",", "."));
-                  if (Number.isNaN(value) || value < 0) return;
-                  await updateKmRate(value);
-                  setKmRateOpen(false);
-                }}
-              />
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* PIN zabezpieczający "Zamknij (i rozlicz) budowę" (patrz
-          builds-screen.tsx) — ten sam wzorzec co Stawka za km wyżej. Puste
-          pole = zabezpieczenie wyłączone (updateCloseBuildPin zapisuje
-          wtedy null, patrz lib/data/settings.ts). */}
+          parametrów rozliczeniowych firmy, teraz jedna karta z trzema
+          wierszami (nie trzy osobne karty) — ten sam wzorzec grupowania
+          co reszta redesignu (osobne, podpisane sekcje zamiast jednego
+          ciągłego bloku). */}
+      <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8, textTransform: "uppercase" }}>
+        Ustawienia pracy
+      </Text>
       <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-4">
         <Pressable
-          onPress={() => setCloseBuildPinOpen(!closeBuildPinOpen)}
+          onPress={() => {
+            setWorkdayOpen(!workdayOpen);
+            setKmRateOpen(false);
+          }}
           style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
         >
-          <IconBadge name="lock" size={18} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-              PIN ZAMKNIĘCIA BUDOWY
-            </Text>
+          <IconBadge name="schedule" size={18} />
+          <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>DNIÓWKA</Text>
             <Text
               style={{
                 color: COLORS.foreground,
@@ -237,55 +111,183 @@ function AdminSettingsSection() {
                 fontSize: 15,
                 marginTop: 2,
               }}
+              numberOfLines={1}
             >
-              {closeBuildPin ? "Włączony" : "Wyłączony"}
+              {workdayHours} h / dzień
             </Text>
           </View>
           <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
-            {closeBuildPinOpen ? "Zwiń" : "Zmień"}
+            {workdayOpen ? "Zwiń" : "Zmień"}
           </Text>
         </Pressable>
-        {closeBuildPinOpen && (
-          <View
-            style={{
-              borderTopWidth: 1,
-              borderTopColor: COLORS.border,
-              padding: 14,
-            }}
-          >
-            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 8 }}>
-              Wpisany tu PIN będzie wymagany przy zamykaniu i rozliczaniu
-              budowy. Zostaw puste, żeby wyłączyć zabezpieczenie.
-            </Text>
-            <Field
-              placeholder="np. 1234 (puste = wyłączony)"
-              value={closeBuildPinInput}
-              onChangeText={setCloseBuildPinInput}
-              keyboardType="number-pad"
-            />
+
+        {workdayOpen && (
+          <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+            <Text className="text-xs text-muted uppercase mb-2">Dniówka (godz./dzień)</Text>
+            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <QuantityStepper
+                value={workdayHoursInput}
+                onChangeText={setWorkdayHoursInput}
+              />
+              <Text style={{ color: COLORS.muted }}>h / dzień</Text>
+            </View>
             <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
               <View style={{ flex: 1 }}>
                 <Button
                   label="Anuluj"
                   secondary
                   onPress={() => {
-                    setCloseBuildPinInput(closeBuildPin ?? "");
-                    setCloseBuildPinOpen(false);
+                    setWorkdayHoursInput(String(workdayHours));
+                    setWorkdayOpen(false);
                   }}
                 />
               </View>
               <View style={{ flex: 1 }}>
                 <Button
                   label="Zapisz"
-                  onPress={async () => {
-                    await updateCloseBuildPin(closeBuildPinInput);
-                    setCloseBuildPinOpen(false);
+                  onPress={() => {
+                    saveWorkdayHours();
+                    setWorkdayOpen(false);
                   }}
                 />
               </View>
             </View>
           </View>
         )}
+
+        <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border }}>
+          <Pressable
+            onPress={() => {
+              setKmRateOpen(!kmRateOpen);
+              setWorkdayOpen(false);
+            }}
+            style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
+          >
+            <IconBadge name="directions-car" size={18} />
+            <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
+              <Text style={{ color: COLORS.muted, fontSize: 11 }}>STAWKA ZA KM</Text>
+              <Text
+                style={{
+                  color: COLORS.foreground,
+                  fontWeight: "700",
+                  fontSize: 15,
+                  marginTop: 2,
+                }}
+                numberOfLines={1}
+              >
+                {kmRate.toFixed(2)} zł/km
+              </Text>
+            </View>
+            <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+              {kmRateOpen ? "Zwiń" : "Zmień"}
+            </Text>
+          </Pressable>
+
+          {kmRateOpen && (
+            <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+              <Text className="text-xs text-muted uppercase mb-2">Stawka za km</Text>
+              <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                <QuantityStepper
+                  value={kmRateInput}
+                  onChangeText={setKmRateInput}
+                  step={0.5}
+                />
+                <Text style={{ color: COLORS.muted }}>zł / km</Text>
+              </View>
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Anuluj"
+                    secondary
+                    onPress={() => {
+                      setKmRateInput(kmRate ? String(kmRate) : "");
+                      setKmRateOpen(false);
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Zapisz"
+                    onPress={async () => {
+                      const value = Number(kmRateInput.replace(",", "."));
+                      if (Number.isNaN(value) || value < 0) return;
+                      await updateKmRate(value);
+                      setKmRateOpen(false);
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border }}>
+          <Pressable
+            onPress={() => setCloseBuildPinOpen(!closeBuildPinOpen)}
+            style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
+          >
+            <IconBadge name="lock" size={18} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                PIN ZAMKNIĘCIA BUDOWY
+              </Text>
+              <Text
+                style={{
+                  color: COLORS.foreground,
+                  fontWeight: "700",
+                  fontSize: 15,
+                  marginTop: 2,
+                }}
+              >
+                {closeBuildPin ? "Włączony" : "Wyłączony"}
+              </Text>
+            </View>
+            <Text style={{ color: COLORS.primary, fontSize: 13, fontWeight: "700" }}>
+              {closeBuildPinOpen ? "Zwiń" : "Zmień"}
+            </Text>
+          </Pressable>
+          {closeBuildPinOpen && (
+            <View
+              style={{
+                borderTopWidth: 1,
+                borderTopColor: COLORS.border,
+                padding: 14,
+              }}
+            >
+              <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 8 }}>
+                Wpisany tu PIN będzie wymagany przy zamykaniu i rozliczaniu
+                budowy. Zostaw puste, żeby wyłączyć zabezpieczenie.
+              </Text>
+              <Field
+                placeholder="np. 1234 (puste = wyłączony)"
+                value={closeBuildPinInput}
+                onChangeText={setCloseBuildPinInput}
+                keyboardType="number-pad"
+              />
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Anuluj"
+                    secondary
+                    onPress={() => {
+                      setCloseBuildPinInput(closeBuildPin ?? "");
+                      setCloseBuildPinOpen(false);
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Zapisz"
+                    onPress={async () => {
+                      await updateCloseBuildPin(closeBuildPinInput);
+                      setCloseBuildPinOpen(false);
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* "Widok Brygadzisty" — Admin bywa na budowie i chce od razu
@@ -296,26 +298,36 @@ function AdminSettingsSection() {
           czysto kosmetyczne uproszczenie ekranu, nie zmiana uprawnień.
           Powrót: zakładka "Admin" w widoku Brygadzisty pokazuje
           Ustawienia z przyciskiem "Wróć do widoku Admina" (patrz
-          settings-screen.tsx + realRole w app-data.tsx). Celowo POD
-          parametrami rozliczeniowymi (dniówka/km/PIN) wyżej — to osobna,
-          drugorzędna akcja, nie konfiguracja firmy. */}
-      <View
-        className="bg-surface border border-border rounded-2xl p-4 mb-4"
-        style={{ alignItems: "center" }}
+          settings-screen.tsx + realRole w app-data.tsx). Płaski wiersz z
+          ikoną zamiast wyśrodkowanego przycisku we własnej karcie — to
+          drugorzędna akcja, nie kolejny parametr konfiguracyjny. */}
+      <Pressable
+        onPress={() => {
+          setDevRole("Brygadzista");
+          setTab("savedReports");
+        }}
+        className="bg-surface border border-border rounded-2xl mb-5"
+        style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 14 }}
       >
-        <Button
-          label="Zmień na widok Brygadzisty"
-          secondary
-          onPress={() => {
-            setDevRole("Brygadzista");
-            setTab("savedReports");
-          }}
-        />
+        <IconBadge name="person" size={18} />
+        <Text style={{ color: COLORS.foreground, fontWeight: "600", fontSize: 14 }}>
+          Zmień na widok Brygadzisty
+        </Text>
+      </Pressable>
+
+      <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8, textTransform: "uppercase" }}>
+        Konto
+      </Text>
+      <View style={{ marginBottom: 20 }}>
+        <AccountSettingsSection />
       </View>
 
-      <AccountSettingsSection />
+      <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8, textTransform: "uppercase" }}>
+        Powiadomienia
+      </Text>
       <WebPushSettingsSection />
-      <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
+
+      <View style={{ marginTop: 20 }}>
         <Button
           label="Wyloguj"
           secondary

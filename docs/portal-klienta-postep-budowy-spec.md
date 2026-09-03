@@ -114,6 +114,15 @@ czasowym, gdy budowa nie ma jeszcze przypisanej technologii/etapów.
 
 ### 5.1 Metoda podstawowa — postęp etapowy (technology stages)
 
+> **Stan faktyczny (aktualny, wdrożony w `get_public_build`,
+> `supabase/sql/090_portal_klienta_procent_etapu_wazony_iloscia.sql` i
+> nowsze): patrz "Decyzje wdrożeniowe, których NIE cofać" niżej.** Wzory
+> poniżej to pierwotna specyfikacja funkcjonalna z etapu projektowania —
+> zostawiona jako kontekst "co i po co", ale rzeczywisty wzór ewoluował w
+> plikach `supabase/sql/0XX_portal_klienta_*.sql` (numerowane
+> chronologicznie, każdy z komentarzem "dlaczego"). W razie wątpliwości
+> **kod w najnowszym pliku SQL jest źródłem prawdy, nie ten dokument.**
+
 Źródła: `technologyStages` (kolejność etapów, `orderIndex`),
 `buildMaterialPlan.stageName` (plan per etap), `report_materials.stage_name`
 (do którego etapu przypisano zużyty materiał w danym raporcie dziennym).
@@ -138,6 +147,37 @@ stageProgress = SUM(report_materials.usedQuantity WHERE stage_name = X)
 ```
 
 To daje dwupoziomowy widok: "Etap 3 z 6: Wylewka (62% tego etapu)".
+
+#### Decyzje wdrożeniowe, których NIE cofać
+
+Trzy właściwości obecnego wzoru wyglądają na "uproszczenie do poprawienia"
+dla kogoś, kto nie zna historii — każda naprawiała konkretne, zgłoszone
+przez klienta rozjechanie liczb. Nie cofać bez ponownego przeczytania
+komentarza w odpowiednim pliku SQL:
+
+1. **"% całości zlecenia" = średnia z już policzonych % etapów, NIE osobne
+   zapytanie po `build_materials`.** (089) Osobne zapytanie dawało dwa
+   niezależne źródła prawdy, które potrafiły się rozjechać — np. etap
+   ręcznie zamknięty checkboxem pokazywał 100% na liście, a duży
+   pierścień całości dalej 0%, bo liczył się z surowego zużycia,
+   ignorując checkbox.
+2. **Ręczne zakończenie etapu (`build_stage_status`, checkbox brygadzisty)
+   zawsze nadpisuje etap na 100%**, niezależnie od realnego zużycia
+   materiału. (071) Bez tego etap nigdy nie osiągał 100%, jeśli zużycie
+   różniło się od planu (90% czy 110% zużytego materiału nie dawało
+   "zakończone").
+3. **% etapu = SUMA zużycia (uciętego do planu NA KAŻDEJ pozycji z
+   osobna) / SUMA planu całego etapu — NIE prosta średnia z osobnych %
+   każdej pozycji materiałowej.** (090) Prosta średnia po pozycjach
+   traktuje mały dodatek (np. plan 1,8 kg) tak samo jak główny materiał
+   etapu (np. plan 360 kg) — jedna pozycja przekroczona ponad plan
+   ("ucina się" na 100%) potrafiła zawyżyć cały etap, mimo że fizycznie
+   nic z głównego materiału nie ruszono. Ważenie ilością planu działa
+   tylko wtedy, gdy materiały jednego etapu są w tej samej jednostce
+   (tu: zawsze kg) — gdyby kiedyś etap miał materiały w mieszanych
+   jednostkach (kg + szt.), trzeba by przejść na ważenie WARTOŚCIĄ
+   (`ilość × materials.unitPrice`), **nie z powrotem na prostą średnią
+   po pozycjach** — to właśnie był błąd, który to naprawiło.
 
 ### 5.2 Metoda zapasowa — postęp czasowy (gdy brak przypisanej technologii)
 

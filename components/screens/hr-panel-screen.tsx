@@ -24,14 +24,7 @@ export function HrPanelScreen() {
   return (
     <>
       <View className="bg-surface border border-border rounded-2xl p-2 mb-5">
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            gap: 6,
-            justifyContent: "center",
-          }}
-        >
+        <View style={{ flexDirection: "row", gap: 6 }}>
           {(
             [
               ["payroll", "Rozliczenie"],
@@ -43,9 +36,9 @@ export function HrPanelScreen() {
               key={value}
               onPress={() => setSection(value)}
               style={{
+                flex: 1,
                 borderRadius: 10,
                 paddingVertical: 10,
-                paddingHorizontal: 16,
                 alignItems: "center",
                 backgroundColor:
                   section === value ? COLORS.primary : "transparent",

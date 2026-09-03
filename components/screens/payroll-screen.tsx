@@ -352,31 +352,40 @@ export function PayrollSection() {
       </View>
 
       {/* Cztery kafelki podsumowania — to samo, co i tak jest w tabeli
-          niżej, tylko zsumowane, żeby nie liczyć w głowie. */}
-      <View
-        className="bg-surface border border-border rounded-2xl mb-5"
-        style={{ flexDirection: "row", flexWrap: "wrap", overflow: "hidden" }}
-      >
+          niżej, tylko zsumowane, żeby nie liczyć w głowie. Osobne karty
+          zamiast jednego wspólnego bloku — "BRAK WPISU" dostaje tło/obrys
+          w kolorze danger, gdy > 0, żeby realnie rzucało się w oczy jako
+          alarm, nie tylko zmiana koloru cyfry. */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
         {(
           [
-            ["DNIÓWKI", String(totals.workedDays), COLORS.foreground],
-            ["DO WYPŁATY", formatPLN(totals.payout), COLORS.primary],
-            ["URLOP", String(totals.leaveDays), COLORS.foreground],
-            ["BRAK WPISU", String(totals.missingDays), totals.missingDays > 0 ? COLORS.warning : COLORS.foreground],
+            ["DNIÓWKI", String(totals.workedDays), COLORS.foreground, false],
+            ["DO WYPŁATY", formatPLN(totals.payout), COLORS.primary, false],
+            ["URLOP", String(totals.leaveDays), COLORS.foreground, false],
+            [
+              "BRAK WPISU",
+              String(totals.missingDays),
+              totals.missingDays > 0 ? COLORS.danger : COLORS.foreground,
+              totals.missingDays > 0,
+            ],
           ] as const
-        ).map(([label, value, color], i) => (
+        ).map(([label, value, color, alert]) => (
           <View
             key={label}
             style={{
-              flexBasis: "50%",
-              padding: 14,
-              borderLeftWidth: i % 2 === 1 ? 1 : 0,
-              borderTopWidth: i >= 2 ? 1 : 0,
-              borderColor: COLORS.border,
+              flexBasis: "47%",
+              flexGrow: 1,
+              padding: 12,
+              borderRadius: 14,
+              borderWidth: 1,
+              backgroundColor: alert ? COLORS.dangerBg : COLORS.surface,
+              borderColor: alert ? COLORS.danger : COLORS.border,
             }}
           >
-            <Text className="text-xs text-muted uppercase">{label}</Text>
-            <Text style={{ color, fontWeight: "800", fontSize: 20, marginTop: 2 }}>
+            <Text style={{ color: alert ? COLORS.danger : COLORS.muted, fontSize: 11 }}>
+              {label}
+            </Text>
+            <Text style={{ color, fontWeight: "700", fontSize: 20, marginTop: 4 }}>
               {value}
             </Text>
           </View>

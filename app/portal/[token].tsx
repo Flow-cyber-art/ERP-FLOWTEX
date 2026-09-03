@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -21,6 +21,13 @@ import Svg, {
   Rect,
   Stop,
 } from "react-native-svg";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { Button, Field, formatPLN } from "@/components/report-ui";
 import {
@@ -134,6 +141,12 @@ const formatDateShortPL = (iso: string) => {
 // logowania.
 const driveThumbUrl = (fileId: string) =>
   `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+
+// Pełny rozmiar do przeglądarki na cały ekran — ten sam publiczny link
+// Drive, tylko większy wariant (w1600), zamiast pobierać oryginał (może
+// ważyć kilkanaście MB na zdjęcie z telefonu).
+const driveFullUrl = (fileId: string) =>
+  `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
 
 function Card({
   children,
@@ -556,12 +569,15 @@ function StagesStepper({ stages }: { stages: PublicBuildView["stages"] }) {
 function PhotoTile({
   photo,
   widthPercent = 31,
+  onPress,
 }: {
   photo: PublicBuildView["photos"][number];
   widthPercent?: number;
+  onPress?: () => void;
 }) {
   return (
-    <View
+    <Pressable
+      onPress={onPress}
       style={{
         width: `${widthPercent}%`,
         aspectRatio: 4 / 3,
@@ -593,7 +609,252 @@ function PhotoTile({
       >
         {formatDateShortPL(photo.createdAt)}
       </Text>
-    </View>
+    </Pressable>
+  );
+}
+
+const MAX_ZOOM = 4;
+const DOUBLE_TAP_ZOOM = 2.5;
+
+// Zdjęcie ze szczypaniem (pinch-to-zoom) + przesuwaniem po przybliżeniu +
+// podwójne stuknięcie jako skrót. Gesture-handler/reanimated już są w
+// projekcie (GestureHandlerRootView w app/_layout.tsx), więc bez nowej
+// zależności. Szczypanie i przesuwanie działają RAZEM (Simultaneous) —
+// przesuwanie ma efekt tylko, gdy zdjęcie jest przybliżone (sprawdzane w
+// onUpdate); podwójny tap idzie osobnym torem (Race), bo miałby się
+// gubić w kolejce ze szczypaniem/przesuwaniem.
+function ZoomableImage({
+  uri,
+  width,
+  height,
+  onZoomChange,
+}: {
+  uri: string;
+  width: number;
+  height: number;
+  onZoomChange: (zoomed: boolean) => void;
+}) {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const resetZoom = () => {
+    "worklet";
+    scale.value = withTiming(1);
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+    savedScale.value = 1;
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+  };
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = Math.min(Math.max(savedScale.value * e.scale, 1), MAX_ZOOM);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value <= 1.02) {
+        resetZoom();
+        runOnJS(onZoomChange)(false);
+      } else {
+        runOnJS(onZoomChange)(true);
+      }
+    });
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      if (savedScale.value <= 1) return;
+      translateX.value = savedTranslateX.value + e.translationX;
+      translateY.value = savedTranslateY.value + e.translationY;
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (savedScale.value > 1) {
+        resetZoom();
+        runOnJS(onZoomChange)(false);
+      } else {
+        scale.value = withTiming(DOUBLE_TAP_ZOOM);
+        savedScale.value = DOUBLE_TAP_ZOOM;
+        runOnJS(onZoomChange)(true);
+      }
+    });
+
+  const composed = Gesture.Race(doubleTap, Gesture.Simultaneous(pinch, pan));
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composed}>
+      <Animated.View style={{ width, height, alignItems: "center", justifyContent: "center" }}>
+        <Animated.Image
+          source={{ uri }}
+          style={[{ width: width - 24, height: height - 160 }, animatedStyle]}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+// Pełnoekranowa przeglądarka — jedna, wspólna lista `photos` (zawsze
+// PEŁNA view.photos, nie tylko podgląd/grupa dnia), żeby strzałki/swipe
+// przechodziły płynnie przez WSZYSTKIE zdjęcia budowy, niezależnie od
+// tego, z którego kafelka viewer został otwarty. Nawigacja: pozioma
+// ScrollView z pagingEnabled daje swipe na dotyku za darmo (bez
+// dodatkowej biblioteki gestów); strzałki i klawiatura (web) ustawiają
+// pozycję przez scrollTo.
+function PhotoViewerModal({
+  photos,
+  index,
+  onIndexChange,
+  onClose,
+}: {
+  photos: PublicBuildView["photos"];
+  index: number | null;
+  onIndexChange: (i: number) => void;
+  onClose: () => void;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
+  const { width, height } = useWindowDimensions();
+  // Gdy dowolne zdjęcie jest przybliżone, wyłączamy swipe między
+  // zdjęciami — inaczej przesuwanie przybliżonego zdjęcia gubiłoby się z
+  // przechodzeniem do kolejnego. Reset przy każdej zmianie indeksu
+  // (strzałka/klawiatura), żeby nie zostać "zablokowanym" na zoomie
+  // poprzedniego zdjęcia w tle.
+  const [zoomed, setZoomed] = useState(false);
+
+  useEffect(() => {
+    if (index == null) return;
+    setZoomed(false);
+    requestAnimationFrame(() =>
+      scrollRef.current?.scrollTo({ x: index * width, animated: false }),
+    );
+  }, [index, width]);
+
+  useEffect(() => {
+    if (index == null || Platform.OS !== "web" || typeof window === "undefined") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" && index > 0) onIndexChange(index - 1);
+      else if (e.key === "ArrowRight" && index < photos.length - 1) onIndexChange(index + 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, photos.length, onIndexChange, onClose]);
+
+  if (index == null) return null;
+  const photo = photos[index];
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.96)" }}>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          scrollEnabled={!zoomed}
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+            if (newIndex !== index && newIndex >= 0 && newIndex < photos.length) {
+              onIndexChange(newIndex);
+            }
+          }}
+          style={{ flex: 1 }}
+        >
+          {photos.map((p) => (
+            <ZoomableImage
+              key={p.id}
+              uri={driveFullUrl(p.id)}
+              width={width}
+              height={height}
+              onZoomChange={setZoomed}
+            />
+          ))}
+        </ScrollView>
+
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          style={{
+            position: "absolute",
+            top: 50,
+            right: 20,
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(255,255,255,0.14)",
+          }}
+        >
+          <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>✕</Text>
+        </Pressable>
+
+        {index > 0 && (
+          <Pressable
+            onPress={() => onIndexChange(index - 1)}
+            hitSlop={12}
+            style={{
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              marginTop: -22,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255,255,255,0.14)",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>‹</Text>
+          </Pressable>
+        )}
+        {index < photos.length - 1 && (
+          <Pressable
+            onPress={() => onIndexChange(index + 1)}
+            hitSlop={12}
+            style={{
+              position: "absolute",
+              right: 12,
+              top: "50%",
+              marginTop: -22,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255,255,255,0.14)",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>›</Text>
+          </Pressable>
+        )}
+
+        <View style={{ position: "absolute", bottom: 28, alignSelf: "center" }}>
+          <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+            {index + 1} / {photos.length} · {formatDateShortPL(photo.createdAt)}
+          </Text>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -616,6 +877,10 @@ function groupPhotosByDay(photos: PublicBuildView["photos"]) {
 
 function PhotosCard({ view }: { view: PublicBuildView }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
+  // Indeks w PEŁNEJ, płaskiej liście view.photos — wspólny dla podglądu
+  // w karcie i dla galerii w modalu, żeby strzałki/swipe w przeglądarce
+  // przechodziły przez wszystkie zdjęcia budowy, nie tylko bieżącą grupę.
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   if (view.photos.length === 0) return null;
 
   const byDay = groupPhotosByDay(view.photos);
@@ -632,7 +897,11 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
       <View style={{ padding: 20 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
           {shown.map((p) => (
-            <PhotoTile key={p.id} photo={p} />
+            <PhotoTile
+              key={p.id}
+              photo={p}
+              onPress={() => setViewerIndex(view.photos.indexOf(p))}
+            />
           ))}
         </View>
         {view.photos.length > shown.length && (
@@ -712,7 +981,11 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
                 </Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                   {group.photos.map((p) => (
-                    <PhotoTile key={p.id} photo={p} />
+                    <PhotoTile
+                      key={p.id}
+                      photo={p}
+                      onPress={() => setViewerIndex(view.photos.indexOf(p))}
+                    />
                   ))}
                 </View>
               </View>
@@ -720,6 +993,13 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
           </ScrollView>
         </View>
       </Modal>
+
+      <PhotoViewerModal
+        photos={view.photos}
+        index={viewerIndex}
+        onIndexChange={setViewerIndex}
+        onClose={() => setViewerIndex(null)}
+      />
     </Card>
   );
 }

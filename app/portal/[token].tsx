@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -134,6 +134,12 @@ const formatDateShortPL = (iso: string) => {
 // logowania.
 const driveThumbUrl = (fileId: string) =>
   `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+
+// Pełny rozmiar do przeglądarki na cały ekran — ten sam publiczny link
+// Drive, tylko większy wariant (w1600), zamiast pobierać oryginał (może
+// ważyć kilkanaście MB na zdjęcie z telefonu).
+const driveFullUrl = (fileId: string) =>
+  `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
 
 function Card({
   children,
@@ -556,12 +562,15 @@ function StagesStepper({ stages }: { stages: PublicBuildView["stages"] }) {
 function PhotoTile({
   photo,
   widthPercent = 31,
+  onPress,
 }: {
   photo: PublicBuildView["photos"][number];
   widthPercent?: number;
+  onPress?: () => void;
 }) {
   return (
-    <View
+    <Pressable
+      onPress={onPress}
       style={{
         width: `${widthPercent}%`,
         aspectRatio: 4 / 3,
@@ -593,7 +602,148 @@ function PhotoTile({
       >
         {formatDateShortPL(photo.createdAt)}
       </Text>
-    </View>
+    </Pressable>
+  );
+}
+
+// Pełnoekranowa przeglądarka — jedna, wspólna lista `photos` (zawsze
+// PEŁNA view.photos, nie tylko podgląd/grupa dnia), żeby strzałki/swipe
+// przechodziły płynnie przez WSZYSTKIE zdjęcia budowy, niezależnie od
+// tego, z którego kafelka viewer został otwarty. Nawigacja: pozioma
+// ScrollView z pagingEnabled daje swipe na dotyku za darmo (bez
+// dodatkowej biblioteki gestów); strzałki i klawiatura (web) ustawiają
+// pozycję przez scrollTo.
+function PhotoViewerModal({
+  photos,
+  index,
+  onIndexChange,
+  onClose,
+}: {
+  photos: PublicBuildView["photos"];
+  index: number | null;
+  onIndexChange: (i: number) => void;
+  onClose: () => void;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
+  const { width, height } = useWindowDimensions();
+
+  useEffect(() => {
+    if (index == null) return;
+    requestAnimationFrame(() =>
+      scrollRef.current?.scrollTo({ x: index * width, animated: false }),
+    );
+  }, [index, width]);
+
+  useEffect(() => {
+    if (index == null || Platform.OS !== "web" || typeof window === "undefined") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" && index > 0) onIndexChange(index - 1);
+      else if (e.key === "ArrowRight" && index < photos.length - 1) onIndexChange(index + 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, photos.length, onIndexChange, onClose]);
+
+  if (index == null) return null;
+  const photo = photos[index];
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.96)" }}>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+            if (newIndex !== index && newIndex >= 0 && newIndex < photos.length) {
+              onIndexChange(newIndex);
+            }
+          }}
+          style={{ flex: 1 }}
+        >
+          {photos.map((p) => (
+            <View
+              key={p.id}
+              style={{ width, height, alignItems: "center", justifyContent: "center" }}
+            >
+              <Image
+                source={{ uri: driveFullUrl(p.id) }}
+                style={{ width: width - 24, height: height - 160 }}
+                resizeMode="contain"
+              />
+            </View>
+          ))}
+        </ScrollView>
+
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          style={{
+            position: "absolute",
+            top: 50,
+            right: 20,
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(255,255,255,0.14)",
+          }}
+        >
+          <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>✕</Text>
+        </Pressable>
+
+        {index > 0 && (
+          <Pressable
+            onPress={() => onIndexChange(index - 1)}
+            hitSlop={12}
+            style={{
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              marginTop: -22,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255,255,255,0.14)",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>‹</Text>
+          </Pressable>
+        )}
+        {index < photos.length - 1 && (
+          <Pressable
+            onPress={() => onIndexChange(index + 1)}
+            hitSlop={12}
+            style={{
+              position: "absolute",
+              right: 12,
+              top: "50%",
+              marginTop: -22,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255,255,255,0.14)",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>›</Text>
+          </Pressable>
+        )}
+
+        <View style={{ position: "absolute", bottom: 28, alignSelf: "center" }}>
+          <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+            {index + 1} / {photos.length} · {formatDateShortPL(photo.createdAt)}
+          </Text>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -616,6 +766,10 @@ function groupPhotosByDay(photos: PublicBuildView["photos"]) {
 
 function PhotosCard({ view }: { view: PublicBuildView }) {
   const [galleryOpen, setGalleryOpen] = useState(false);
+  // Indeks w PEŁNEJ, płaskiej liście view.photos — wspólny dla podglądu
+  // w karcie i dla galerii w modalu, żeby strzałki/swipe w przeglądarce
+  // przechodziły przez wszystkie zdjęcia budowy, nie tylko bieżącą grupę.
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   if (view.photos.length === 0) return null;
 
   const byDay = groupPhotosByDay(view.photos);
@@ -632,7 +786,11 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
       <View style={{ padding: 20 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
           {shown.map((p) => (
-            <PhotoTile key={p.id} photo={p} />
+            <PhotoTile
+              key={p.id}
+              photo={p}
+              onPress={() => setViewerIndex(view.photos.indexOf(p))}
+            />
           ))}
         </View>
         {view.photos.length > shown.length && (
@@ -712,7 +870,11 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
                 </Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                   {group.photos.map((p) => (
-                    <PhotoTile key={p.id} photo={p} />
+                    <PhotoTile
+                      key={p.id}
+                      photo={p}
+                      onPress={() => setViewerIndex(view.photos.indexOf(p))}
+                    />
                   ))}
                 </View>
               </View>
@@ -720,6 +882,13 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
           </ScrollView>
         </View>
       </Modal>
+
+      <PhotoViewerModal
+        photos={view.photos}
+        index={viewerIndex}
+        onIndexChange={setViewerIndex}
+        onClose={() => setViewerIndex(null)}
+      />
     </Card>
   );
 }

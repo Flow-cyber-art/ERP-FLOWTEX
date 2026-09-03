@@ -7,7 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { enqueueReport } from "@/lib/offline-outbox";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import {
@@ -25,6 +27,7 @@ import {
   createMaterial,
   listMaterials,
   setMaterialActive as setMaterialActiveRemote,
+  updateMaterialIndex as updateMaterialIndexRemote,
   updateMaterialPrice as updateMaterialPriceRemote,
 } from "@/lib/data/materials";
 import {
@@ -492,6 +495,26 @@ function useAppDataState(
   // wypełnić raport). Gdy jest sieć, świeże dane z bazy nadpisują ten cache.
   const queryClient = useQueryClient();
   useRealtimeSync(queryClient);
+  // Refetch "budów" i "raportów" przy powrocie na kartę/do apki (zastępuje
+  // wyłączone wyżej refetchOnWindowFocus na tych dwóch zapytaniach) —
+  // explicite PO `getSession()`, żeby zapytanie zawsze poleciało z już
+  // odświeżonym tokenem, nigdy nie w wyścigu z auto-odświeżeniem
+  // supabase-js (patrz komentarz przy buildsQuery). `getSession()` samo w
+  // sobie odświeża token, jeśli jest bliski wygaśnięcia, i czeka na to.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", async (state) => {
+      if (state !== "active") return;
+      try {
+        await supabase.auth.getSession();
+      } catch {
+        // brak sieci / błąd odświeżenia — kolejne zapytania i tak dostaną
+        // błąd autoryzacji, nie ma co robić tu nic więcej.
+      }
+      queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["reports", "list"] });
+    });
+    return () => subscription.remove();
+  }, [queryClient]);
   // Eager — potrzebne od razu niezależnie od zakładki: liczniki w pasku
   // nawigacji (belowMinimumMaterials, pendingOrdersCount,
   // reportsPendingApprovalCount/reportsNeedingFixCount), ekran startowy,
@@ -512,7 +535,19 @@ function useAppDataState(
     // odblokowywał się po utworzeniu katalogu przez Admina). Ten sam wzorzec
     // co reportsQuery niżej: refetch przy powrocie na kartę/ekran +
     // lekki interval jako fallback.
-    refetchOnWindowFocus: true,
+    //
+    // refetchOnWindowFocus CELOWO wyłączone tu (mimo powyższego) — React
+    // Query odpala je na surowym 'visibilitychange', na którym supabase-js
+    // NIEZALEŻNIE próbuje odświeżyć token (autoRefreshToken też nasłuchuje
+    // visibilitychange, żeby nadgonić zegar zatrzymany, gdy karta była w
+    // tle — przeglądarki throttlują tam timery). Oba nasłuchy odpalają się
+    // w tej samej klatce, bez gwarancji kolejności, więc ten refetch
+    // potrafił wystartować z JESZCZE nieodświeżonym tokenem → "permission
+    // denied" (403) zaraz po powrocie z zewnętrznego linku (np. folder
+    // zdjęć na Google Drive otwarty w nowej karcie). Refetch-na-powrót
+    // jest niżej, explicite PO `supabase.auth.getSession()` (efekt za
+    // useRealtimeSync), więc token jest już świeży, zanim zapytanie leci.
+    refetchOnWindowFocus: false,
     refetchInterval: 60000,
     staleTime: Infinity,
   });
@@ -889,7 +924,12 @@ function useAppDataState(
     // nikt nie patrzy. Sam moment wysyłki (ten sam proces) jest już objęty
     // osobnym invalidate("reports") w saveDailyReportUnsafe, więc na
     // jednym urządzeniu wynik i tak jest natychmiastowy.
-    refetchOnWindowFocus: true,
+    //
+    // refetchOnWindowFocus CELOWO wyłączone (patrz analogiczny komentarz
+    // przy buildsQuery wyżej — race z odświeżaniem tokenu supabase-js na
+    // tym samym 'visibilitychange'). Refetch-na-powrót jest niżej, po
+    // `supabase.auth.getSession()`.
+    refetchOnWindowFocus: false,
     refetchInterval: 60000,
   });
   useEffect(() => {
@@ -962,6 +1002,10 @@ function useAppDataState(
   const updateMaterialPriceMutation = useMutation({
     mutationFn: (vars: { materialId: number; unitPrice: number }) =>
       updateMaterialPriceRemote(vars.materialId, vars.unitPrice),
+  });
+  const updateMaterialIndexMutation = useMutation({
+    mutationFn: (vars: { materialId: number; index: string }) =>
+      updateMaterialIndexRemote(vars.materialId, vars.index),
   });
   const adjustMaterialStockMutation = useMutation({
     mutationFn: (vars: { materialId: number; newStock: number }) =>
@@ -2342,6 +2386,21 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać ceny.");
     }
   };
+  // Edycja indeksu materiałowego — np. korekta literówki albo dopisanie
+  // kodu z cennika dostawcy, który przy zakładaniu materiału pominięto.
+  const updateMaterialIndex = async (materialId: string, index: string) => {
+    const numericId = Number(materialId);
+    if (Number.isNaN(numericId)) return;
+    try {
+      await updateMaterialIndexMutation.mutateAsync({
+        materialId: numericId,
+        index,
+      });
+      await invalidate("materials");
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać indeksu.");
+    }
+  };
   // Korekta stanu magazynowego materiału — np. pomyłka przy dodawaniu lub
   // ręczna inwentaryzacja. W górę: dopisuje partię "korekta" po aktualnej
   // średniej cenie. W dół: zdejmuje FIFO tak jak realne zużycie.
@@ -2894,6 +2953,7 @@ function useAppDataState(
     updateCloseBuildPin: updateCloseBuildPinValue,
     updateMaterialPrice,
     updateMaterialStock,
+    updateMaterialIndex,
     setMaterialActive,
     submitOrderCart,
     createOrderFromShortage,

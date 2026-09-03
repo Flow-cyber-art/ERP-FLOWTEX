@@ -26,6 +26,10 @@ export function DateField({
     return (
       <input
         type="date"
+        // Bez tego pole pokazuje datę w formacie wynikającym z locale
+        // przeglądarki (np. US → MM/DD/YYYY) — wymuszamy polski DD/MM/YYYY
+        // niezależnie od ustawień przeglądarki użytkownika.
+        lang="pl-PL"
         value={value}
         onChange={(e: any) => onChange(e.target.value)}
         style={{

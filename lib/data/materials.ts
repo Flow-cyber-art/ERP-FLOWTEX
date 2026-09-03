@@ -62,6 +62,14 @@ export async function updateMaterialPrice(materialId: number, unitPrice: number)
   if (error) throw new Error(error.message);
 }
 
+export async function updateMaterialIndex(materialId: number, index: string): Promise<void> {
+  const { error } = await supabase
+    .from("materials")
+    .update({ index, updatedAt: new Date().toISOString() })
+    .eq("id", materialId);
+  if (error) throw new Error(error.message);
+}
+
 export async function adjustMaterialStock(materialId: number, newStock: number): Promise<void> {
   const { error } = await supabase.rpc("adjust_material_stock", {
     p_material_id: materialId,

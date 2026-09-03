@@ -34,6 +34,7 @@ export function WarehouseScreen() {
     saveMaterial,
     updateMaterialPrice,
     updateMaterialStock,
+    updateMaterialIndex,
     setMaterialActive,
   } = useAppData();
 
@@ -89,6 +90,7 @@ export function WarehouseScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
   const [stockInput, setStockInput] = useState("");
+  const [indexInput, setIndexInput] = useState("");
   // Podpowiedzi przy dodawaniu NOWEGO materiału — ten sam mechanizm co w
   // Zamówieniach (orders-screen.tsx), żeby nie powstał cichy duplikat pod
   // nieco inną nazwą/literówką tego, co już jest w magazynie.
@@ -355,6 +357,7 @@ export function WarehouseScreen() {
                 setEditingId(m.id);
                 setPriceInput(String(m.unitPrice || ""));
                 setStockInput(String(m.stock ?? ""));
+                setIndexInput(m.index || "");
               }
             }}
             className="flex-row items-center justify-between px-4 py-3"
@@ -466,9 +469,15 @@ export function WarehouseScreen() {
                 );
               })()}
               <Text className="text-xs text-muted uppercase mb-2">
-                Popraw stan i cenę (np. w razie pomyłki)
+                Popraw indeks, stan i cenę (np. w razie pomyłki)
               </Text>
               <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 6 }}>
+                    Indeks
+                  </Text>
+                  <Field value={indexInput} onChangeText={setIndexInput} />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 6 }}>
                     Stan magazynowy
@@ -494,6 +503,9 @@ export function WarehouseScreen() {
                     // nieprzewidywalny. Cena wpisana ręcznie ma być
                     // ostateczna, więc idzie DRUGA, po zakończeniu korekty
                     // stanu.
+                    if (indexInput.trim() && indexInput.trim() !== m.index) {
+                      await updateMaterialIndex(m.id, indexInput.trim());
+                    }
                     await updateMaterialStock(m.id, Number(stockInput) || 0);
                     await updateMaterialPrice(m.id, Number(priceInput) || 0);
                     setEditingId(null);

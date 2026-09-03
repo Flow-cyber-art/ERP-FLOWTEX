@@ -278,77 +278,92 @@ export function PayrollSection() {
 
   return (
     <>
-      <View className="bg-surface border border-border rounded-2xl p-2 mb-3">
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          {(
-            [
-              ["week", "Tydzień"],
-              ["month", "Miesiąc"],
-              ["year", "Rok"],
-            ] as const
-          ).map(([value, label]) => (
-            <Pressable
-              key={value}
-              onPress={() => {
-                setMode(value);
-                setOffset(0);
-              }}
-              style={{
-                flex: 1,
-                borderRadius: 10,
-                paddingVertical: 10,
-                alignItems: "center",
-                backgroundColor: mode === value ? COLORS.primary : "transparent",
-              }}
-            >
-              <Text
-                style={{
-                  color: mode === value ? COLORS.background : COLORS.muted,
-                  fontWeight: "700",
-                  fontSize: 13,
-                }}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
+      {/* Jeden pasek zamiast dwóch — strzałka / (zakres dat + przełącznik
+          Tydzień-Miesiąc-Rok) / strzałka, zgodnie z makietą. */}
       <View
         className="bg-surface border border-border rounded-2xl mb-5"
-        style={{ flexDirection: "row", alignItems: "center", padding: 6 }}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 10,
+          paddingVertical: 8,
+        }}
       >
-        <Pressable onPress={() => setOffset(offset - 1)} style={{ padding: 10 }}>
-          <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "800" }}>‹</Text>
+        <Pressable onPress={() => setOffset(offset - 1)} style={{ padding: 8 }}>
+          <Text style={{ color: COLORS.muted, fontSize: 16, fontWeight: "800" }}>‹</Text>
         </Pressable>
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 14 }}>
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
             {rangeLabel}
           </Text>
-        </View>
-        <Pressable
-          onPress={() => setOffset(Math.min(0, offset + 1))}
-          disabled={offset >= 0}
-          style={{ padding: 10, opacity: offset >= 0 ? 0.3 : 1 }}
-        >
-          <Text style={{ color: COLORS.primary, fontSize: 18, fontWeight: "800" }}>›</Text>
-        </Pressable>
-        {offset !== 0 && (
-          <Pressable
-            onPress={() => setOffset(0)}
+          <View
             style={{
-              marginLeft: 6,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
+              flexDirection: "row",
+              gap: 2,
+              backgroundColor: COLORS.background,
               borderRadius: 8,
-              borderWidth: 1,
-              borderColor: COLORS.border,
+              padding: 2,
             }}
           >
-            <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>Dziś</Text>
+            {(
+              [
+                ["week", "Tydzień"],
+                ["month", "Miesiąc"],
+                ["year", "Rok"],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={value}
+                onPress={() => {
+                  setMode(value);
+                  setOffset(0);
+                }}
+                style={{
+                  borderRadius: 6,
+                  paddingVertical: 5,
+                  paddingHorizontal: 10,
+                  backgroundColor: mode === value ? COLORS.primary : "transparent",
+                }}
+              >
+                <Text
+                  style={{
+                    color: mode === value ? COLORS.background : COLORS.muted,
+                    fontWeight: "700",
+                    fontSize: 12,
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          {offset !== 0 && (
+            <Pressable
+              onPress={() => setOffset(0)}
+              style={{
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+            >
+              <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700" }}>Dziś</Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => setOffset(Math.min(0, offset + 1))}
+            disabled={offset >= 0}
+            style={{ padding: 8, opacity: offset >= 0 ? 0.3 : 1 }}
+          >
+            <Text style={{ color: COLORS.muted, fontSize: 16, fontWeight: "800" }}>›</Text>
           </Pressable>
-        )}
+        </View>
       </View>
 
       {/* Cztery kafelki podsumowania — to samo, co i tak jest w tabeli

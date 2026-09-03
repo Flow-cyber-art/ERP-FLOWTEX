@@ -21,6 +21,13 @@ import Svg, {
   Rect,
   Stop,
 } from "react-native-svg";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { Button, Field, formatPLN } from "@/components/report-ui";
 import {
@@ -606,6 +613,105 @@ function PhotoTile({
   );
 }
 
+const MAX_ZOOM = 4;
+const DOUBLE_TAP_ZOOM = 2.5;
+
+// Zdjęcie ze szczypaniem (pinch-to-zoom) + przesuwaniem po przybliżeniu +
+// podwójne stuknięcie jako skrót. Gesture-handler/reanimated już są w
+// projekcie (GestureHandlerRootView w app/_layout.tsx), więc bez nowej
+// zależności. Szczypanie i przesuwanie działają RAZEM (Simultaneous) —
+// przesuwanie ma efekt tylko, gdy zdjęcie jest przybliżone (sprawdzane w
+// onUpdate); podwójny tap idzie osobnym torem (Race), bo miałby się
+// gubić w kolejce ze szczypaniem/przesuwaniem.
+function ZoomableImage({
+  uri,
+  width,
+  height,
+  onZoomChange,
+}: {
+  uri: string;
+  width: number;
+  height: number;
+  onZoomChange: (zoomed: boolean) => void;
+}) {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const resetZoom = () => {
+    "worklet";
+    scale.value = withTiming(1);
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+    savedScale.value = 1;
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+  };
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = Math.min(Math.max(savedScale.value * e.scale, 1), MAX_ZOOM);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value <= 1.02) {
+        resetZoom();
+        runOnJS(onZoomChange)(false);
+      } else {
+        runOnJS(onZoomChange)(true);
+      }
+    });
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      if (savedScale.value <= 1) return;
+      translateX.value = savedTranslateX.value + e.translationX;
+      translateY.value = savedTranslateY.value + e.translationY;
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (savedScale.value > 1) {
+        resetZoom();
+        runOnJS(onZoomChange)(false);
+      } else {
+        scale.value = withTiming(DOUBLE_TAP_ZOOM);
+        savedScale.value = DOUBLE_TAP_ZOOM;
+        runOnJS(onZoomChange)(true);
+      }
+    });
+
+  const composed = Gesture.Race(doubleTap, Gesture.Simultaneous(pinch, pan));
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composed}>
+      <Animated.View style={{ width, height, alignItems: "center", justifyContent: "center" }}>
+        <Animated.Image
+          source={{ uri }}
+          style={[{ width: width - 24, height: height - 160 }, animatedStyle]}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
 // Pełnoekranowa przeglądarka — jedna, wspólna lista `photos` (zawsze
 // PEŁNA view.photos, nie tylko podgląd/grupa dnia), żeby strzałki/swipe
 // przechodziły płynnie przez WSZYSTKIE zdjęcia budowy, niezależnie od
@@ -626,9 +732,16 @@ function PhotoViewerModal({
 }) {
   const scrollRef = useRef<ScrollView>(null);
   const { width, height } = useWindowDimensions();
+  // Gdy dowolne zdjęcie jest przybliżone, wyłączamy swipe między
+  // zdjęciami — inaczej przesuwanie przybliżonego zdjęcia gubiłoby się z
+  // przechodzeniem do kolejnego. Reset przy każdej zmianie indeksu
+  // (strzałka/klawiatura), żeby nie zostać "zablokowanym" na zoomie
+  // poprzedniego zdjęcia w tle.
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     if (index == null) return;
+    setZoomed(false);
     requestAnimationFrame(() =>
       scrollRef.current?.scrollTo({ x: index * width, animated: false }),
     );
@@ -655,6 +768,7 @@ function PhotoViewerModal({
           ref={scrollRef}
           horizontal
           pagingEnabled
+          scrollEnabled={!zoomed}
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={(e) => {
             const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -665,16 +779,13 @@ function PhotoViewerModal({
           style={{ flex: 1 }}
         >
           {photos.map((p) => (
-            <View
+            <ZoomableImage
               key={p.id}
-              style={{ width, height, alignItems: "center", justifyContent: "center" }}
-            >
-              <Image
-                source={{ uri: driveFullUrl(p.id) }}
-                style={{ width: width - 24, height: height - 160 }}
-                resizeMode="contain"
-              />
-            </View>
+              uri={driveFullUrl(p.id)}
+              width={width}
+              height={height}
+              onZoomChange={setZoomed}
+            />
           ))}
         </ScrollView>
 

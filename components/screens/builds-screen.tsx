@@ -60,6 +60,9 @@ export function BuildsScreen() {
     buildTechnologySnapshots,
     buildMaterialPlans,
     buildMaterialLots,
+    buildStageStatuses,
+    completeBuildStage,
+    reopenBuildStage,
     assignBuildTechnology,
     assignments,
     savedReports,
@@ -1686,13 +1689,57 @@ export function BuildsScreen() {
                         <Text style={{ color: COLORS.muted, fontSize: 11 }}>Materiał</Text>
                         <Text style={{ color: COLORS.muted, fontSize: 11 }}>Ilość</Text>
                       </View>
-                      {stageOrder.map((stageName) => (
+                      {stageOrder.map((stageName) => {
+                        // Ten sam checkpoint co u brygadzisty
+                        // (report-screen.tsx) — jeden mechanizm
+                        // "zakończono etap" (build_stage_status),
+                        // widoczny i klikalny z obu miejsc, żeby Admin
+                        // nie musiał wchodzić w raport, żeby zaznaczyć
+                        // albo cofnąć etap.
+                        const isStageCompleted = buildStageStatuses.some(
+                          (s) => s.buildId === Number(b.id) && s.stageName === stageName,
+                        );
+                        return (
                         <View key={stageName} style={{ marginTop: 10 }}>
-                          <Text
-                            style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700", marginBottom: 4 }}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginBottom: 4,
+                            }}
                           >
-                            {stageName.toUpperCase()}
-                          </Text>
+                            <Text
+                              style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700" }}
+                            >
+                              {stageName.toUpperCase()}
+                            </Text>
+                            <Pressable
+                              disabled={b.status === "zamknięta"}
+                              onPress={() => {
+                                if (isStageCompleted) {
+                                  reopenBuildStage(b.id, stageName);
+                                } else {
+                                  completeBuildStage(b.id, stageName);
+                                }
+                              }}
+                              hitSlop={8}
+                              style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: 5,
+                                borderWidth: 2,
+                                borderColor: isStageCompleted ? COLORS.primary : COLORS.border,
+                                backgroundColor: isStageCompleted ? COLORS.primary : "transparent",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              {isStageCompleted && (
+                                <MaterialIcons name="check" size={13} color={COLORS.background} />
+                              )}
+                            </Pressable>
+                          </View>
                           {planByStage[stageName].map((row) => {
                             const cost = plannedCostFor(row);
                             const nameKey = row.materialName.trim().toLowerCase();
@@ -1737,7 +1784,8 @@ export function BuildsScreen() {
                             );
                           })}
                         </View>
-                      ))}
+                        );
+                      })}
                       {totalPlannedCost > 0 && (
                         <View
                           style={{

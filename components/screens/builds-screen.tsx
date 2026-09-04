@@ -60,9 +60,6 @@ export function BuildsScreen() {
     buildTechnologySnapshots,
     buildMaterialPlans,
     buildMaterialLots,
-    buildStageStatuses,
-    completeBuildStage,
-    reopenBuildStage,
     assignBuildTechnology,
     assignments,
     savedReports,
@@ -1657,116 +1654,90 @@ export function BuildsScreen() {
                       .toLowerCase();
                     if (name) assignedByMaterialName.set(name, a);
                   }
+                  // Ten sam materiał potrafi wystąpić w KILKU etapach tej
+                  // samej receptury (np. ten sam klej w warstwie zasadniczej
+                  // i zamykającej) — `assigned` powyżej to jedna, ZSUMOWANA
+                  // ilość na cały materiał (build_materials nie ma podziału
+                  // per etap), więc pokazanie jej przy KAŻDYM wystąpieniu
+                  // sugerowałoby błędnie, że tyle poszło na KAŻDY etap z
+                  // osobna. Pokazujemy adnotację tylko RAZ na materiał, z
+                  // dopiskiem gdy dotyczy więcej niż jednego etapu.
+                  const materialOccurrences = new Map<string, number>();
+                  for (const row of plan) {
+                    const key = row.materialName.trim().toLowerCase();
+                    materialOccurrences.set(key, (materialOccurrences.get(key) ?? 0) + 1);
+                  }
+                  const annotatedMaterialNames = new Set<string>();
+                  // Tabela Materiał/Ilość zamiast stackowanych etykiet —
+                  // dawka (consumptionPerM2) celowo pominięta (redesign),
+                  // warstwa zostaje pogrubionym nagłówkiem grupy nad
+                  // wierszami, nie osobną kolumną.
                   return (
                     <View style={{ marginTop: 10 }}>
-                      {/* Wizualizacja etapów jak u brygadzisty
-                          (report-screen.tsx) — osobna karta per etap z tym
-                          samym checkpointem, ten sam wiersz materiału
-                          (ikona/nazwa/podtytuł), tylko bez edycji: ilość
-                          po prawej to PLAN (statyczny tekst), nie stepper
-                          — wpisywanie realnego zużycia zostaje wyłącznie
-                          na ekranie raportu brygadzisty. */}
-                      {stageOrder.map((stageName) => {
-                        const isStageCompleted = buildStageStatuses.some(
-                          (s) => s.buildId === Number(b.id) && s.stageName === stageName,
-                        );
-                        return (
-                          <View
-                            key={stageName}
-                            style={{
-                              backgroundColor: COLORS.surface,
-                              borderRadius: 12,
-                              padding: 12,
-                              marginTop: 8,
-                            }}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          paddingBottom: 6,
+                          borderBottomWidth: 1,
+                          borderBottomColor: COLORS.border,
+                        }}
+                      >
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>Materiał</Text>
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>Ilość</Text>
+                      </View>
+                      {stageOrder.map((stageName) => (
+                        <View key={stageName} style={{ marginTop: 10 }}>
+                          <Text
+                            style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700", marginBottom: 4 }}
                           >
-                            <View
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                              }}
-                            >
-                              <Text
-                                style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}
-                              >
-                                {stageName}
-                              </Text>
-                              <Pressable
-                                disabled={b.status === "zamknięta"}
-                                onPress={() => {
-                                  if (isStageCompleted) {
-                                    reopenBuildStage(b.id, stageName);
-                                  } else {
-                                    completeBuildStage(b.id, stageName);
-                                  }
-                                }}
-                                hitSlop={8}
-                                style={{
-                                  width: 21,
-                                  height: 21,
-                                  borderRadius: 5,
-                                  borderWidth: 2,
-                                  borderColor: isStageCompleted ? COLORS.primary : COLORS.border,
-                                  backgroundColor: isStageCompleted ? COLORS.primary : "transparent",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                }}
-                              >
-                                {isStageCompleted && (
-                                  <MaterialIcons name="check" size={14} color={COLORS.background} />
-                                )}
-                              </Pressable>
-                            </View>
-                            <View style={{ marginTop: 8 }}>
-                              {planByStage[stageName].map((row, i) => {
-                                const nameKey = row.materialName.trim().toLowerCase();
-                                const assigned = assignedByMaterialName.get(nameKey);
-                                return (
-                                  <View
-                                    key={row.id}
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      paddingVertical: 12,
-                                      borderTopWidth: i > 0 ? 1 : 0,
-                                      borderTopColor: COLORS.border,
-                                    }}
+                            {stageName.toUpperCase()}
+                          </Text>
+                          {planByStage[stageName].map((row) => {
+                            const cost = plannedCostFor(row);
+                            const nameKey = row.materialName.trim().toLowerCase();
+                            const assigned = assignedByMaterialName.get(nameKey);
+                            const usedInMultipleStages = (materialOccurrences.get(nameKey) ?? 0) > 1;
+                            const showAnnotation =
+                              assigned && !annotatedMaterialNames.has(nameKey);
+                            if (showAnnotation) annotatedMaterialNames.add(nameKey);
+                            return (
+                              <View key={row.id} style={{ marginTop: 6 }}>
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <Text
+                                    style={{ color: COLORS.foreground, fontSize: 13, flex: 1, marginRight: 8 }}
                                   >
-                                    <View
-                                      style={{
-                                        flex: 1,
-                                        minWidth: 0,
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        paddingRight: 8,
-                                      }}
-                                    >
-                                      <IconBadge name="layers" size={16} badgeSize={32} />
-                                      <View style={{ marginLeft: 8, flex: 1, minWidth: 0 }}>
-                                        <Text
-                                          className="text-sm font-semibold text-foreground"
-                                          numberOfLines={2}
-                                        >
-                                          {row.materialName}
-                                        </Text>
-                                        <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>
-                                          {assigned ? "Materiał przypisany do budowy" : "Oczekuje na dostawę"}
-                                        </Text>
-                                      </View>
-                                    </View>
-                                    <Text
-                                      style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 15 }}
-                                    >
+                                    {row.materialName}
+                                  </Text>
+                                  <View style={{ alignItems: "flex-end" }}>
+                                    <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
                                       {row.plannedQuantity} {row.unit}
                                     </Text>
+                                    {cost !== null && (
+                                      <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                                        {formatPLN(cost)}
+                                      </Text>
+                                    )}
                                   </View>
-                                );
-                              })}
-                            </View>
-                          </View>
-                        );
-                      })}
+                                </View>
+                                {showAnnotation && (
+                                  <Text
+                                    style={{ color: COLORS.success, fontSize: 11, textAlign: "right" }}
+                                  >
+                                    przypisano z magazynu{usedInMultipleStages ? " (łącznie, wszystkie etapy)" : ""}: {assigned.planned} {row.unit}
+                                  </Text>
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      ))}
                       {totalPlannedCost > 0 && (
                         <View
                           style={{

@@ -3060,6 +3060,7 @@ export function BuildsScreen() {
                     build={b}
                     materials={materials}
                     assignments={assignments}
+                    buildMaterialPlans={buildMaterialPlans}
                     employees={employees}
                     expanded={expandedReportId === report.id}
                     onToggle={() =>

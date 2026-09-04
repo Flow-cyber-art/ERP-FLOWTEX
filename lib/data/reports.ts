@@ -143,7 +143,13 @@ export type ReportRow = {
   note: string | null;
   clientNote: string | null;
   builds: { number: string; name: string } | null;
-  report_materials: { materialId: number; usedQuantity: string; cost: string; reason: string | null }[];
+  report_materials: {
+    materialId: number;
+    usedQuantity: string;
+    cost: string;
+    reason: string | null;
+    stageName: string | null;
+  }[];
   report_people: { employeeId: number; start: string; end: string }[];
   report_extra_costs: {
     id: number;
@@ -159,7 +165,7 @@ const REPORT_SELECT = `
   submittedByProfileId, note,
   clientNote:client_note,
   builds ( number, name ),
-  report_materials ( materialId, usedQuantity, cost, reason ),
+  report_materials ( materialId, usedQuantity, cost, reason, stageName:stage_name ),
   report_people ( employeeId, start, end ),
   report_extra_costs ( id, label, amount, note, category )
 `;

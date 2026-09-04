@@ -19,6 +19,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { BuildPhotosSection } from "@/components/build-photos-section";
+import { materialReportKey } from "@/lib/material-report-key";
 
 export function ReportScreen() {
   const {
@@ -168,33 +169,71 @@ export function ReportScreen() {
       .toLowerCase()
       .includes(pomocniczeQuery.trim().toLowerCase());
   });
+  // Jeden wiersz per (materiał, etap) — dokładnie te same klucze, co
+  // faktyczne pola na ekranie (renderMaterialRow) — do kroku 3
+  // (podsumowanie) i walidacji "czy coś wpisano". Bez tego materiał
+  // rozbity na dwa etapy zlewałby się w jeden wiersz/klucz podsumowania.
+  const materialSummaryRows: { key: string; name: string; unit?: string }[] = [];
+  for (const a of buildAssignments) {
+    const m = materials.find((x) => x.id === a.materialId);
+    const name = m?.name?.trim().toLowerCase();
+    const stagesForMaterial = name
+      ? planForActiveBuild.filter((p) => p.materialName.trim().toLowerCase() === name)
+      : [];
+    if (stagesForMaterial.length === 0) {
+      materialSummaryRows.push({
+        key: materialReportKey(a.materialId, null),
+        name: m?.name ?? a.materialId,
+        unit: m?.unit,
+      });
+    } else {
+      for (const p of stagesForMaterial) {
+        materialSummaryRows.push({
+          key: materialReportKey(a.materialId, p.stageName),
+          name: m?.name ?? a.materialId,
+          unit: p.unit,
+        });
+      }
+    }
+  }
 
   // removable: tylko materiały pomocnicze (dodane ręcznie z magazynu w tym
   // raporcie) mają "✕" do cofnięcia pomyłki — materiały z planu technologii
   // przypisują się automatycznie przy przyjęciu zamówienia i nie da się ich
   // tak po prostu odpiąć od budowy.
+  // stageName/stagePlan: gdy materiał należy do etapu technologii, ta
+  // konkretna karta odpowiada TEMU etapowi (materiał, który występuje w
+  // dwóch etapach, renderuje się jako DWIE osobne karty — patrz pętla po
+  // stageOrder niżej) — bez tego oba pola pisałyby do tego samego wiersza
+  // report_materials (zgłoszony problem: "piasek w dwóch miejscach").
   const renderMaterialRow = (
     a: (typeof buildAssignments)[number],
     i: number,
     removable: boolean,
+    stageName?: string | null,
+    stagePlan?: { plannedQuantity: number; unit: string } | null,
   ) => {
     const m = materials.find((x) => x.id === a.materialId);
+    const key = materialReportKey(a.materialId, stageName ?? null);
     // reportValues trzyma DZISIEJSZE zużycie (od zera), nie stan
     // całkowity — do porównania z planem (Admin: "plan/pozostało") trzeba
-    // doliczyć to, co budowa ma już zużyte życiowo (a.used), pomniejszone
-    // o to, co ten sam, otwarty raport już wcześniej wpisał (bo inaczej
-    // policzyłoby się podwójnie przy edycji istniejącego raportu).
-    const dailyValue = Number(reportValues[a.materialId] || 0);
-    const alreadyCountedInTotal = Number(
-      editingReport?.materialValues[a.materialId] || 0,
-    );
-    const currentValue = a.used + dailyValue - alreadyCountedInTotal;
+    // doliczyć życiowe zużycie TEGO KLUCZA (materiał × etap), nie całego
+    // materiału (a.used miesza etapy razem) — sumowane z zapisanych
+    // raportów budowy, pomijając akurat otwarty (editingReport), żeby nie
+    // policzyć dzisiejszej wartości podwójnie.
+    const lifeToDateBeforeToday = savedReports
+      .filter((r) => r.buildId === activeBuild?.id && r.id !== editingReport?.id)
+      .reduce((sum, r) => sum + Number(r.materialValues[key] || 0), 0);
+    const dailyValue = Number(reportValues[key] || 0);
+    const currentValue = lifeToDateBeforeToday + dailyValue;
+    const planQty = stagePlan?.plannedQuantity ?? a.planned;
+    const planUnit = stagePlan?.unit ?? m?.unit;
     const different =
       devRole === "Admin" &&
-      reportValues[a.materialId] !== undefined &&
-      currentValue !== a.planned;
+      reportValues[key] !== undefined &&
+      currentValue !== planQty;
     return (
-      <View key={a.materialId}>
+      <View key={key}>
         <View
           style={{
             flexDirection: "row",
@@ -229,7 +268,7 @@ export function ReportScreen() {
                 {!m
                   ? `ID: ${a.materialId}`
                   : devRole === "Admin"
-                    ? `plan ${a.planned} ${m.unit} · pozostało ${Math.max(0, a.planned - currentValue)} ${m.unit}`
+                    ? `plan ${planQty} ${planUnit} · pozostało ${Math.max(0, planQty - currentValue)} ${planUnit}`
                     : "Materiał przypisany do budowy"}
               </Text>
             </View>
@@ -238,12 +277,12 @@ export function ReportScreen() {
           {/* prawa kolumna — sztywna szerokość steppera */}
           <QuantityStepper
             disabled={reportApproved}
-            value={reportValues[a.materialId] || "0"}
+            value={reportValues[key] || "0"}
             unit={m?.unit}
             onChangeText={(v) =>
               setReportValues({
                 ...reportValues,
-                [a.materialId]: v,
+                [key]: v,
               })
             }
           />
@@ -266,7 +305,7 @@ export function ReportScreen() {
             </Pressable>
           )}
         </View>
-        {devRole === "Admin" && currentValue > a.planned && (
+        {devRole === "Admin" && currentValue > planQty && (
           // Ostrzeżenie tylko dla Admina — Brygadzista i tak wpisuje
           // realne zużycie z budowy, zna założony plan i nie potrzebuje
           // appki oceniającej, czy się w nim zmieścił (dotyczy zarówno
@@ -280,15 +319,15 @@ export function ReportScreen() {
               marginBottom: 8,
             }}
           >
-            ⚠ Przekracza plan o {(currentValue - a.planned).toFixed(2)} {m?.unit}
+            ⚠ Przekracza plan o {(currentValue - planQty).toFixed(2)} {planUnit}
           </Text>
         )}
         {different && (
           <Field
             editable={!reportApproved}
             placeholder="Dlaczego wystąpiła różnica?"
-            value={reasons[a.materialId] || ""}
-            onChangeText={(v: string) => setReasons({ ...reasons, [a.materialId]: v })}
+            value={reasons[key] || ""}
+            onChangeText={(v: string) => setReasons({ ...reasons, [key]: v })}
           />
         )}
       </View>
@@ -616,7 +655,11 @@ export function ReportScreen() {
                             const assignment = assignmentByMaterialName.get(
                               p.materialName.trim().toLowerCase(),
                             );
-                            if (assignment) return renderMaterialRow(assignment, i, false);
+                            if (assignment)
+                              return renderMaterialRow(assignment, i, false, stageName, {
+                                plannedQuantity: Number(p.plannedQuantity),
+                                unit: p.unit,
+                              });
                             return (
                               <View
                                 key={p.id}
@@ -1228,36 +1271,33 @@ export function ReportScreen() {
             <Text className="text-xs text-muted uppercase mt-5 mb-1">
               Materiały
             </Text>
-            {buildAssignments.map((a, i) => {
-              const m = materials.find((x) => x.id === a.materialId);
-              return (
-                <View
-                  key={a.materialId}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingVertical: 8,
-                    borderTopWidth: i > 0 ? 1 : 0,
-                    borderTopColor: COLORS.border,
-                  }}
+            {materialSummaryRows.map((row, i) => (
+              <View
+                key={row.key}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingVertical: 8,
+                  borderTopWidth: i > 0 ? 1 : 0,
+                  borderTopColor: COLORS.border,
+                }}
+              >
+                <Text
+                  className="text-sm text-foreground"
+                  numberOfLines={2}
+                  style={{ flex: 1, minWidth: 0, marginRight: 8 }}
                 >
-                  <Text
-                    className="text-sm text-foreground"
-                    numberOfLines={2}
-                    style={{ flex: 1, minWidth: 0, marginRight: 8 }}
-                  >
-                    {m?.name || "Materiał usunięty z magazynu"}
-                  </Text>
-                  <Text
-                    className="text-sm font-bold text-foreground"
-                    style={{ flexShrink: 0 }}
-                  >
-                    {reportValues[a.materialId] || "0"} {m?.unit}
-                  </Text>
-                </View>
-              );
-            })}
+                  {row.name}
+                </Text>
+                <Text
+                  className="text-sm font-bold text-foreground"
+                  style={{ flexShrink: 0 }}
+                >
+                  {reportValues[row.key] || "0"} {row.unit}
+                </Text>
+              </View>
+            ))}
 
             {!!draftKm && (
               <>
@@ -1394,8 +1434,8 @@ export function ReportScreen() {
           >
             Gotowe do zapisania · {draftPeople.length}{" "}
             {pluralPL(draftPeople.length, "osoba", "osoby", "osób")} ·{" "}
-            {buildAssignments.length}{" "}
-            {pluralPL(buildAssignments.length, "materiał", "materiały", "materiałów")}
+            {materialSummaryRows.length}{" "}
+            {pluralPL(materialSummaryRows.length, "materiał", "materiały", "materiałów")}
           </Text>
         </View>
       )}
@@ -1418,8 +1458,8 @@ export function ReportScreen() {
               fullWidth
               onPress={() => {
                 if (reportStep === 1) {
-                  const anyMaterialFilled = buildAssignments.some(
-                    (a) => Number(reportValues[a.materialId] || 0) > 0,
+                  const anyMaterialFilled = Object.values(reportValues).some(
+                    (v) => Number(v || 0) > 0,
                   );
                   if (
                     buildAssignments.length > 0 &&

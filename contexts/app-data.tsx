@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { enqueueReport } from "@/lib/offline-outbox";
 import { normalizeMaterialName } from "@/lib/material-name-match";
+import { materialReportKey, parseMaterialReportKey } from "@/lib/material-report-key";
 import {
   closeBuild as closeBuildRemote,
   createBuild,
@@ -239,7 +240,11 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
   const materialCosts: Record<string, number> = {};
   const reasons: Record<string, string> = {};
   for (const m of row.report_materials) {
-    const key = String(m.materialId);
+    // materialReportKey — materiał może wystąpić w RAPORCIE więcej niż
+    // raz, jeśli technologia używa go w więcej niż jednym etapie (patrz
+    // lib/material-report-key.ts) — bez tego drugi wpis nadpisywał
+    // pierwszy, tak jak wcześniej robił to sam ekran brygadzisty.
+    const key = materialReportKey(String(m.materialId), m.stageName);
     materialValues[key] = m.usedQuantity;
     materialCosts[key] = Number(m.cost);
     if (m.reason) reasons[key] = m.reason;
@@ -1940,36 +1945,57 @@ function useAppDataState(
     const reportMaterialCosts: Record<string, number> = {
       ...(existingReport?.materialCosts || {}),
     };
-    relevantAssignments.forEach((assignment) => {
-      if (reportValues[assignment.materialId] === undefined) return;
-      // reportValues trzyma DZISIEJSZE zużycie tego raportu (od zera), nie
-      // nowy stan całkowity budowy — patrz getReportDefaults i
-      // 047_raport_dzienna_ilosc_nie_skumulowana.sql. Delta do zastosowania
-      // liczona jest więc względem tego, co TEN SAM raport już wcześniej
-      // zapisał (existingReport), nie względem życiowego `assignment.used`.
-      const newDaily = Number(reportValues[assignment.materialId] || 0);
-      const oldDaily = Number(
-        existingReport?.materialValues[assignment.materialId] || 0,
-      );
+    // reportValues jest kluczowane przez materialReportKey — jeden
+    // materiał może dziś mieć KILKA wpisów (po jednym na etap technologii,
+    // w którym występuje, patrz lib/material-report-key.ts). Fizyczne
+    // zdjęcie z partii jest nieświadome etapu (magazyn nie dzieli się na
+    // etapy), więc do lokalnego podglądu FIFO sumujemy delty WSZYSTKICH
+    // kluczy tego samego materiału — realny, autorytatywny koszt per
+    // wpis (per etap) liczy baza (submit_daily_report) i nadpisuje ten
+    // podgląd zaraz po synchronizacji (invalidate("reports") niżej).
+    const relevantAssignmentByMaterialId = new Map(
+      relevantAssignments.map((a) => [a.materialId, a] as const),
+    );
+    const deltaByMaterialId = new Map<string, number>();
+    const keyDeltas: { key: string; materialId: string; delta: number }[] = [];
+    for (const key of Object.keys(reportValues)) {
+      const { materialId } = parseMaterialReportKey(key);
+      if (!relevantAssignmentByMaterialId.has(materialId)) continue;
+      const newDaily = Number(reportValues[key] || 0);
+      const oldDaily = Number(existingReport?.materialValues[key] || 0);
       const delta = newDaily - oldDaily;
+      keyDeltas.push({ key, materialId, delta });
       if (delta > 0) {
-        const result = consumeFIFOWithCostPure(
-          nextBatches,
-          assignment.materialId,
-          delta,
+        deltaByMaterialId.set(
+          materialId,
+          (deltaByMaterialId.get(materialId) || 0) + delta,
         );
-        nextBatches = result.batches;
-        affectedMaterialIds.add(assignment.materialId);
-        const key = `${buildId}:${assignment.materialId}`;
-        costDeltas[key] = (costDeltas[key] || 0) + result.cost;
-        reportMaterialCosts[assignment.materialId] =
-          (reportMaterialCosts[assignment.materialId] || 0) + result.cost;
       }
+    }
+    for (const [materialId, totalDelta] of deltaByMaterialId) {
+      const result = consumeFIFOWithCostPure(
+        nextBatches,
+        materialId,
+        totalDelta,
+      );
+      nextBatches = result.batches;
+      affectedMaterialIds.add(materialId);
+      const bKey = `${buildId}:${materialId}`;
+      costDeltas[bKey] = (costDeltas[bKey] || 0) + result.cost;
+      // Koszt tego podglądu rozbity proporcjonalnie do udziału każdego
+      // wpisu (etapu) w łącznej delcie materiału — przybliżenie, dokładny
+      // koszt per wpis wraca z bazy (patrz komentarz wyżej).
+      keyDeltas
+        .filter((kd) => kd.materialId === materialId && kd.delta > 0)
+        .forEach((kd) => {
+          const share = (kd.delta / totalDelta) * result.cost;
+          reportMaterialCosts[kd.key] = (reportMaterialCosts[kd.key] || 0) + share;
+        });
       // Zmniejszenie zużycia (korekta raportu w dół) nie "oddaje" partii ani
       // nie odejmuje wcześniej doliczonego kosztu — nie wiemy z której
       // partii realnie towar wrócił; ewentualny zwrot trafia do magazynu
       // jako zwykła korekta stanu.
-    });
+    }
 
     const reportSnapshot: SavedReport = {
       id: existingReport?.id || `report-${Date.now()}`,
@@ -2017,13 +2043,22 @@ function useAppDataState(
         recalcMaterialsFromBatches(prev, finalBatches, affectedMaterialIds),
       );
     }
+    // Suma netto (dodatnia i ujemna razem) delt PER MATERIAŁ — jak wyżej,
+    // `assignments.used` jest nieświadome etapu, więc liczy się łącznie
+    // ze wszystkich kluczy (etapów) tego materiału naraz.
+    const netDeltaByMaterialId = new Map<string, number>();
+    for (const kd of keyDeltas) {
+      netDeltaByMaterialId.set(
+        kd.materialId,
+        (netDeltaByMaterialId.get(kd.materialId) || 0) + kd.delta,
+      );
+    }
     setAssignments((prevAssignments) =>
       prevAssignments.map((a) => {
-        if (a.buildId !== buildId || reportValues[a.materialId] === undefined)
+        if (a.buildId !== buildId || !netDeltaByMaterialId.has(a.materialId))
           return a;
-        const newDaily = Number(reportValues[a.materialId] || 0);
-        const oldDaily = Number(existingReport?.materialValues[a.materialId] || 0);
-        return { ...a, used: Math.max(0, a.used + (newDaily - oldDaily)) };
+        const delta = netDeltaByMaterialId.get(a.materialId) || 0;
+        return { ...a, used: Math.max(0, a.used + delta) };
       }),
     );
     if (draftPeople.length) {
@@ -2068,26 +2103,22 @@ function useAppDataState(
     // ponownie, gdy dane referencyjne się zsynchronizują.
     const numericBuildId = Number(buildId);
     // Etap technologii (Faza 6) — wyłącznie informacyjne (report_materials
-    // .stage_name), dopasowane po nazwie materiału do build_material_plan
-    // tej budowy; materiały pomocnicze (spoza planu) zostają bez etapu.
-    const planForBuild = buildMaterialPlans.filter(
-      (p) => p.buildId === numericBuildId,
-    );
-    const stageNameForMaterial = (materialId: string) => {
-      const name = materials.find((m) => m.id === materialId)?.name;
-      if (!name) return undefined;
-      const normalized = normalizeMaterialName(name);
-      return planForBuild.find(
-        (p) => normalizeMaterialName(p.materialName) === normalized,
-      )?.stageName;
-    };
+    // .stage_name). W odróżnieniu od dawnej wersji, KLUCZ w
+    // reportSnapshot.materialValues już JEDNOZNACZNIE niesie etap (patrz
+    // lib/material-report-key.ts) — wybrany explicite na ekranie
+    // brygadzisty, przy KTÓRYM konkretnie polu wpisał ilość, więc tu
+    // wystarczy go odczytać, bez zgadywania "pierwszy pasujący etap w
+    // planie" (to właśnie było źródłem zgłoszonego błędu).
     const materialsPayload = Object.entries(reportSnapshot.materialValues)
-      .map(([materialId, usedQuantityRaw]) => ({
-        materialId: Number(materialId),
-        usedQuantity: Number(usedQuantityRaw) || 0,
-        reason: reasons[materialId],
-        stageName: stageNameForMaterial(materialId),
-      }))
+      .map(([key, usedQuantityRaw]) => {
+        const { materialId, stageName } = parseMaterialReportKey(key);
+        return {
+          materialId: Number(materialId),
+          usedQuantity: Number(usedQuantityRaw) || 0,
+          reason: reasons[key],
+          stageName: stageName ?? undefined,
+        };
+      })
       .filter((m) => !Number.isNaN(m.materialId));
     const peoplePayload = draftPeople
       .map((p) => ({

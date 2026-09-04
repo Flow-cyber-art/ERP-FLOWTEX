@@ -30,8 +30,15 @@ import { useAppData } from "@/contexts/app-data";
 // przełączanie między dwoma widokami. Zatwierdzenie po prostu przenosi
 // raport do dolnej sekcji przy najbliższym odświeżeniu danych.
 export function ManagerScreen() {
-  const { builds, assignments, savedReports, approveReport, employees, materials } =
-    useAppData();
+  const {
+    builds,
+    assignments,
+    buildMaterialPlans,
+    savedReports,
+    approveReport,
+    employees,
+    materials,
+  } = useAppData();
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [buildQuery, setBuildQuery] = useState("");
@@ -168,6 +175,7 @@ export function ManagerScreen() {
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}
                   assignments={assignments}
+                  buildMaterialPlans={buildMaterialPlans}
                   employees={employees}
                   expanded={expandedReportId === report.id}
                   onToggle={() =>
@@ -197,6 +205,7 @@ export function ManagerScreen() {
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}
                   assignments={assignments}
+                  buildMaterialPlans={buildMaterialPlans}
                   employees={employees}
                   expanded={expandedReportId === report.id}
                   onToggle={() =>

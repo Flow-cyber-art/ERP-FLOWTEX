@@ -1,5 +1,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { parseMaterialReportKey } from "@/lib/material-report-key";
+import { normalizeMaterialName } from "@/lib/material-name-match";
+import type { BuildMaterialPlanRow } from "@/lib/data/build-technology";
 import {
   Alert,
   Modal,
@@ -1328,6 +1331,7 @@ const ReportCard = ({
   build,
   materials,
   assignments,
+  buildMaterialPlans = [],
   employees,
   expanded,
   onToggle,
@@ -1339,6 +1343,13 @@ const ReportCard = ({
   build?: Build;
   materials: Material[];
   assignments: Assignment[];
+  // Plan per etap technologii — do rozbicia pozycji materiałowej na
+  // konkretny etap, gdy materiał występuje w więcej niż jednym (patrz
+  // materialReportKey w lib/material-report-key.ts). Opcjonalne z
+  // domyślnym `[]`, żeby istniejące wywołania ReportCard bez tego propa
+  // (jeśli jakieś zostały) nie się nie wysypały — po prostu nie pokażą
+  // etykiety etapu.
+  buildMaterialPlans?: BuildMaterialPlanRow[];
   employees: Employee[];
   expanded: boolean;
   onToggle: () => void;
@@ -1352,6 +1363,7 @@ const ReportCard = ({
 }) => {
   const approved = report.status === "approved";
   const planned = assignments.filter((a) => a.buildId === build?.id);
+  const plansForBuild = buildMaterialPlans.filter((p) => p.buildId === Number(build?.id));
   const totalHours = report.people.reduce((sum, person) => {
     const [sh, sm] = person.start.split(":").map(Number);
     const [eh, em] = person.end.split(":").map(Number);
@@ -1437,12 +1449,37 @@ const ReportCard = ({
               </Text>
             ) : (
               Object.entries(report.materialValues).map(
-                ([materialId, used], i) => {
+                ([key, used], i) => {
+                  const { materialId, stageName } = parseMaterialReportKey(key);
                   const material = materials.find((m) => m.id === materialId);
                   const assignment = planned.find(
                     (a) => a.materialId === materialId,
                   );
-                  const plan = assignment?.planned;
+                  // Materiał rozbity na więcej niż jeden etap technologii
+                  // (patrz materialReportKey w lib/material-report-key.ts,
+                  // np. piasek jako zasyp w dwóch różnych warstwach) — dla
+                  // niego "assignment" (build_materials) jest ZBIORCZY na
+                  // cały materiał, nie per etap, więc plan/"łącznie" trzeba
+                  // liczyć z konkretnego wiersza planu TEGO etapu zamiast z
+                  // assignment, inaczej dwa etapy pokazywałyby tę samą,
+                  // mylącą sumę.
+                  const stagesForMaterial = material
+                    ? plansForBuild.filter(
+                        (p) =>
+                          normalizeMaterialName(p.materialName) ===
+                          normalizeMaterialName(material.name),
+                      )
+                    : [];
+                  const isSplitAcrossStages = stagesForMaterial.length > 1;
+                  const stagePlanRow = stageName
+                    ? stagesForMaterial.find((p) => p.stageName === stageName)
+                    : undefined;
+                  const usedNum = Number(used) || 0;
+                  const plan = isSplitAcrossStages
+                    ? stagePlanRow
+                      ? Number(stagePlanRow.plannedQuantity)
+                      : undefined
+                    : assignment?.planned;
                   // `used` w report.materialValues to DZISIEJSZE zużycie
                   // TEGO raportu (od 047_raport_dzienna_ilosc_nie_
                   // skumulowana.sql), nie stan całkowity budowy — do
@@ -1454,9 +1491,16 @@ const ReportCard = ({
                   // dla starszych, już zatwierdzonych raportów pokazuje
                   // aktualny stan budowy, nie historyczny zamrożony stan z
                   // dnia wysyłki (ta historia już nigdzie nie jest
-                  // trzymana, patrz nagłówek migracji 047).
-                  const usedNum = Number(used) || 0;
-                  const totalUsed = assignment ? assignment.used : usedNum;
+                  // trzymana, patrz nagłówek migracji 047). Dla materiału
+                  // rozbitego na etapy assignment.used miesza etapy razem,
+                  // więc "łącznie" pokazuje tylko dzisiejszą wartość (bez
+                  // mylącego zbiorczego stanu) — dokładny per-etap stan
+                  // życiowy jest w Rozliczeniu budowy, nie tutaj.
+                  const totalUsed = isSplitAcrossStages
+                    ? usedNum
+                    : assignment
+                      ? assignment.used
+                      : usedNum;
                   const ratio = plan ? totalUsed / plan : null;
                   // Zielony = w normie, pomarańczowy = lekkie przekroczenie,
                   // czerwony = znaczne — żeby nie trzeba było porównywać dwóch
@@ -1468,11 +1512,11 @@ const ReportCard = ({
                         ? COLORS.warning
                         : COLORS.danger;
                   const differs = plan !== undefined && totalUsed !== plan;
-                  const reason = report.reasons[materialId];
-                  const cost = report.materialCosts?.[materialId];
+                  const reason = report.reasons[key];
+                  const cost = report.materialCosts?.[key];
                   return (
                     <View
-                      key={materialId}
+                      key={key}
                       style={{
                         paddingVertical: 10,
                         borderTopWidth: i > 0 ? 1 : 0,
@@ -1481,6 +1525,12 @@ const ReportCard = ({
                     >
                       <Text className="text-sm font-semibold text-foreground">
                         {material?.name || materialId}
+                        {stageName ? (
+                          <Text style={{ color: COLORS.muted, fontWeight: "600" }}>
+                            {" "}
+                            · {stageName}
+                          </Text>
+                        ) : null}
                       </Text>
                       <View
                         style={{
@@ -1505,9 +1555,11 @@ const ReportCard = ({
                             fontSize: 12,
                           }}
                         >
-                          {plan !== undefined
-                            ? `łącznie ${totalUsed} z ${plan} ${material?.unit} planu`
-                            : `łącznie ${totalUsed} ${material?.unit}`}
+                          {plan === undefined
+                            ? `łącznie ${totalUsed} ${material?.unit}`
+                            : isSplitAcrossStages
+                              ? `plan etapu ${plan} ${material?.unit}`
+                              : `łącznie ${totalUsed} z ${plan} ${material?.unit} planu`}
                         </Text>
                       </View>
                       {plan !== undefined && plan > 0 && (

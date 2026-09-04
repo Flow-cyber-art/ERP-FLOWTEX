@@ -3,6 +3,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { parseMaterialReportKey } from "@/lib/material-report-key";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import type { BuildMaterialPlanRow } from "@/lib/data/build-technology";
+import type { BuildStageStatusRow } from "@/lib/data/build-stages";
 import {
   Alert,
   Modal,
@@ -1332,6 +1333,7 @@ const ReportCard = ({
   materials,
   assignments,
   buildMaterialPlans = [],
+  buildStageStatuses = [],
   employees,
   expanded,
   onToggle,
@@ -1350,6 +1352,11 @@ const ReportCard = ({
   // (jeśli jakieś zostały) nie się nie wysypały — po prostu nie pokażą
   // etykiety etapu.
   buildMaterialPlans?: BuildMaterialPlanRow[];
+  // Które etapy są odznaczone jako zakończone (build_stage_status) — do
+  // checkboxa przy karcie etapu, TEN SAM stan co u brygadzisty
+  // (report-screen.tsx), tylko tu wyłącznie do odczytu (patrz komentarz
+  // niżej przy renderowaniu karty etapu).
+  buildStageStatuses?: BuildStageStatusRow[];
   employees: Employee[];
   expanded: boolean;
   onToggle: () => void;
@@ -1448,8 +1455,35 @@ const ReportCard = ({
                 Nie zgłoszono zużycia materiałów.
               </Text>
             ) : (
-              Object.entries(report.materialValues).map(
-                ([key, used], i) => {
+              (() => {
+                // Wizualizacja jak u brygadzisty (report-screen.tsx) —
+                // karta per etap z checkpointem "zakończono etap" (odczyt,
+                // bez klikania stąd — to zostaje wyłącznie na ekranie
+                // raportu, żeby jeden przycisk nie znaczył dwóch różnych
+                // rzeczy w dwóch miejscach naraz), wewnątrz materiały TEGO
+                // etapu. Materiał pomocniczy (bez etapu, patrz
+                // materialReportKey) zostaje pod spodem, w osobnej sekcji,
+                // tak jak u brygadzisty.
+                const entries = Object.entries(report.materialValues);
+                const planStageOrder: string[] = [];
+                for (const p of plansForBuild) {
+                  if (!planStageOrder.includes(p.stageName)) planStageOrder.push(p.stageName);
+                }
+                const entriesByStage = new Map<string, [string, string][]>();
+                const auxEntries: [string, string][] = [];
+                for (const entry of entries) {
+                  const { stageName } = parseMaterialReportKey(entry[0]);
+                  if (!stageName) {
+                    auxEntries.push(entry);
+                    continue;
+                  }
+                  if (!entriesByStage.has(stageName)) entriesByStage.set(stageName, []);
+                  entriesByStage.get(stageName)!.push(entry);
+                  if (!planStageOrder.includes(stageName)) planStageOrder.push(stageName);
+                }
+                const stageOrder = planStageOrder.filter((s) => entriesByStage.has(s));
+
+                const renderEntry = ([key, used]: [string, string], i: number) => {
                   const { materialId, stageName } = parseMaterialReportKey(key);
                   const material = materials.find((m) => m.id === materialId);
                   const assignment = planned.find(
@@ -1518,97 +1552,163 @@ const ReportCard = ({
                     <View
                       key={key}
                       style={{
+                        flexDirection: "row",
+                        alignItems: "center",
                         paddingVertical: 10,
                         borderTopWidth: i > 0 ? 1 : 0,
                         borderTopColor: COLORS.border,
                       }}
                     >
-                      <Text className="text-sm font-semibold text-foreground">
-                        {material?.name || materialId}
-                        {stageName ? (
-                          <Text style={{ color: COLORS.muted, fontWeight: "600" }}>
-                            {" "}
-                            · {stageName}
-                          </Text>
-                        ) : null}
-                      </Text>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "baseline",
-                          marginTop: 4,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: COLORS.foreground,
-                            fontWeight: "800",
-                            fontSize: 15,
-                          }}
-                        >
-                          dziś: {usedNum} {material?.unit}
+                      <IconBadge name="layers" size={16} badgeSize={32} />
+                      <View style={{ marginLeft: 8, flex: 1, minWidth: 0 }}>
+                        <Text className="text-sm font-semibold text-foreground" numberOfLines={2}>
+                          {material?.name || materialId}
                         </Text>
-                        <Text
-                          style={{
-                            color: differs ? COLORS.warning : COLORS.muted,
-                            fontSize: 12,
-                          }}
-                        >
-                          {plan === undefined
-                            ? `łącznie ${totalUsed} ${material?.unit}`
-                            : isSplitAcrossStages
-                              ? `plan etapu ${plan} ${material?.unit}`
-                              : `łącznie ${totalUsed} z ${plan} ${material?.unit} planu`}
-                        </Text>
-                      </View>
-                      {plan !== undefined && plan > 0 && (
                         <View
                           style={{
-                            height: 4,
-                            borderRadius: 2,
-                            backgroundColor: COLORS.background,
-                            marginTop: 6,
-                            overflow: "hidden",
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "baseline",
+                            marginTop: 2,
                           }}
                         >
+                          <Text
+                            style={{
+                              color: COLORS.foreground,
+                              fontWeight: "800",
+                              fontSize: 15,
+                            }}
+                          >
+                            dziś: {usedNum} {material?.unit}
+                          </Text>
+                          <Text
+                            style={{
+                              color: differs ? COLORS.warning : COLORS.muted,
+                              fontSize: 12,
+                            }}
+                          >
+                            {plan === undefined
+                              ? `łącznie ${totalUsed} ${material?.unit}`
+                              : isSplitAcrossStages
+                                ? `plan etapu ${plan} ${material?.unit}`
+                                : `łącznie ${totalUsed} z ${plan} ${material?.unit} planu`}
+                          </Text>
+                        </View>
+                        {plan !== undefined && plan > 0 && (
                           <View
                             style={{
                               height: 4,
                               borderRadius: 2,
-                              width: `${Math.min(100, (totalUsed / plan) * 100)}%`,
-                              backgroundColor: barColor,
+                              backgroundColor: COLORS.surface,
+                              marginTop: 6,
+                              overflow: "hidden",
                             }}
-                          />
-                        </View>
-                      )}
-                      {cost !== undefined && (
-                        <Text
-                          style={{
-                            color: COLORS.muted,
-                            fontSize: 12,
-                            marginTop: 4,
-                            textAlign: "right",
-                          }}
-                        >
-                          {formatPLN(cost)}
-                        </Text>
-                      )}
-                      {reason ? (
-                        <Text
-                          style={{
-                            color: COLORS.warning,
-                            fontSize: 12,
-                            marginTop: 4,
-                          }}
-                        >
-                          Powód odchylenia: {reason}
-                        </Text>
-                      ) : null}
+                          >
+                            <View
+                              style={{
+                                height: 4,
+                                borderRadius: 2,
+                                width: `${Math.min(100, (totalUsed / plan) * 100)}%`,
+                                backgroundColor: barColor,
+                              }}
+                            />
+                          </View>
+                        )}
+                        {cost !== undefined && (
+                          <Text
+                            style={{
+                              color: COLORS.muted,
+                              fontSize: 12,
+                              marginTop: 4,
+                              textAlign: "right",
+                            }}
+                          >
+                            {formatPLN(cost)}
+                          </Text>
+                        )}
+                        {reason ? (
+                          <Text
+                            style={{
+                              color: COLORS.warning,
+                              fontSize: 12,
+                              marginTop: 4,
+                            }}
+                          >
+                            Powód odchylenia: {reason}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                   );
-                },
-              )
+                };
+
+                return (
+                  <>
+                    {stageOrder.map((stageName) => {
+                      const isStageCompleted = buildStageStatuses.some(
+                        (s) => s.buildId === Number(build?.id) && s.stageName === stageName,
+                      );
+                      return (
+                        <View
+                          key={stageName}
+                          style={{
+                            backgroundColor: COLORS.background,
+                            borderRadius: 12,
+                            padding: 12,
+                            marginTop: 8,
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+                              {stageName}
+                            </Text>
+                            {/* Sam checkpoint (build_stage_status) — bez
+                                onPress: tylko odczyt tego, co brygadzista
+                                już zaznaczył na swoim ekranie. */}
+                            <View
+                              style={{
+                                width: 21,
+                                height: 21,
+                                borderRadius: 5,
+                                borderWidth: 2,
+                                borderColor: isStageCompleted ? COLORS.primary : COLORS.border,
+                                backgroundColor: isStageCompleted ? COLORS.primary : "transparent",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              {isStageCompleted && (
+                                <MaterialIcons name="check" size={14} color={COLORS.background} />
+                              )}
+                            </View>
+                          </View>
+                          <View style={{ marginTop: 4 }}>
+                            {entriesByStage.get(stageName)!.map(renderEntry)}
+                          </View>
+                        </View>
+                      );
+                    })}
+                    {auxEntries.length > 0 && (
+                      <View style={{ marginTop: stageOrder.length > 0 ? 14 : 0 }}>
+                        {stageOrder.length > 0 && (
+                          <Text
+                            style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700", marginBottom: 4 }}
+                          >
+                            MATERIAŁY POMOCNICZE
+                          </Text>
+                        )}
+                        {auxEntries.map(renderEntry)}
+                      </View>
+                    )}
+                  </>
+                );
+              })()
             )}
           </DetailSection>
 

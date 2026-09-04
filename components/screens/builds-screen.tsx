@@ -60,6 +60,7 @@ export function BuildsScreen() {
     buildTechnologySnapshots,
     buildMaterialPlans,
     buildMaterialLots,
+    buildStageStatuses,
     assignBuildTechnology,
     assignments,
     savedReports,
@@ -2994,6 +2995,7 @@ export function BuildsScreen() {
                     materials={materials}
                     assignments={assignments}
                     buildMaterialPlans={buildMaterialPlans}
+                    buildStageStatuses={buildStageStatuses}
                     employees={employees}
                     expanded={expandedReportId === report.id}
                     onToggle={() =>

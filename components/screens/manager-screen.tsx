@@ -34,6 +34,7 @@ export function ManagerScreen() {
     builds,
     assignments,
     buildMaterialPlans,
+    buildStageStatuses,
     savedReports,
     approveReport,
     employees,
@@ -176,6 +177,7 @@ export function ManagerScreen() {
                   materials={materials}
                   assignments={assignments}
                   buildMaterialPlans={buildMaterialPlans}
+                  buildStageStatuses={buildStageStatuses}
                   employees={employees}
                   expanded={expandedReportId === report.id}
                   onToggle={() =>
@@ -206,6 +208,7 @@ export function ManagerScreen() {
                   materials={materials}
                   assignments={assignments}
                   buildMaterialPlans={buildMaterialPlans}
+                  buildStageStatuses={buildStageStatuses}
                   employees={employees}
                   expanded={expandedReportId === report.id}
                   onToggle={() =>

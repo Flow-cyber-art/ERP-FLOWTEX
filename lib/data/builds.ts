@@ -94,8 +94,18 @@ export async function createBuild(input: CreateBuildInput): Promise<BuildRow> {
 }
 
 export type CloseBuildReturnItem = {
+  // `lotId` (build_material_lots.id) identyfikuje partię jednoznacznie —
+  // NIE rekonstruować tego po (materialId, batchId, quantity) po stronie
+  // bazy: `sourceBatchId` partii bardzo często jest `null` (materiał
+  // zamówiony bezpośrednio pod budowę, albo cała partia-źródłowa wzięta
+  // naraz — batch źródłowy jest wtedy kasowany, więc FK zeruje
+  // sourceBatchId), więc dwie różne partie tego samego materiału (różne
+  // ceny) potrafią mieć identyczne (materialId, batchId=null) — a jeśli
+  // dodatkowo mają tę samą pozostałą ilość, dopasowanie "po wartości"
+  // zamiast po ID potrafiło po cichu zamienić im ceny/decyzje miejscami.
+  // Patrz supabase/sql/091_close_build_zwrot_po_lot_id.sql.
+  lotId: number;
   materialId: number;
-  batchId: number | null;
   quantity: number;
   decision: "zwrot" | "wyrzucenie";
   reason?: string | null;

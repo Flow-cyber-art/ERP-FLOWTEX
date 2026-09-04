@@ -3099,9 +3099,12 @@ export function BuildsScreen() {
                 );
               });
               const submitClose = async () => {
+                // lotId identyfikuje partię jednoznacznie — NIE batchId
+                // (bardzo często null, patrz komentarz przy
+                // CloseBuildReturnItem w lib/data/builds.ts).
                 const items = remainingLots.map((l) => ({
+                  lotId: Number(l.id),
                   materialId: l.materialId,
-                  batchId: l.sourceBatchId,
                   quantity: Number(l.quantity),
                   decision: returnDecisions[l.id]?.decision ?? "zwrot",
                   reason: returnDecisions[l.id]?.reason || undefined,

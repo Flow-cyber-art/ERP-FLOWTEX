@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { COLORS, formatPLN, ScreenHeader, SearchablePicker } from "@/components/report-ui";
 import { ComparisonBarChart, DonutChart, KpiTile } from "@/components/charts";
 import { useAppData } from "@/contexts/app-data";
 import { normalizeMaterialName } from "@/lib/material-name-match";
+import { listMaterialIssuesForBuild, type StockMovementRow } from "@/lib/data/stock-movements";
 
 /**
  * Faza 8 modułu Technologia — Rozliczenie budowy. Spina Fazy 0–7 w
@@ -61,6 +63,35 @@ export function SettlementScreen() {
 
   const build =
     visibleBuilds.find((b) => b.id === selectedId) ?? visibleBuilds[0] ?? null;
+
+  // Skąd wzięła się cena materiału — część mogła być pobrana z magazynu
+  // (istniejąca partia), część zamówiona osobno, często po innej cenie
+  // (patrz omówienie z Adminem — czy to rozróżnione w programie). Główna
+  // liczba "Koszt" wyżej to zawsze poprawna suma (actualCost, FIFO) —
+  // to tylko dodatkowy, zwijany wgląd W CO się ona składa. Osobne
+  // zapytanie per budowa (nie w globalnym app-data z staleTime: Infinity)
+  // — to szczegół otwierany rzadko, nie ma sensu trzymać go wiecznie w
+  // pamięci dla każdej budowy naraz. `stock_movements` (trwały log), NIE
+  // `build_material_lots` (żywy stan, zeruje się przy zużyciu/zamknięciu
+  // budowy) — inaczej ten wgląd znikałby właśnie wtedy, gdy jest
+  // najbardziej potrzebny (budowa już zamknięta/rozliczona).
+  const issuesQuery = useQuery({
+    queryKey: ["stockMovements", "buildIssues", build?.id],
+    queryFn: () => listMaterialIssuesForBuild(Number(build!.id)),
+    enabled: !!build,
+    staleTime: 60000,
+  });
+  const priceBreakdownByMaterial = useMemo(() => {
+    const map = new Map<string, StockMovementRow[]>();
+    (issuesQuery.data ?? []).forEach((m) => {
+      const key = String(m.materialId);
+      const list = map.get(key) ?? [];
+      list.push(m);
+      map.set(key, list);
+    });
+    return map;
+  }, [issuesQuery.data]);
+  const [expandedPriceKey, setExpandedPriceKey] = useState<string | null>(null);
 
   // Koszt materiału na budowie = RZECZYWISTY, skumulowany koszt FIFO
   // doliczony przez submit_daily_report przy raportach dziennych
@@ -126,6 +157,7 @@ export function SettlementScreen() {
         const koszt = materialId ? materialCostFor(materialId) : 0;
         return {
           key: `${r.id}`,
+          materialId,
           name: material?.name ?? r.materialName,
           unit: r.unit,
           plan,
@@ -396,25 +428,37 @@ export function SettlementScreen() {
                   </Text>
                 </View>
                 {stage.items.map((item) => (
-                  <View key={item.key} style={{ flexDirection: "row", paddingVertical: 6 }}>
-                    <Text
-                      style={{ flex: 2, color: COLORS.foreground, fontSize: 12 }}
-                      numberOfLines={1}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text style={{ flex: 1, color: COLORS.muted, fontSize: 12, textAlign: "right" }}>
-                      {item.plan} {item.unit}
-                    </Text>
-                    <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
-                      {item.przypisano}
-                    </Text>
-                    <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
-                      {item.zuzyto}
-                    </Text>
-                    <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right", fontWeight: "700" }}>
-                      {formatPLN(item.koszt)}
-                    </Text>
+                  <View key={item.key} style={{ paddingVertical: 6 }}>
+                    <View style={{ flexDirection: "row" }}>
+                      <Text
+                        style={{ flex: 2, color: COLORS.foreground, fontSize: 12 }}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text style={{ flex: 1, color: COLORS.muted, fontSize: 12, textAlign: "right" }}>
+                        {item.plan} {item.unit}
+                      </Text>
+                      <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
+                        {item.przypisano}
+                      </Text>
+                      <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right" }}>
+                        {item.zuzyto}
+                      </Text>
+                      <Text style={{ flex: 1, color: COLORS.foreground, fontSize: 12, textAlign: "right", fontWeight: "700" }}>
+                        {formatPLN(item.koszt)}
+                      </Text>
+                    </View>
+                    {item.materialId && (
+                      <PriceBreakdown
+                        unit={item.unit}
+                        movements={priceBreakdownByMaterial.get(item.materialId) ?? []}
+                        isOpen={expandedPriceKey === item.key}
+                        onToggle={() =>
+                          setExpandedPriceKey(expandedPriceKey === item.key ? null : item.key)
+                        }
+                      />
+                    )}
                   </View>
                 ))}
               </View>
@@ -429,16 +473,25 @@ export function SettlementScreen() {
               {auxAssignments.map((a) => {
                 const material = materials.find((m) => m.id === a.materialId);
                 return (
-                  <View
-                    key={a.materialId}
-                    style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}
-                  >
-                    <Text style={{ color: COLORS.foreground, fontSize: 12 }} numberOfLines={1}>
-                      {material?.name ?? "Materiał usunięty"}
-                    </Text>
-                    <Text style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "700" }}>
-                      {a.used} {material?.unit ?? ""} · {formatPLN(materialCostFor(a.materialId))}
-                    </Text>
+                  <View key={a.materialId} style={{ paddingVertical: 4 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={{ color: COLORS.foreground, fontSize: 12 }} numberOfLines={1}>
+                        {material?.name ?? "Materiał usunięty"}
+                      </Text>
+                      <Text style={{ color: COLORS.foreground, fontSize: 12, fontWeight: "700" }}>
+                        {a.used} {material?.unit ?? ""} · {formatPLN(materialCostFor(a.materialId))}
+                      </Text>
+                    </View>
+                    <PriceBreakdown
+                      unit={material?.unit}
+                      movements={priceBreakdownByMaterial.get(a.materialId) ?? []}
+                      isOpen={expandedPriceKey === `aux-${a.materialId}`}
+                      onToggle={() =>
+                        setExpandedPriceKey(
+                          expandedPriceKey === `aux-${a.materialId}` ? null : `aux-${a.materialId}`,
+                        )
+                      }
+                    />
                   </View>
                 );
               })}
@@ -604,6 +657,43 @@ export function SettlementScreen() {
         </>
       )}
     </>
+  );
+}
+
+// Pokazuje się TYLKO gdy materiał faktycznie ma więcej niż jedną cenę
+// (żeby nie zaśmiecać widoku, gdy wszystko przyszło po jednej cenie —
+// czyli w normalnym przypadku).
+function PriceBreakdown({
+  unit,
+  movements,
+  isOpen,
+  onToggle,
+}: {
+  unit?: string;
+  movements: StockMovementRow[];
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const distinctPrices = new Set(movements.map((m) => m.unitPrice));
+  if (distinctPrices.size < 2) return null;
+  return (
+    <View style={{ marginTop: 2, marginBottom: 4 }}>
+      <Pressable onPress={onToggle} style={{ alignSelf: "flex-start" }}>
+        <Text style={{ color: COLORS.primary, fontSize: 11, fontWeight: "700" }}>
+          {isOpen ? "▲" : "▼"} {distinctPrices.size} ceny — skąd się wzięła
+        </Text>
+      </Pressable>
+      {isOpen && (
+        <View style={{ marginTop: 4, paddingLeft: 4 }}>
+          {movements.map((m) => (
+            <Text key={m.id} style={{ color: COLORS.muted, fontSize: 11, paddingVertical: 1 }}>
+              {m.quantity} {unit ?? ""} × {formatPLN(Number(m.unitPrice))} ·{" "}
+              {m.createdAt.slice(0, 10)}
+            </Text>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 

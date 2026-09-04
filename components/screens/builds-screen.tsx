@@ -1623,141 +1623,74 @@ export function BuildsScreen() {
                 )}
 
                 {!pickerOpen && techMaterialsExpandedBuildId === b.id && plan.length > 0 && (() => {
-                  // Koszt planowany = plannedQuantity × AKTUALNA cena
-                  // materiału (materials.unitPrice — średnia ważona stanu,
-                  // przeliczana przy każdej partii, patrz fn_recalc_material
-                  // w supabase/sql/001_rpc_functions.sql/040_...sql). Brak
-                  // powiązanego materiału (linkedMaterialId) = koszt
-                  // nieznany, pomijany w sumie zamiast liczony jako 0.
-                  const plannedCostFor = (row: (typeof plan)[number]) => {
-                    if (!row.linkedMaterialId) return null;
-                    const material = materials.find(
-                      (m) => m.id === String(row.linkedMaterialId),
-                    );
-                    if (!material) return null;
-                    return Number(row.plannedQuantity) * material.unitPrice;
-                  };
-                  const totalPlannedCost = plan.reduce((sum, row) => {
-                    const cost = plannedCostFor(row);
-                    return sum + (cost ?? 0);
-                  }, 0);
-                  // Realnie przypisana partia (z "MATERIAŁY DODATKOWE" wyżej
-                  // w kodzie, tu wyłączona z tamtej sekcji, patrz
-                  // extraAssignments) dopasowana po nazwie do pozycji planu —
-                  // żeby ilość faktycznie przypisana z magazynu nie zniknęła
-                  // po rozdzieleniu tych dwóch list.
-                  const assignedByMaterialName = new Map<string, (typeof assignments)[number]>();
-                  for (const a of assignments) {
-                    if (a.buildId !== b.id) continue;
-                    const name = materials.find((m) => m.id === a.materialId)?.name
-                      ?.trim()
-                      .toLowerCase();
-                    if (name) assignedByMaterialName.set(name, a);
-                  }
-                  // Ten sam materiał potrafi wystąpić w KILKU etapach tej
-                  // samej receptury (np. ten sam klej w warstwie zasadniczej
-                  // i zamykającej) — `assigned` powyżej to jedna, ZSUMOWANA
-                  // ilość na cały materiał (build_materials nie ma podziału
-                  // per etap), więc pokazanie jej przy KAŻDYM wystąpieniu
-                  // sugerowałoby błędnie, że tyle poszło na KAŻDY etap z
-                  // osobna. Pokazujemy adnotację tylko RAZ na materiał, z
-                  // dopiskiem gdy dotyczy więcej niż jednego etapu.
-                  const materialOccurrences = new Map<string, number>();
-                  for (const row of plan) {
-                    const key = row.materialName.trim().toLowerCase();
-                    materialOccurrences.set(key, (materialOccurrences.get(key) ?? 0) + 1);
-                  }
-                  const annotatedMaterialNames = new Set<string>();
-                  // Tabela Materiał/Ilość zamiast stackowanych etykiet —
-                  // dawka (consumptionPerM2) celowo pominięta (redesign),
-                  // warstwa zostaje pogrubionym nagłówkiem grupy nad
-                  // wierszami, nie osobną kolumną.
+                  // Tabela Warstwa/Dawka/Ilość — to ma pokazywać, JAKA
+                  // technologia (z normami zużycia na m²) jest przypisana
+                  // do budowy, nic więcej (nie koszt, nie "ile już
+                  // przypisano z magazynu" — to żyje gdzie indziej:
+                  // Rozliczenie budowy / zakładka Materiały). Kolumna
+                  // "Warstwa" pokazuje nazwę etapu tylko przy PIERWSZYM
+                  // materiale danej warstwy (kolejne wiersze zostają
+                  // puste w tej kolumnie), tak jak w SQL-u generowanym dla
+                  // technologii (lib/data/technology-sql-import.ts) — ta
+                  // sama konwencja co w arkuszu, z którego wklejane są
+                  // technologie.
                   return (
                     <View style={{ marginTop: 10 }}>
                       <View
                         style={{
                           flexDirection: "row",
-                          justifyContent: "space-between",
                           paddingBottom: 6,
                           borderBottomWidth: 1,
                           borderBottomColor: COLORS.border,
                         }}
                       >
-                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>Materiał</Text>
-                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>Ilość</Text>
-                      </View>
-                      {stageOrder.map((stageName) => (
-                        <View key={stageName} style={{ marginTop: 10 }}>
-                          <Text
-                            style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700", marginBottom: 4 }}
-                          >
-                            {stageName.toUpperCase()}
-                          </Text>
-                          {planByStage[stageName].map((row) => {
-                            const cost = plannedCostFor(row);
-                            const nameKey = row.materialName.trim().toLowerCase();
-                            const assigned = assignedByMaterialName.get(nameKey);
-                            const usedInMultipleStages = (materialOccurrences.get(nameKey) ?? 0) > 1;
-                            const showAnnotation =
-                              assigned && !annotatedMaterialNames.has(nameKey);
-                            if (showAnnotation) annotatedMaterialNames.add(nameKey);
-                            return (
-                              <View key={row.id} style={{ marginTop: 6 }}>
-                                <View
-                                  style={{
-                                    flexDirection: "row",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                  }}
-                                >
-                                  <Text
-                                    style={{ color: COLORS.foreground, fontSize: 13, flex: 1, marginRight: 8 }}
-                                  >
-                                    {row.materialName}
-                                  </Text>
-                                  <View style={{ alignItems: "flex-end" }}>
-                                    <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
-                                      {row.plannedQuantity} {row.unit}
-                                    </Text>
-                                    {cost !== null && (
-                                      <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                                        {formatPLN(cost)}
-                                      </Text>
-                                    )}
-                                  </View>
-                                </View>
-                                {showAnnotation && (
-                                  <Text
-                                    style={{ color: COLORS.success, fontSize: 11, textAlign: "right" }}
-                                  >
-                                    przypisano z magazynu{usedInMultipleStages ? " (łącznie, wszystkie etapy)" : ""}: {assigned.planned} {row.unit}
-                                  </Text>
-                                )}
-                              </View>
-                            );
-                          })}
-                        </View>
-                      ))}
-                      {totalPlannedCost > 0 && (
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            marginTop: 4,
-                            paddingTop: 6,
-                            borderTopWidth: 1,
-                            borderTopColor: COLORS.border,
-                          }}
+                        <Text style={{ flex: 1.1, color: COLORS.muted, fontSize: 11 }}>Warstwa</Text>
+                        <Text style={{ flex: 1.6, color: COLORS.muted, fontSize: 11 }} />
+                        <Text
+                          style={{ flex: 0.9, color: COLORS.muted, fontSize: 11, textAlign: "right" }}
                         >
-                          <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
-                            Koszt materiałowy planowany razem
-                          </Text>
-                          <Text
-                            style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 13 }}
+                          Dawka
+                        </Text>
+                        <Text
+                          style={{ flex: 0.8, color: COLORS.muted, fontSize: 11, textAlign: "right" }}
+                        >
+                          Ilość
+                        </Text>
+                      </View>
+                      {stageOrder.map((stageName) =>
+                        planByStage[stageName].map((row, i) => (
+                          <View
+                            key={row.id}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              paddingVertical: 8,
+                              borderTopWidth: 1,
+                              borderTopColor: COLORS.border,
+                            }}
                           >
-                            {formatPLN(totalPlannedCost)}
-                          </Text>
-                        </View>
+                            <Text
+                              style={{ flex: 1.1, color: COLORS.muted, fontSize: 12 }}
+                              numberOfLines={2}
+                            >
+                              {i === 0 ? stageName : ""}
+                            </Text>
+                            <Text
+                              style={{ flex: 1.6, color: COLORS.foreground, fontSize: 13, fontWeight: "700" }}
+                              numberOfLines={2}
+                            >
+                              {row.materialName}
+                            </Text>
+                            <Text style={{ flex: 0.9, color: COLORS.muted, fontSize: 12, textAlign: "right" }}>
+                              {row.consumptionPerM2} {row.unit}/m²
+                            </Text>
+                            <Text
+                              style={{ flex: 0.8, color: COLORS.foreground, fontWeight: "700", fontSize: 13, textAlign: "right" }}
+                            >
+                              {row.plannedQuantity} {row.unit}
+                            </Text>
+                          </View>
+                        )),
                       )}
                     </View>
                   );

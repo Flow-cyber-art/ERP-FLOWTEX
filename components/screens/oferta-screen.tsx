@@ -35,21 +35,24 @@ import {
  * offers/offer_items — patrz supabase/sql/094_faza0_oferty.sql.
  */
 
+// Ciemny wariant palety prototypu (ten, który faktycznie akceptowaliśmy —
+// nie jasny, patrz rozmowa) — dokładne wartości z :root[data-theme="dark"]
+// / prefers-color-scheme:dark w oferta-wizard.html.
 const OC = {
-  bg: "#EFEDE5",
-  surface: "#FFFFFF",
-  surface2: "#F7F4EC",
-  border: "#DAD4C4",
-  borderStrong: "#C4BCA6",
-  ink: "#221F19",
-  inkMuted: "#6E6857",
-  inkFaint: "#9A9481",
-  accent: "#AE7A2B",
-  accentInk: "#211A0D",
-  accentSoft: "#F1E3C4",
-  accentStrong: "#8A5F1E",
-  danger: "#9B3A34",
-  dangerSoft: "#F2DEDC",
+  bg: "#15171B",
+  surface: "#1D2025",
+  surface2: "#22262C",
+  border: "#343A42",
+  borderStrong: "#454C56",
+  ink: "#EDEAE1",
+  inkMuted: "#A29C8C",
+  inkFaint: "#726C5D",
+  accent: "#D9A44C",
+  accentInk: "#1B1408",
+  accentSoft: "#3A2E17",
+  accentStrong: "#EBC077",
+  danger: "#C15850",
+  dangerSoft: "#2E1D1B",
 };
 const RADIUS = 3; // prototyp: --radius: 3px — świadomie bez dużych zaokrągleń, poza numerami kroków (kółka)
 
@@ -154,7 +157,7 @@ function OButton({
     >
       <Text
         style={{
-          color: secondary ? OC.ink : "#FFFFFF",
+          color: secondary ? OC.ink : OC.accentInk,
           fontWeight: "700",
           fontSize: 11.5,
           textTransform: "uppercase",
@@ -188,7 +191,7 @@ function OStepper({ steps, current }: { steps: { n: number; label: string }[]; c
               {current > s.n ? (
                 <MaterialIcons name="check" size={14} color={OC.accent} />
               ) : (
-                <Text style={{ color: current === s.n ? "#FFFFFF" : OC.inkMuted, fontWeight: "800", fontSize: 12 }}>{s.n}</Text>
+                <Text style={{ color: current === s.n ? OC.accentInk : OC.inkMuted, fontWeight: "800", fontSize: 12 }}>{s.n}</Text>
               )}
             </View>
             <Text
@@ -579,7 +582,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
               Faza 0 (pilotaż) — oferta budowana z tych samych kart co technologie posadzek.
             </Text>
           </View>
-          <OButton label="Wyczyść i zacznij od nowa" secondary danger onPress={handleClearAndRestart} />
+          <OButton label="Wyczyść i zacznij od nowa" secondary onPress={handleClearAndRestart} />
         </View>
 
         <OStepper steps={WIZARD_STEPS} current={step} />
@@ -698,7 +701,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                       justifyContent: "center",
                     }}
                   >
-                    {selected[tech.id] && <MaterialIcons name="check" size={14} color="#FFFFFF" />}
+                    {selected[tech.id] && <MaterialIcons name="check" size={14} color={OC.accentInk} />}
                   </View>
                   <Text style={{ color: OC.accentStrong, fontSize: 11.5, fontWeight: "700", width: 84 }}>{tech.code}</Text>
                   <Text style={{ color: OC.ink, flex: 1 }}>{tech.name}</Text>

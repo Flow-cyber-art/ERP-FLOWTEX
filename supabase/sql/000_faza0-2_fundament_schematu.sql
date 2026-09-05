@@ -38,6 +38,17 @@
 -- ale nieszkodliwe) — tylko klucz obcy do skasowanej tabeli `users`
 -- został pominięty.
 --
+-- Dodatkowo (ta sama sesja): 8 funkcji SECURITY DEFINER, które nie miały
+-- ustawionego `search_path` (ostrzeżenie Supabase Security Advisor
+-- "function_search_path_mutable" — teoretyczna podatność na przechwycenie
+-- przez obiekt o tej samej nazwie utworzony wcześniej na search_path
+-- wywołującego), dostały `SET search_path TO 'public'`:
+-- count_business_days, fn_add_material_batch, fn_add_material_batch_ext,
+-- fn_build_plan_remaining, fn_consume_build_lot_fifo, fn_consume_fifo,
+-- fn_recalc_material, normalize_material_name. Na żywej bazie zastosowane
+-- przez lekkie `ALTER FUNCTION ... SET search_path` (bez podmiany ciała
+-- funkcji); w tym pliku odzwierciedlone wprost w definicjach poniżej.
+--
 -- Jak uruchomić NA NOWYM/PUSTYM projekcie Supabase: SQL Editor -> wklej
 -- całość -> Run -> potem po kolei 001_rpc_functions.sql .. 093_*.sql.
 -- Na projekcie, który już ma ten schemat (czyli obecny produkcyjny),
@@ -1648,6 +1659,7 @@ CREATE OR REPLACE FUNCTION public.count_business_days(p_from date, p_to date)
  RETURNS integer
  LANGUAGE sql
  IMMUTABLE
+ SET search_path TO 'public'
 AS $function$
   select count(*)::integer
   from generate_series(p_from, p_to, interval '1 day') as d
@@ -1766,6 +1778,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.fn_add_material_batch(p_material_id integer, p_quantity numeric, p_unit_price numeric, p_received_at date, p_source batch_source)
  RETURNS void
  LANGUAGE plpgsql
+ SET search_path TO 'public'
 AS $function$
 begin
   insert into material_batches ("materialId", quantity, "unitPrice", "receivedAt", source)
@@ -1778,6 +1791,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.fn_add_material_batch_ext(p_material_id integer, p_quantity numeric, p_unit_price numeric, p_received_at date, p_source batch_source, p_document_number text DEFAULT NULL::text, p_supplier text DEFAULT NULL::text)
  RETURNS void
  LANGUAGE plpgsql
+ SET search_path TO 'public'
 AS $function$
 declare
   v_batch_id integer;
@@ -1820,6 +1834,7 @@ CREATE OR REPLACE FUNCTION public.fn_build_plan_remaining(p_build_id integer)
  RETURNS TABLE(material_name text, linked_material_id integer, unit text, remaining numeric)
  LANGUAGE sql
  STABLE
+ SET search_path TO 'public'
 AS $function$
   select p.material_name, p.linked_material_id, p.unit,
          p.total_planned - coalesce(a.total_ordered, 0) as remaining
@@ -1846,6 +1861,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.fn_consume_build_lot_fifo(p_build_id integer, p_material_id integer, p_amount numeric, p_report_id integer DEFAULT NULL::integer, p_stage_name text DEFAULT NULL::text)
  RETURNS numeric
  LANGUAGE plpgsql
+ SET search_path TO 'public'
 AS $function$
 declare
   v_remaining decimal := p_amount;
@@ -1932,6 +1948,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.fn_consume_fifo(p_material_id integer, p_amount numeric)
  RETURNS numeric
  LANGUAGE plpgsql
+ SET search_path TO 'public'
 AS $function$
 declare
   v_remaining decimal := p_amount;
@@ -1976,6 +1993,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.fn_recalc_material(p_material_id integer)
  RETURNS void
  LANGUAGE plpgsql
+ SET search_path TO 'public'
 AS $function$
 declare
   v_stock decimal(12, 3);
@@ -2295,6 +2313,7 @@ CREATE OR REPLACE FUNCTION public.normalize_material_name(p_name text)
  RETURNS text
  LANGUAGE sql
  IMMUTABLE
+ SET search_path TO 'public'
 AS $function$
   select trim(
     regexp_replace(

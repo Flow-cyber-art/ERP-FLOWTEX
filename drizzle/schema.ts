@@ -574,6 +574,62 @@ export const technologyMaterials = pgTable("technology_materials", {
 });
 
 /* ============================================================
+ * WIZARD OFERT — Faza 0 (pilotaż, supabase/sql/094_faza0_oferty.sql).
+ * Czyta `technologies`/`technology_stages`/`technology_materials` (nigdy
+ * nie zapisuje do nich) i zamraża wybrane pozycje razem z kosztem
+ * materiału w chwili tworzenia oferty (materialCostsJson) — tak samo jak
+ * buildTechnologySnapshot zamraża recepturę dla budowy, żeby późniejsza
+ * zmiana receptury/cen w magazynie nie przeliczała po cichu już wysłanej
+ * klientowi oferty. `offerPilotTechnologies` ogranicza wybór kart w
+ * kroku 1 wizardu do garstki dopuszczonych na pilotaż technologii —
+ * osobna, malutka tabela właśnie po to, żeby nie dopisywać kolumny do
+ * `technologies`.
+ * ============================================================ */
+
+export const offers = pgTable("offers", {
+  id: serial("id").primaryKey(),
+  ref: text("ref").notNull().unique(),
+  companyName: text("company_name").notNull().default(""),
+  contactPerson: text("contact_person").notNull().default(""),
+  address: text("address").notNull().default(""),
+  investmentAddress: text("investment_address").notNull().default(""),
+  nip: text("nip").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  discountPercent: decimal("discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+  status: text("status").notNull().default("szkic"), // 'szkic' | 'wyslana' | 'zaakceptowana' | 'odrzucona'
+  createdBy: text("createdBy"), // uuid (auth.users/profiles.id), jak technologies.createdBy
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const offerItems = pgTable("offer_items", {
+  id: serial("id").primaryKey(),
+  offerId: integer("offer_id")
+    .notNull()
+    .references(() => offers.id, { onDelete: "cascade" }),
+  // Nullable: NULL = pozycja własna (spoza katalogu), bez opisu technologii.
+  technologyId: integer("technology_id").references(() => technologies.id, {
+    onDelete: "set null",
+  }),
+  code: text("code").notNull().default(""),
+  name: text("name").notNull().default(""),
+  unit: text("unit").notNull().default("szt"),
+  qty: decimal("qty", { precision: 12, scale: 3 }).notNull().default("0"),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  isCustom: boolean("is_custom").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  materialCostsJson: text("material_costs_json").notNull().default("[]"), // jsonb — brak natywnego typu jsonb w tym pliku dotąd, patrz SQL
+});
+
+export const offerPilotTechnologies = pgTable("offer_pilot_technologies", {
+  technologyId: integer("technology_id")
+    .primaryKey()
+    .references(() => technologies.id, { onDelete: "cascade" }),
+  addedAt: timestamp("addedAt").defaultNow().notNull(),
+});
+
+/* ============================================================
  * PLAN MATERIAŁOWY BUDOWY — Faza 2. Przypisanie technologii do budowy
  * zamraża jej treść tu (snapshot_json) i przelicza plan (m² × zużycie).
  * Zapisywane wyłącznie przez RPC `assign_technology_to_build()` — patrz
@@ -723,3 +779,12 @@ export type InsertBuildOrder = typeof buildOrders.$inferInsert;
 
 export type BuildOrderItem = typeof buildOrderItems.$inferSelect;
 export type InsertBuildOrderItem = typeof buildOrderItems.$inferInsert;
+
+export type Offer = typeof offers.$inferSelect;
+export type InsertOffer = typeof offers.$inferInsert;
+
+export type OfferItem = typeof offerItems.$inferSelect;
+export type InsertOfferItem = typeof offerItems.$inferInsert;
+
+export type OfferPilotTechnology = typeof offerPilotTechnologies.$inferSelect;
+export type InsertOfferPilotTechnology = typeof offerPilotTechnologies.$inferInsert;

@@ -2,8 +2,12 @@ import { lazy, Suspense } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { COLORS } from "@/components/report-ui";
 import { AuthGate } from "@/components/auth-gate";
+
+// Bursztynowy akcent prototypu wizardu ofert (patrz oferta-screen.tsx) —
+// tylko dla spinnera ładowania, zanim właściwy ekran (z własną, jasną
+// paletą) się zamontuje.
+const OFERTA_ACCENT = "#AE7A2B";
 
 /**
  * /oferta — Wizard Ofert, Faza 0 (pilotaż). Trasa samodzielna (jak
@@ -30,8 +34,8 @@ export default function OfertaRoute() {
         {(profile) => (
           <Suspense
             fallback={
-              <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                <ActivityIndicator color={COLORS.primary} />
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#EFEDE5" }}>
+                <ActivityIndicator color={OFERTA_ACCENT} />
               </View>
             }
           >

@@ -353,64 +353,72 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
 
       {step === 1 && (
         <>
-          <Text className="text-xs text-muted uppercase mt-2 mb-2">Firma / kontrahent</Text>
-          <Field placeholder="Nazwa firmy *" value={client.companyName} onChangeText={(v: string) => setClient({ ...client, companyName: v })} />
-          <Field placeholder="NIP" value={client.nip} onChangeText={(v: string) => setClient({ ...client, nip: v })} style={{ marginTop: 10 }} />
-          <Field placeholder="Adres siedziby" value={client.address} onChangeText={(v: string) => setClient({ ...client, address: v })} style={{ marginTop: 10 }} />
-
-          <Text className="text-xs text-muted uppercase mt-4 mb-2">Osoba kontaktowa</Text>
-          <Field placeholder="Imię i nazwisko *" value={client.contactPerson} onChangeText={(v: string) => setClient({ ...client, contactPerson: v })} />
-          <Field placeholder="Telefon" value={client.phone} onChangeText={(v: string) => setClient({ ...client, phone: v })} keyboardType="phone-pad" style={{ marginTop: 10 }} />
-          <Field placeholder="E-mail" value={client.email} onChangeText={(v: string) => setClient({ ...client, email: v })} keyboardType="email-address" style={{ marginTop: 10 }} />
-
-          <Text className="text-xs text-muted uppercase mt-4 mb-2">Inwestycja (jeśli inny adres)</Text>
-          <Field placeholder="Adres inwestycji" value={client.investmentAddress} onChangeText={(v: string) => setClient({ ...client, investmentAddress: v })} />
-
-          <Text className="text-xs text-muted uppercase mt-4 mb-2">Numer referencyjny</Text>
-          <Field placeholder="Nr referencyjny" value={client.ref} onChangeText={(v: string) => setClient({ ...client, ref: v })} />
-          <Text className="text-xs text-muted mt-1">Podpowiedziany automatycznie — możesz nadpisać właściwym numerem.</Text>
-
-          <Text className="text-xs text-muted uppercase mt-6 mb-2">Odzyskaj wcześniejszą ofertę (po numerze lub kliencie)</Text>
-          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-            <Field
-              placeholder="np. 261847 albo Testowa Sp. z o.o."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              style={{ flex: 1 }}
-            />
-            <Button label="Szukaj" secondary onPress={runSearch} />
+          <View className="bg-surface border border-border rounded-2xl" style={{ padding: 14, marginBottom: 14 }}>
+            <Text className="text-xs text-muted uppercase mb-2">Firma / kontrahent</Text>
+            <Field placeholder="Nazwa firmy *" value={client.companyName} onChangeText={(v: string) => setClient({ ...client, companyName: v })} />
+            <Field placeholder="NIP" value={client.nip} onChangeText={(v: string) => setClient({ ...client, nip: v })} style={{ marginTop: 10 }} />
+            <Field placeholder="Adres siedziby" value={client.address} onChangeText={(v: string) => setClient({ ...client, address: v })} style={{ marginTop: 10 }} />
           </View>
-          {searching && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 12 }} />}
-          {searchResults && (
-            <View style={{ marginTop: 10 }}>
-              {searchResults.length === 0 ? (
-                <Text className="text-sm text-muted">Brak wyników.</Text>
-              ) : (
-                searchResults.map((row) => (
-                  <View
-                    key={row.id}
-                    className="bg-surface border border-border rounded-2xl"
-                    style={{ padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}
-                  >
-                    <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => loadOffer(row)}>
-                      <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
-                        {row.ref} — {row.companyName || "(bez nazwy)"}
-                      </Text>
-                      <Text style={{ color: COLORS.muted, fontSize: 12 }}>{row.status}</Text>
-                    </Pressable>
-                    <Button label="Wczytaj" secondary onPress={() => loadOffer(row)} />
-                    <Pressable onPress={() => handleDeleteOffer(row)} hitSlop={8}>
-                      <MaterialIcons name="delete-outline" size={20} color={COLORS.danger} />
-                    </Pressable>
-                  </View>
-                ))
-              )}
+
+          <View className="bg-surface border border-border rounded-2xl" style={{ padding: 14, marginBottom: 14 }}>
+            <Text className="text-xs text-muted uppercase mb-2">Osoba kontaktowa</Text>
+            <Field placeholder="Imię i nazwisko *" value={client.contactPerson} onChangeText={(v: string) => setClient({ ...client, contactPerson: v })} />
+            <Field placeholder="Telefon" value={client.phone} onChangeText={(v: string) => setClient({ ...client, phone: v })} keyboardType="phone-pad" style={{ marginTop: 10 }} />
+            <Field placeholder="E-mail" value={client.email} onChangeText={(v: string) => setClient({ ...client, email: v })} keyboardType="email-address" style={{ marginTop: 10 }} />
+          </View>
+
+          <View className="bg-surface border border-border rounded-2xl" style={{ padding: 14, marginBottom: 14 }}>
+            <Text className="text-xs text-muted uppercase mb-2">Inwestycja (jeśli inny adres)</Text>
+            <Field placeholder="Adres inwestycji" value={client.investmentAddress} onChangeText={(v: string) => setClient({ ...client, investmentAddress: v })} />
+          </View>
+
+          <View className="bg-surface border border-border rounded-2xl" style={{ padding: 14, marginBottom: 14 }}>
+            <Text className="text-xs text-muted uppercase mb-2">Numer referencyjny</Text>
+            <Field placeholder="Nr referencyjny" value={client.ref} onChangeText={(v: string) => setClient({ ...client, ref: v })} />
+            <Text className="text-xs text-muted mt-2">Podpowiedziany automatycznie — możesz nadpisać właściwym numerem.</Text>
+          </View>
+
+          <View className="bg-surface border border-border rounded-2xl" style={{ padding: 14, marginBottom: 14 }}>
+            <Text className="text-xs text-muted uppercase mb-2">Odzyskaj wcześniejszą ofertę (po numerze lub kliencie)</Text>
+            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <Field
+                placeholder="np. 261847 albo Testowa Sp. z o.o."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                style={{ flex: 1 }}
+              />
+              <Button label="Szukaj" secondary onPress={runSearch} />
             </View>
-          )}
-
-          <View style={{ marginTop: 20 }}>
-            <Button label="Dalej: wybierz karty →" fullWidth onPress={() => setStep(2)} />
+            {searching && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 12 }} />}
+            {searchResults && (
+              <View style={{ marginTop: 10 }}>
+                {searchResults.length === 0 ? (
+                  <Text className="text-sm text-muted">Brak wyników.</Text>
+                ) : (
+                  searchResults.map((row) => (
+                    <View
+                      key={row.id}
+                      className="bg-background border border-border rounded-2xl"
+                      style={{ padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}
+                    >
+                      <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => loadOffer(row)}>
+                        <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+                          {row.ref} — {row.companyName || "(bez nazwy)"}
+                        </Text>
+                        <Text style={{ color: COLORS.muted, fontSize: 12 }}>{row.status}</Text>
+                      </Pressable>
+                      <Button label="Wczytaj" secondary onPress={() => loadOffer(row)} />
+                      <Pressable onPress={() => handleDeleteOffer(row)} hitSlop={8}>
+                        <MaterialIcons name="delete-outline" size={20} color={COLORS.danger} />
+                      </Pressable>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
           </View>
+
+          <Button label="Dalej: wybierz karty →" fullWidth onPress={() => setStep(2)} />
         </>
       )}
 

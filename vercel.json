@@ -8,6 +8,10 @@
     {
       "source": "/portal/:token",
       "destination": "/portal/[token].html"
+    },
+    {
+      "source": "/oferta",
+      "destination": "/oferta.html"
     }
   ]
 }

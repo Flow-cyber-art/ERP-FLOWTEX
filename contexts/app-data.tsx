@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -603,8 +604,11 @@ function useAppDataState(
     refetchOnWindowFocus: false,
     staleTime: Infinity,
   });
-  const teams = (teamsQuery.data ?? []) as TeamRow[];
-  const teamMembers = (teamMembersQuery.data ?? []) as TeamMemberRow[];
+  const teams = useMemo(() => (teamsQuery.data ?? []) as TeamRow[], [teamsQuery.data]);
+  const teamMembers = useMemo(
+    () => (teamMembersQuery.data ?? []) as TeamMemberRow[],
+    [teamMembersQuery.data],
+  );
   // Leniwe — reszta poniżej odpala się dopiero przy pierwszym wejściu na
   // zakładkę, która ich faktycznie potrzebuje (tabDataEnabled wyżej),
   // zamiast wszystkie naraz na starcie aplikacji. Każde `enabled` wymienia
@@ -649,7 +653,10 @@ function useAppDataState(
     staleTime: Infinity,
     enabled: tabDataEnabled(["builds", "report", "settlement"]),
   });
-  const buildMaterialPlans = (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[];
+  const buildMaterialPlans = useMemo(
+    () => (buildMaterialPlansQuery.data ?? []) as BuildMaterialPlanRow[],
+    [buildMaterialPlansQuery.data],
+  );
   // Zamówienia jako nagłówek+pozycje (Faza 3) — dla WSZYSTKICH budów naraz,
   // filtrowane po buildId w UI, ten sam wzorzec co plan materiałowy wyżej.
   // Budowy (generowanie/przyjęcie z planu) i Zamówienia (lista/przyjęcie).
@@ -674,7 +681,10 @@ function useAppDataState(
     staleTime: Infinity,
     enabled: tabDataEnabled(["warehouse", "builds", "report"]),
   });
-  const warehouseBatches = (warehouseBatchesQuery.data ?? []) as WarehouseBatchRow[];
+  const warehouseBatches = useMemo(
+    () => (warehouseBatchesQuery.data ?? []) as WarehouseBatchRow[],
+    [warehouseBatchesQuery.data],
+  );
   // Partie faktycznie przypisane do budów (Faza 5) — czysty odczyt,
   // przydatny do pokazania "z jakiej partii" w raporcie/rozliczeniu.
   // Budowy (panel zamknięcia — decyzja o pozostałości) i Rozliczenie.
@@ -969,8 +979,10 @@ function useAppDataState(
   // offline — to typowe operacje panelu Admina/Magazynu/HR wykonywane przy
   // biurku, z założeniem że jest sieć. Brak połączenia kończy się czytelnym
   // komunikatem zamiast cichego, potencjalnie niespójnego zapisu lokalnego.
-  const invalidate = (key: string) =>
-    queryClient.invalidateQueries({ queryKey: [key, "list"] });
+  const invalidate = useCallback(
+    (key: string) => queryClient.invalidateQueries({ queryKey: [key, "list"] }),
+    [queryClient],
+  );
 
   // Zamówienia/Magazyn polegają na Realtime do świeżości danych
   // (staleTime: Infinity na tych zapytaniach) — ale uśpiona karta w
@@ -1316,13 +1328,13 @@ function useAppDataState(
       } catch {}
     });
   }, []);
-  const dismissShortage = (materialId: string, missing: number) => {
+  const dismissShortage = useCallback((materialId: string, missing: number) => {
     setDismissedShortages((prev) => {
       const next = { ...prev, [materialId]: missing };
       AsyncStorage.setItem("dismissed-shortages", JSON.stringify(next)).catch(() => {});
       return next;
     });
-  };
+  }, []);
   const shortages = useMemo(() => {
     const needed = new Map<string, number>();
     // Liczymy zapotrzebowanie TYLKO z budów, które są jeszcze aktywne —
@@ -1431,7 +1443,7 @@ function useAppDataState(
   // (wyszukiwarka pokazuje różne daty/ceny tej samej pozycji, patrz
   // warehouseBatches) i ile z niej trafia na budowę, zamiast tylko
   // wpisywać ilość planowaną i zdawać się na automatyczny FIFO.
-  const addToDraft = () => {
+  const addToDraft = useCallback(() => {
     const amount = Number(plannedAmount);
     // activeBuild?.id, nie goły selectedBuildId — ten drugi startuje na
     // ID z lokalnego seeda (initialBuilds[0].id, patrz useState wyżej) i
@@ -1459,12 +1471,12 @@ function useAppDataState(
         { batchId: selectedBatchId, materialId: String(batch.materialId), quantity: amount },
       ]);
     setPlannedAmount("");
-  };
+  }, [activeBuild?.id, draftAssignments, plannedAmount, selectedBatchId, selectedBuildId, warehouseBatches]);
   // Klik na materiał w wyszukiwarce dodaje go od razu do listy oczekującej
   // (z ilością 0, edytowalną w miejscu) zamiast wymuszać osobny krok
   // "wpisz ilość → Dodaj do listy" — przy kolejnym materiale użytkownik
   // po prostu klika następną pozycję, bez cofania się do pustego pola.
-  const addMaterialToDraft = (batchId: string) => {
+  const addMaterialToDraft = useCallback((batchId: string) => {
     if (draftAssignments.some((a) => a.batchId === batchId)) return;
     const batch = warehouseBatches.find((b) => String(b.id) === batchId);
     if (!batch) return;
@@ -1472,17 +1484,17 @@ function useAppDataState(
       ...draftAssignments,
       { batchId, materialId: String(batch.materialId), quantity: 0 },
     ]);
-  };
-  const updateDraftQuantity = (batchId: string, value: string) => {
+  }, [draftAssignments, warehouseBatches]);
+  const updateDraftQuantity = useCallback((batchId: string, value: string) => {
     const quantity = Number(value) || 0;
     setDraftAssignments(
       draftAssignments.map((a) => (a.batchId === batchId ? { ...a, quantity } : a)),
     );
-  };
-  const removeFromDraft = (batchId: string) => {
+  }, [draftAssignments]);
+  const removeFromDraft = useCallback((batchId: string) => {
     setDraftAssignments(draftAssignments.filter((a) => a.batchId !== batchId));
-  };
-  const commitAssignments = async () => {
+  }, [draftAssignments]);
+  const commitAssignments = useCallback(async () => {
     if (!draftAssignments.length) return;
     // Patrz komentarz w addToDraft — activeBuild?.id jest tym, co
     // faktycznie widać na ekranie, selectedBuildId bywa nieaktualne.
@@ -1551,12 +1563,12 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się przypisać materiałów do budowy.");
     }
-  };
+  }, [activeBuild?.id, assignBatchesMutation, builds, draftAssignments, invalidate, reportValues, selectedBuildId]);
   // Cofnięcie pomyłkowo dodanego materiału pomocniczego (odwrotność
   // commitAssignments powyżej) — zwraca ilość do partii źródłowej po
   // stronie bazy (unassign_material_from_build, 026), zablokowane tam,
   // jeśli materiał został już częściowo zużyty w raporcie.
-  const removeBuildAssignment = async (buildId: string, materialId: string) => {
+  const removeBuildAssignment = useCallback(async (buildId: string, materialId: string) => {
     const numericBuildId = Number(buildId);
     const numericMaterialId = Number(materialId);
     if (Number.isNaN(numericBuildId) || Number.isNaN(numericMaterialId)) return;
@@ -1574,9 +1586,9 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się usunąć przypisania materiału.");
     }
-  };
+  }, [invalidate, unassignMaterialMutation]);
   // Status etapu technologii (Faza 6) — wyłącznie brygadzista/admin, ręcznie.
-  const completeBuildStage = async (buildId: string, stageName: string) => {
+  const completeBuildStage = useCallback(async (buildId: string, stageName: string) => {
     const numericBuildId = Number(buildId);
     if (Number.isNaN(numericBuildId)) return;
     try {
@@ -1585,8 +1597,8 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zakończyć etapu.");
     }
-  };
-  const reopenBuildStage = async (buildId: string, stageName: string) => {
+  }, [completeBuildStageMutation, invalidate]);
+  const reopenBuildStage = useCallback(async (buildId: string, stageName: string) => {
     const numericBuildId = Number(buildId);
     if (Number.isNaN(numericBuildId)) return;
     try {
@@ -1595,8 +1607,8 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się wznowić etapu.");
     }
-  };
-  const saveMaterial = async (newMaterial: NewMaterialInput, onSaved: () => void) => {
+  }, [invalidate, reopenBuildStageMutation]);
+  const saveMaterial = useCallback(async (newMaterial: NewMaterialInput, onSaved: () => void) => {
     // Był tu cichy `return` bez żadnej informacji dla użytkownika — z
     // zewnątrz wyglądało jak "przycisk nic nie robi" (najczęściej dlatego,
     // że pole "Ilość początkowa" zostaje puste, jeśli nikt go nie dotknie —
@@ -1662,8 +1674,8 @@ function useAppDataState(
       return;
     }
     await createIt();
-  };
-  const saveBuild = async (
+  }, [createMaterialMutation, invalidate, materials]);
+  const saveBuild = useCallback(async (
     newBuild: NewBuildInput,
     onSaved: (buildId: string) => void,
   ) => {
@@ -1703,11 +1715,11 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać budowy.");
     }
-  };
+  }, [createBuildMutation, queryClient]);
   // Edycja podstawowych danych budowy po jej utworzeniu (numer/nazwa/
   // odpowiedzialny/klient/adres/wartość kontraktu) — te same pola co krok 1
   // kreatora w saveBuild wyżej, tylko jako update zamiast insert.
-  const updateBuildBasicInfo = async (
+  const updateBuildBasicInfo = useCallback(async (
     buildId: string,
     input: {
       number: string;
@@ -1742,13 +1754,13 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać danych budowy.");
     }
-  };
+  }, [queryClient, updateBuildBasicInfoMutation]);
   // Edycja brygady/dni roboczych/godzin dziennych po utworzeniu budowy —
   // te same pola co krok 1 kreatora (sekcja "Brygada i planowana
   // robocizna"), tylko jako update zamiast insert. Bez tego brygadę dało
   // się przypisać WYŁĄCZNIE w trakcie zakładania budowy — literówka albo
   // zmiana ekipy w trakcie realizacji nie miała jak się poprawić.
-  const updateBuildLaborPlan = async (
+  const updateBuildLaborPlan = useCallback(async (
     buildId: string,
     input: { teamId: string; durationDays: string; plannedHoursPerDay: string },
     onSaved?: () => void,
@@ -1771,12 +1783,12 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać brygady/planu robocizny.");
     }
-  };
+  }, [queryClient, updateBuildLaborPlanMutation]);
   // Przypisanie technologii do budowy (Faza 2) — atomowo w RPC: zapisuje
   // m², zamraża snapshot receptury, przelicza plan materiałowy. Bezpieczne
   // do wywołania wielokrotnie (Admin poprawia metraż / zmienia technologię),
   // dopóki budowa nie weszła w kolejne fazy (raporty/rozliczenie).
-  const assignBuildTechnology = async (
+  const assignBuildTechnology = useCallback(async (
     buildId: string,
     technologyId: number,
     areaM2: number,
@@ -1795,18 +1807,18 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się przypisać technologii.");
     }
-  };
+  }, [assignTechnologyMutation, queryClient]);
   // Zamówienia z planu materiałowego (Faza 3) — agregacja
   // `build_material_plan` w jedno zamówienie ze statusem "robocze".
-  const generateOrderFromPlan = async (buildId: string) => {
+  const generateOrderFromPlan = useCallback(async (buildId: string) => {
     try {
       await generateOrderFromPlanMutation.mutateAsync({ buildId: Number(buildId) });
       await invalidate("buildOrders");
     } catch (error) {
       reportMutationError(error, "Nie udało się wygenerować zamówienia z planu.");
     }
-  };
-  const updateOrderItemQuantity = async (itemId: number, orderedQuantity: number) => {
+  }, [generateOrderFromPlanMutation, invalidate]);
+  const updateOrderItemQuantity = useCallback(async (itemId: number, orderedQuantity: number) => {
     if (!orderedQuantity || orderedQuantity <= 0) return;
     try {
       await updateOrderItemQuantityMutation.mutateAsync({ itemId, orderedQuantity });
@@ -1814,14 +1826,14 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać ilości zamawianej.");
     }
-  };
+  }, [invalidate, updateOrderItemQuantityMutation]);
   // Zaznaczenie checkboxa "Na magazynie (wolne)" przy pozycji zamówienia —
   // RPC dobiera partie FIFO i REALNIE przenosi je na podmagazyn budowy
   // (build_material_lots/build_materials.planned), a dopiero potem
   // pomniejsza ordered_quantity i zeruje available_free_quantity — patrz
   // applyOrderItemFreeStock w lib/data/build-orders.ts. Bez tego "Plan" w
   // Rozliczeniu budowy rozjeżdżałby się z "Przypisano".
-  const applyOrderItemFreeStock = async (itemId: number) => {
+  const applyOrderItemFreeStock = useCallback(async (itemId: number) => {
     try {
       await applyOrderItemFreeStockMutation.mutateAsync({ itemId });
       await Promise.all([
@@ -1834,35 +1846,35 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się uwzględnić wolnego stanu magazynu.");
     }
-  };
-  const markBuildOrderOrdered = async (orderId: number) => {
+  }, [applyOrderItemFreeStockMutation, invalidate]);
+  const markBuildOrderOrdered = useCallback(async (orderId: number) => {
     try {
       await markBuildOrderOrderedMutation.mutateAsync({ orderId });
       await invalidate("buildOrders");
     } catch (error) {
       reportMutationError(error, "Nie udało się oznaczyć zamówienia jako złożone.");
     }
-  };
-  const cancelBuildOrder = async (orderId: number) => {
+  }, [invalidate, markBuildOrderOrderedMutation]);
+  const cancelBuildOrder = useCallback(async (orderId: number) => {
     try {
       await cancelBuildOrderMutation.mutateAsync({ orderId });
       await invalidate("buildOrders");
     } catch (error) {
       reportMutationError(error, "Nie udało się anulować zamówienia.");
     }
-  };
-  const deleteBuildOrder = async (orderId: number) => {
+  }, [cancelBuildOrderMutation, invalidate]);
+  const deleteBuildOrder = useCallback(async (orderId: number) => {
     try {
       await deleteBuildOrderMutation.mutateAsync({ orderId });
       await invalidate("buildOrders");
     } catch (error) {
       reportMutationError(error, "Nie udało się skasować zamówienia.");
     }
-  };
+  }, [deleteBuildOrderMutation, invalidate]);
   // Przyjęcie dostawy: każda pozycja z osobną ilością/ceną dopisuje własną
   // partię (patrz receive_order w 007_faza3_zamowienia.sql) — dlatego po
   // sukcesie odświeżamy też magazyn, nie tylko listę zamówień.
-  const receiveBuildOrder = async (
+  const receiveBuildOrder = useCallback(async (
     orderId: number,
     items: ReceiveBuildOrderItemInput[],
     documentNumber?: string,
@@ -1887,27 +1899,13 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się przyjąć dostawy.");
     }
-  };
-  const saveWorkdayHours = () => {
+  }, [invalidate, receiveBuildOrderMutation]);
+  const saveWorkdayHours = useCallback(() => {
     const hours = Number(workdayHoursInput);
     if (!hours || hours <= 0) return;
     setWorkdayHours(hours);
-  };
-  const saveDailyReport = () => {
-    try {
-      saveDailyReportUnsafe();
-    } catch (error) {
-      // Bez tego wyjątek w tej funkcji (synchronicznej, wołanej wprost z
-      // onPress) kończył się CISZĄ — przycisk "wyglądał" jakby nic nie
-      // robił: żadnego alertu, żadnego requestu, żadnego błędu w konsoli
-      // widocznego dla użytkownika (choć technicznie wyjątek trafiał do
-      // konsoli deweloperskiej, brygadzista jej nie widzi). Teraz zawsze
-      // widać komunikat, nawet jeśli przyczyna wymaga dalszej diagnozy.
-      console.error("[saveDailyReport] wyjątek:", error);
-      reportMutationError(error, "Nie udało się zapisać raportu dziennego.");
-    }
-  };
-  const saveDailyReportUnsafe = () => {
+  }, [workdayHoursInput]);
+  const saveDailyReportUnsafe = useCallback(() => {
     const buildId = activeBuild?.id || selectedBuildId;
     if (activeBuild?.status === "zamknięta") {
       notify(
@@ -2187,8 +2185,39 @@ function useAppDataState(
         }
       });
     }
-  };
-  const saveEmployee = async (newEmployee: NewEmployeeInput, onSaved: () => void) => {
+  }, [
+    activeBuild?.id,
+    activeBuild?.name,
+    activeBuild?.number,
+    activeBuild?.status,
+    assignments,
+    draftExtraCosts,
+    draftKm,
+    draftNote,
+    draftPeople,
+    editingReportId,
+    invalidate,
+    materialBatches,
+    reasons,
+    reportValues,
+    savedReports,
+    selectedBuildId,
+  ]);
+  const saveDailyReport = useCallback(() => {
+    try {
+      saveDailyReportUnsafe();
+    } catch (error) {
+      // Bez tego wyjątek w tej funkcji (synchronicznej, wołanej wprost z
+      // onPress) kończył się CISZĄ — przycisk "wyglądał" jakby nic nie
+      // robił: żadnego alertu, żadnego requestu, żadnego błędu w konsoli
+      // widocznego dla użytkownika (choć technicznie wyjątek trafiał do
+      // konsoli deweloperskiej, brygadzista jej nie widzi). Teraz zawsze
+      // widać komunikat, nawet jeśli przyczyna wymaga dalszej diagnozy.
+      console.error("[saveDailyReport] wyjątek:", error);
+      reportMutationError(error, "Nie udało się zapisać raportu dziennego.");
+    }
+  }, [saveDailyReportUnsafe]);
+  const saveEmployee = useCallback(async (newEmployee: NewEmployeeInput, onSaved: () => void) => {
     if (!newEmployee.name || !newEmployee.role) return;
     // Kartoteka pracowników zna tylko dwie role (Brygadzista/Pracownik) —
     // "Admin" w wyborze na ekranie Administratora to rola aplikacyjna
@@ -2209,11 +2238,11 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać pracownika.");
     }
-  };
+  }, [createEmployeeMutation, invalidate]);
   // Nowa brygada (panel administratora, sekcja Zespół) — lider opcjonalny,
   // skład dopisywany osobno przez addTeamMember (ten sam wzorzec co
   // materiał→partia: nagłówek najpierw, powiązane wiersze potem).
-  const saveTeam = async (newTeam: NewTeamInput, onSaved: () => void) => {
+  const saveTeam = useCallback(async (newTeam: NewTeamInput, onSaved: () => void) => {
     if (!newTeam.name) return;
     try {
       await createTeamMutation.mutateAsync({
@@ -2225,28 +2254,28 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać brygady.");
     }
-  };
-  const addTeamMember = async (teamId: number, employeeId: number) => {
+  }, [createTeamMutation, invalidate]);
+  const addTeamMember = useCallback(async (teamId: number, employeeId: number) => {
     try {
       await addTeamMemberMutation.mutateAsync({ teamId, employeeId });
       await invalidate("teamMembers");
     } catch (error) {
       reportMutationError(error, "Nie udało się dodać pracownika do brygady.");
     }
-  };
-  const removeTeamMember = async (teamId: number, employeeId: number) => {
+  }, [addTeamMemberMutation, invalidate]);
+  const removeTeamMember = useCallback(async (teamId: number, employeeId: number) => {
     try {
       await removeTeamMemberMutation.mutateAsync({ teamId, employeeId });
       await invalidate("teamMembers");
     } catch (error) {
       reportMutationError(error, "Nie udało się usunąć pracownika z brygady.");
     }
-  };
+  }, [invalidate, removeTeamMemberMutation]);
   // Edycja imienia i nazwiska pracownika (panel administratora, HR ->
   // Zespół) — to Admin ustala tożsamość pracownika, nie sam pracownik
   // przez samoobsługę (patrz account-settings-section.tsx, gdzie
   // samoobsługowa "Nazwa wyświetlana" została usunięta).
-  const updateEmployeeName = async (employeeId: string, name: string) => {
+  const updateEmployeeName = useCallback(async (employeeId: string, name: string) => {
     const numericId = Number(employeeId);
     if (Number.isNaN(numericId) || !name.trim()) return;
     try {
@@ -2258,9 +2287,9 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać imienia i nazwiska.");
     }
-  };
+  }, [invalidate, updateEmployeeNameMutation]);
   // Edycja stawki godzinowej istniejącego pracownika (panel administratora).
-  const updateEmployeeRate = async (employeeId: string, rate: number) => {
+  const updateEmployeeRate = useCallback(async (employeeId: string, rate: number) => {
     const numericId = Number(employeeId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2272,10 +2301,10 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać stawki.");
     }
-  };
+  }, [invalidate, updateEmployeeRateMutation]);
   // Edycja stawki kosztowej (koszty budowy) istniejącego pracownika —
   // osobna od stawki wypłatowej powyżej (panel administratora).
-  const updateEmployeeCostRate = async (employeeId: string, rate: number) => {
+  const updateEmployeeCostRate = useCallback(async (employeeId: string, rate: number) => {
     const numericId = Number(employeeId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2287,10 +2316,10 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać stawki kosztowej.");
     }
-  };
+  }, [invalidate, updateEmployeeCostRateMutation]);
   // Archiwizacja/przywrócenie pracownika — ten sam mechanizm co
   // setMaterialActive (panel administratora, sekcja Zespół).
-  const setEmployeeActive = async (employeeId: string, active: boolean) => {
+  const setEmployeeActive = useCallback(async (employeeId: string, active: boolean) => {
     const numericId = Number(employeeId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2302,9 +2331,9 @@ function useAppDataState(
         active ? "Nie udało się przywrócić pracownika." : "Nie udało się zarchiwizować pracownika.",
       );
     }
-  };
+  }, [invalidate, setEmployeeActiveMutation]);
   // Pula dni urlopowych na rok (panel administratora, sekcja HR).
-  const updateEmployeeLeaveDays = async (employeeId: string, days: number) => {
+  const updateEmployeeLeaveDays = useCallback(async (employeeId: string, days: number) => {
     const numericId = Number(employeeId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2316,11 +2345,11 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać puli dni urlopowych.");
     }
-  };
+  }, [invalidate, updateEmployeeLeaveDaysMutation]);
   // Nowy wniosek urlopowy (ekran Pracownika/Brygadzisty) — employeeId
   // wnioskującego dociąga serwer sam z profilu (patrz request_leave w
   // supabase/sql/049_urlopy.sql), więc klient go tu nie podaje.
-  const submitLeaveRequest = async (input: {
+  const submitLeaveRequest = useCallback(async (input: {
     type: LeaveType;
     dateFrom: string;
     dateTo: string;
@@ -2334,11 +2363,11 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się złożyć wniosku urlopowego.");
       return false;
     }
-  };
+  }, [invalidate, requestLeaveMutation]);
   // Edycja własnego, jeszcze nierozpatrzonego wniosku (patrz
   // update_leave_request w supabase/sql/050_edycja_urlopu_i_fix_decyzji.sql)
   // — zamiast zmuszać pracownika do anuluj+złóż nowy przy pomyłce.
-  const updateLeaveRequest = async (
+  const updateLeaveRequest = useCallback(async (
     requestId: string,
     input: { type: LeaveType; dateFrom: string; dateTo: string; note?: string },
   ): Promise<boolean> => {
@@ -2352,8 +2381,8 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać zmian we wniosku.");
       return false;
     }
-  };
-  const cancelLeaveRequest = async (requestId: string) => {
+  }, [invalidate, updateLeaveRequestMutation]);
+  const cancelLeaveRequest = useCallback(async (requestId: string) => {
     const numericId = Number(requestId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2362,10 +2391,10 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się anulować wniosku.");
     }
-  };
+  }, [cancelLeaveRequestMutation, invalidate]);
   // Zatwierdzenie/odrzucenie wniosku (Brygadzista/Admin) — patrz
   // components/screens/team-time-screen.tsx i sekcja HR w admin-screen.tsx.
-  const decideLeaveRequest = async (requestId: string, approve: boolean) => {
+  const decideLeaveRequest = useCallback(async (requestId: string, approve: boolean) => {
     const numericId = Number(requestId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2377,34 +2406,34 @@ function useAppDataState(
         approve ? "Nie udało się zatwierdzić wniosku." : "Nie udało się odrzucić wniosku.",
       );
     }
-  };
+  }, [decideLeaveRequestMutation, invalidate]);
   // Stawka za km (Faza 7) — edytowana wyłącznie przez Admina (RLS), patrz
   // AdminSettingsSection w components/screens/admin-screen.tsx.
-  const updateKmRate = async (rate: number) => {
+  const updateKmRate = useCallback(async (rate: number) => {
     try {
       await updateKmRateMutation.mutateAsync({ kmRate: rate });
       await queryClient.invalidateQueries({ queryKey: ["settings", "get"] });
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać stawki za km.");
     }
-  };
+  }, [queryClient, updateKmRateMutation]);
   // PIN zabezpieczający "Zamknij (i rozlicz) budowę" (patrz builds-screen.tsx)
   // — edytowany wyłącznie przez Admina (RLS), pusty string wyłącza
   // zabezpieczenie (patrz updateCloseBuildPin w lib/data/settings.ts).
-  const updateCloseBuildPinValue = async (pin: string) => {
+  const updateCloseBuildPinValue = useCallback(async (pin: string) => {
     try {
       await updateCloseBuildPinMutation.mutateAsync({ pin });
       await queryClient.invalidateQueries({ queryKey: ["settings", "get"] });
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać PIN-u.");
     }
-  };
+  }, [queryClient, updateCloseBuildPinMutation]);
   // Edycja ceny jednostkowej materiału w magazynie. Nie wpływa wstecz na
   // już przypisane do budów ilości — te mają cenę zamrożoną na Assignment.
   // Ręczna zmiana ceny to korekta pomyłki (np. źle wpisana cena), nie nowy
   // zakup — nadpisuje średnią ważoną wprost, nie tworzy nowej partii.
   // Historia partii (i ich realne ceny) zostaje nienaruszona.
-  const updateMaterialPrice = async (materialId: string, price: number) => {
+  const updateMaterialPrice = useCallback(async (materialId: string, price: number) => {
     const numericId = Number(materialId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2416,10 +2445,10 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać ceny.");
     }
-  };
+  }, [invalidate, updateMaterialPriceMutation]);
   // Edycja indeksu materiałowego — np. korekta literówki albo dopisanie
   // kodu z cennika dostawcy, który przy zakładaniu materiału pominięto.
-  const updateMaterialIndex = async (materialId: string, index: string) => {
+  const updateMaterialIndex = useCallback(async (materialId: string, index: string) => {
     const numericId = Number(materialId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2431,11 +2460,11 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać indeksu.");
     }
-  };
+  }, [invalidate, updateMaterialIndexMutation]);
   // Korekta stanu magazynowego materiału — np. pomyłka przy dodawaniu lub
   // ręczna inwentaryzacja. W górę: dopisuje partię "korekta" po aktualnej
   // średniej cenie. W dół: zdejmuje FIFO tak jak realne zużycie.
-  const updateMaterialStock = async (materialId: string, stock: number) => {
+  const updateMaterialStock = useCallback(async (materialId: string, stock: number) => {
     const numericId = Number(materialId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2447,13 +2476,13 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się skorygować stanu magazynowego.");
     }
-  };
+  }, [adjustMaterialStockMutation, invalidate]);
   // Archiwizacja zamiast usuwania (patrz
   // supabase/sql/038_archiwizacja_materialow.sql) — materiał zostaje w
   // bazie (historia go referencjuje po ID), tylko znika z domyślnej listy
   // Magazynu; dalej podpowiadany przy dopasowaniu nazwy, żeby nie powstał
   // duplikat. Przywrócenie to ta sama funkcja z active=true.
-  const setMaterialActive = async (materialId: string, active: boolean) => {
+  const setMaterialActive = useCallback(async (materialId: string, active: boolean) => {
     const numericId = Number(materialId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2465,7 +2494,7 @@ function useAppDataState(
         active ? "Nie udało się przywrócić materiału." : "Nie udało się zarchiwizować materiału.",
       );
     }
-  };
+  }, [invalidate, setMaterialActiveMutation]);
   // Finalne zatwierdzenie koszyka (patrz OrderCartItem/koszyk lokalny w
   // orders-screen.tsx): tworzy jedno zamówienie w Supabase per pozycja
   // koszyka (material_orders nie ma nagłówka+pozycji), dopiero teraz — nie
@@ -2474,7 +2503,7 @@ function useAppDataState(
   // dostawcy / Usuń) jako jedno zgrupowane zamówienie, mimo że w bazie to
   // nadal osobne wiersze. Zwraca true przy powodzeniu, żeby ekran mógł
   // wyczyścić swój lokalny koszyk.
-  const submitOrderCart = async (orderCart: OrderCartItem[]) => {
+  const submitOrderCart = useCallback(async (orderCart: OrderCartItem[]) => {
     if (orderCart.length === 0) return false;
     const batchId =
       orderCart.length > 1
@@ -2498,11 +2527,11 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się złożyć zamówienia.");
       return false;
     }
-  };
+  }, [createOrderMutation, invalidate]);
   // Jedno tapnięcie z listy braków magazynowych: materiał (i jego jednostka)
   // są już znane, więc od razu tworzymy w pełni powiązane zamówienie —
   // bez przepisywania nazwy/ilości do osobnego formularza.
-  const createOrderFromShortage = async (materialId: string, quantity: number) => {
+  const createOrderFromShortage = useCallback(async (materialId: string, quantity: number) => {
     const material = materials.find((m) => m.id === materialId);
     if (!material || quantity <= 0) return;
     try {
@@ -2516,9 +2545,9 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się złożyć zamówienia.");
     }
-  };
+  }, [createOrderMutation, invalidate, materials]);
   // Krok 2: zamówienie zostało faktycznie złożone u dostawcy.
-  const markOrderOrdered = async (orderId: string) => {
+  const markOrderOrdered = useCallback(async (orderId: string) => {
     const numericId = Number(orderId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2527,11 +2556,11 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się oznaczyć zamówienia jako złożone.");
     }
-  };
+  }, [invalidate, markOrderOrderedMutation]);
   // Kasowanie pomyłkowego/zduplikowanego zamówienia — tylko dopóki jest
   // "do realizacji" (delete_material_order odrzuci inny status, patrz
   // supabase/sql/023_usuwanie_zamowien_material_orders.sql).
-  const deleteOrder = async (orderId: string) => {
+  const deleteOrder = useCallback(async (orderId: string) => {
     const numericId = Number(orderId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2540,13 +2569,13 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się usunąć zamówienia.");
     }
-  };
+  }, [deleteOrderMutation, invalidate]);
   // Krok 3: dostawa dotarła. Ilość jest edytowalna w tym miejscu, bo dostawca
   // może przywieźć inaczej niż zamówiono — to ta wartość trafia na stan
   // magazynowy, nie pierwotnie zamówiona. Jeśli zamówienie nie było powiązane
   // z istniejącym materiałem (dopisane ręcznie), serwer zakłada nową pozycję
   // magazynową zamiast po cichu gubić dostawę.
-  const receiveOrder = async (
+  const receiveOrder = useCallback(async (
     orderId: string,
     receivedQuantity: number,
     receivedUnitPrice?: number,
@@ -2571,8 +2600,8 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się przyjąć dostawy.");
     }
-  };
-  const addPersonToDraft = () => {
+  }, [invalidate, receiveOrderMutation]);
+  const addPersonToDraft = useCallback(() => {
     if (!selectedEmployeeId) {
       notify(
         "Nie wybrano pracownika",
@@ -2618,11 +2647,11 @@ function useAppDataState(
     // rzędu (np. przez pomyłkę) po cichu dodałoby ją ponownie zamiast
     // wymagać nowego, świadomego wyboru.
     setSelectedEmployeeId("");
-  };
+  }, [draftPeople, personEnd, personStart, selectedEmployeeId]);
   // Dodaje od razu WSZYSTKICH pracowników (spoza już dodanych) z aktualnie
   // ustawionymi godzinami OD/DO — żeby przy całej brygadzie pracującej te
   // same godziny nie trzeba było dodawać każdej osoby osobno.
-  const addAllEmployeesToDraft = () => {
+  const addAllEmployeesToDraft = useCallback(() => {
     if (!personStart || !personEnd) return;
     const [sh, sm] = personStart.split(":").map(Number);
     const [eh, em] = personEnd.split(":").map(Number);
@@ -2661,14 +2690,14 @@ function useAppDataState(
       JSON.stringify({ start: personStart, end: personEnd }),
     );
     setSelectedEmployeeId("");
-  };
+  }, [draftPeople, employees, personEnd, personStart]);
   // Usunięcie pomyłkowo dodanej osoby z koszyka raportu (np. zły
   // pracownik albo złe godziny) — analogiczne "✕" jak przy materiałach
   // pomocniczych (removeFromDraft).
-  const removePersonFromDraft = (employeeId: string) => {
+  const removePersonFromDraft = useCallback((employeeId: string) => {
     setDraftPeople(draftPeople.filter((person) => person.employeeId !== employeeId));
-  };
-  const addExtraCostToDraft = (
+  }, [draftPeople]);
+  const addExtraCostToDraft = useCallback((
     label: string,
     amount: number,
     note?: string,
@@ -2678,11 +2707,11 @@ function useAppDataState(
       ...draftExtraCosts,
       { id: `cost-${Date.now()}`, label, amount, note, category },
     ]);
-  };
-  const removeExtraCostFromDraft = (id: string) => {
+  }, [draftExtraCosts]);
+  const removeExtraCostFromDraft = useCallback((id: string) => {
     setDraftExtraCosts(draftExtraCosts.filter((c) => c.id !== id));
-  };
-  const openSavedReport = (reportId: string) => {
+  }, [draftExtraCosts]);
+  const openSavedReport = useCallback((reportId: string) => {
     const report = savedReports.find((item) => item.id === reportId);
     if (!report) return;
     setEditingReportId(report.id);
@@ -2696,7 +2725,7 @@ function useAppDataState(
     setReportSaved(false);
     setReportStep(1);
     setTab("report");
-  };
+  }, [savedReports]);
   // Start "od zera": wcześniej przycisk "+ Nowy raport" (saved-reports-
   // screen.tsx) tylko przełączał zakładkę na "report" bez czyszczenia
   // niczego. Dla PIERWSZEGO raportu w sesji działało to przypadkiem (pola
@@ -2718,10 +2747,10 @@ function useAppDataState(
   // (`build_materials.used = used + delta`). Dlatego nowy raport startuje
   // z pustym polem (stepper i tak pokazuje "0" jako fallback), a nie od
   // `a.used`, jak wcześniej.
-  const getReportDefaults = (_buildId: string): Record<string, string> => {
+  const getReportDefaults = useCallback((_buildId: string): Record<string, string> => {
     return {};
-  };
-  const startNewReport = () => {
+  }, []);
+  const startNewReport = useCallback(() => {
     setEditingReportId(null);
     setReportValues(selectedBuildId ? getReportDefaults(selectedBuildId) : {});
     setReasons({});
@@ -2734,8 +2763,8 @@ function useAppDataState(
     setHrSaved(false);
     setReportStatus("roboczy");
     setTab("report");
-  };
-  const approveReport = (reportId: string) => {
+  }, [getReportDefaults, selectedBuildId]);
+  const approveReport = useCallback((reportId: string) => {
     const report = savedReports.find((r) => r.id === reportId);
     setSavedReports((previous) =>
       previous.map((report) =>
@@ -2777,12 +2806,12 @@ function useAppDataState(
         },
       },
     );
-  };
+  }, [approveReportMutation, queryClient, savedReports]);
   // Zamyka budowę i zapisuje snapshot finalnego rozliczenia (godziny,
   // materiały plan/zużycie, koszty dodatkowe). Wymaga, żeby wszystkie
   // raporty tej budowy były już zatwierdzone — inaczej rozliczenie
   // opierałoby się na niezweryfikowanych danych.
-  const closeBuild = async (buildId: string, returns: CloseBuildReturnItem[] = []) => {
+  const closeBuild = useCallback(async (buildId: string, returns: CloseBuildReturnItem[] = []) => {
     const build = builds.find((b) => b.id === buildId);
     if (!build || build.status === "zamknięta") return;
     const numericId = Number(buildId);
@@ -2800,12 +2829,12 @@ function useAppDataState(
         "Nie udało się zamknąć budowy — sprawdź, czy wszystkie raporty są zatwierdzone.",
       );
     }
-  };
+  }, [builds, closeBuildMutation, invalidate, queryClient]);
   // Wznawia zamkniętą budowę: przywraca status "aktywna". Zapisany
   // snapshot rozliczenia w Supabase zostaje (nadpisze go dopiero kolejne
   // `closeBuild`), więc jeśli budowa zostanie zamknięta ponownie bez
   // zmian, ostatnie rozliczenie wciąż jest dostępne do wglądu.
-  const reopenBuild = async (buildId: string) => {
+  const reopenBuild = useCallback(async (buildId: string) => {
     const numericId = Number(buildId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2814,11 +2843,11 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się wznowić budowy.");
     }
-  };
+  }, [queryClient, reopenBuildMutation]);
   // Zapisuje/zmienia link do folderu ze zdjęciami budowy (np. Google
   // Drive). Dostępne z ekranu Budowy (Admin) i z ekranu Raportu
   // (Brygadzista) — każdy z dostępem do danej budowy.
-  const updateBuildPhotosUrl = async (buildId: string, photosUrl: string) => {
+  const updateBuildPhotosUrl = useCallback(async (buildId: string, photosUrl: string) => {
     const numericId = Number(buildId);
     if (Number.isNaN(numericId)) return;
     try {
@@ -2830,8 +2859,8 @@ function useAppDataState(
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać linku do zdjęć.");
     }
-  };
-  return {
+  }, [queryClient, updateBuildPhotosUrlMutation]);
+  return useMemo(() => ({
     tab,
     devRole,
     // Prawdziwa rola z profilu Supabase (profiles.role), niezależna od
@@ -2997,7 +3026,129 @@ function useAppDataState(
     removeExtraCostFromDraft,
     reportsPendingApprovalCount,
     reportsNeedingFixCount,
-  };
+  }), [
+    activeBuild,
+    addAllEmployeesToDraft,
+    addExtraCostToDraft,
+    addMaterialToDraft,
+    addPersonToDraft,
+    addTeamMember,
+    addToDraft,
+    adminComment,
+    applyOrderItemFreeStock,
+    approveReport,
+    assignBuildTechnology,
+    assignments,
+    belowMinimumMaterials,
+    buildAssignments,
+    buildMaterialActualCost,
+    buildMaterialLotsQuery.data,
+    buildMaterialPlans,
+    buildMaterialReturnsQuery.data,
+    buildOrdersQuery.data,
+    buildStageStatusesQuery.data,
+    buildTechnologySnapshotsQuery.data,
+    builds,
+    buildsView,
+    cancelBuildOrder,
+    cancelLeaveRequest,
+    closeBuild,
+    closeBuildPin,
+    commitAssignments,
+    completeBuildStage,
+    createOrderFromShortage,
+    decideLeaveRequest,
+    deleteBuildOrder,
+    deleteOrder,
+    devRole,
+    dismissShortage,
+    draftAssignments,
+    draftExtraCosts,
+    draftKm,
+    draftNote,
+    draftPeople,
+    editingReportId,
+    employeePickerOpen,
+    employees,
+    generateOrderFromPlan,
+    getReportDefaults,
+    hrSaved,
+    initialRole,
+    kmRate,
+    leaveRequests,
+    markBuildOrderOrdered,
+    markOrderOrdered,
+    materialBatches,
+    materials,
+    myEmployeeId,
+    myProfileId,
+    openSavedReport,
+    orders,
+    personEnd,
+    personStart,
+    picker,
+    pickerQuery,
+    plannedAmount,
+    reasons,
+    receiveBuildOrder,
+    receiveOrder,
+    removeBuildAssignment,
+    removeExtraCostFromDraft,
+    removeFromDraft,
+    removePersonFromDraft,
+    removeTeamMember,
+    reopenBuild,
+    reopenBuildStage,
+    reportSaved,
+    reportStatus,
+    reportStep,
+    reportValues,
+    reportsNeedingFixCount,
+    reportsPendingApprovalCount,
+    saveBuild,
+    saveDailyReport,
+    saveEmployee,
+    saveMaterial,
+    saveTeam,
+    saveWorkdayHours,
+    savedReports,
+    selectedBatchId,
+    selectedBuildId,
+    selectedEmployeeId,
+    selectedMaterialId,
+    setEmployeeActive,
+    setMaterialActive,
+    shortages,
+    showAssignment,
+    startNewReport,
+    submitLeaveRequest,
+    submitOrderCart,
+    tab,
+    teamMembers,
+    teams,
+    technologiesQuery.data,
+    timeEntries,
+    timePicker,
+    updateBuildBasicInfo,
+    updateBuildLaborPlan,
+    updateBuildPhotosUrl,
+    updateCloseBuildPinValue,
+    updateDraftQuantity,
+    updateEmployeeCostRate,
+    updateEmployeeLeaveDays,
+    updateEmployeeName,
+    updateEmployeeRate,
+    updateKmRate,
+    updateLeaveRequest,
+    updateMaterialIndex,
+    updateMaterialPrice,
+    updateMaterialStock,
+    updateOrderItemQuantity,
+    warehouseBatches,
+    warehouseView,
+    workdayHours,
+    workdayHoursInput,
+  ]);
 }
 
 type AppData = ReturnType<typeof useAppDataState>;

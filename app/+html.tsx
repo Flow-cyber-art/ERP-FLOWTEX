@@ -21,6 +21,10 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
         />
 
+        {/* Bez tego przeglądarka w karcie pokazuje samą domenę (np.
+            "erp.flowtex.pl") zamiast nazwy aplikacji. */}
+        <title>ERP FLOWTEX</title>
+
         {/* Manifest — bez niego iOS nie potraktuje strony jako PWA. */}
         <link rel="manifest" href="/manifest.json" />
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { DateField } from "@/components/date-field";
@@ -315,21 +315,38 @@ export function BuildsScreen() {
   // lista roboczych budów nie rosła bezterminowo o rozliczone pozycje.
   // Stan (buildsView) żyje w kontekście, bo na desktopie steruje nim
   // osobna pozycja w sidebarze (index.tsx), a nie ten ekran.
-  const activeBuilds = builds.filter((b) => b.status !== "zamknięta");
-  const archivedBuilds = builds
-    .filter((b) => b.status === "zamknięta")
-    .sort((x, y) =>
-      (y.settlement?.closedAt || "").localeCompare(x.settlement?.closedAt || ""),
-    );
+  // Memoizowane: bez tego cała lista budów (filtr aktywne/archiwum + sort +
+  // wyszukiwarka) liczyła się od zera przy KAŻDYM renderze ekranu — także
+  // przy rozwinięciu jednego akordeonu czy wpisaniu znaku w zupełnie innym
+  // formularzu na tej samej karcie. `builds`/`buildsView` zmieniają się
+  // rzadko (dane z serwera, przełącznik widoku), więc przeliczanie tylko
+  // gdy faktycznie się zmienią jest bezpieczne i nic nie psuje.
+  const activeBuilds = useMemo(
+    () => builds.filter((b) => b.status !== "zamknięta"),
+    [builds],
+  );
+  const archivedBuilds = useMemo(
+    () =>
+      builds
+        .filter((b) => b.status === "zamknięta")
+        .sort((x, y) =>
+          (y.settlement?.closedAt || "").localeCompare(x.settlement?.closedAt || ""),
+        ),
+    [builds],
+  );
   const buildsForView = buildsView === "active" ? activeBuilds : archivedBuilds;
   const buildQueryNormalized = buildQuery.trim().toLowerCase();
-  const visibleBuilds = buildQueryNormalized
-    ? buildsForView.filter(
-        (b) =>
-          b.number.toLowerCase().includes(buildQueryNormalized) ||
-          b.name.toLowerCase().includes(buildQueryNormalized),
-      )
-    : buildsForView;
+  const visibleBuilds = useMemo(
+    () =>
+      buildQueryNormalized
+        ? buildsForView.filter(
+            (b) =>
+              b.number.toLowerCase().includes(buildQueryNormalized) ||
+              b.name.toLowerCase().includes(buildQueryNormalized),
+          )
+        : buildsForView,
+    [buildsForView, buildQueryNormalized],
+  );
 
   return (
     <>

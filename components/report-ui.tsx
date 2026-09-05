@@ -428,6 +428,14 @@ const Button = ({
 // intrinsic width ~177px i min-width: auto. Bez minWidth: 0 pole ustawione
 // przez flex: 1 / flex: 2 NIE MOŻE się zwężyć i ucina placeholder
 // (np. "Nazwa kosztu (np. paliwo)") albo rozpycha cały wiersz.
+// Pola liczbowe (PIN, km, kwota, grubość...) mają zwykle domyślną wartość
+// typu "0" — bez zaznaczenia jej całej po kliknięciu kursor ląduje czasem
+// przed, czasem po tej cyfrze (zależnie od przeglądarki/platformy), więc
+// pierwszy wpisany znak dopisuje się do "0" zamiast go zastąpić. Dla pól
+// numerycznych zaznaczamy więc całą zawartość na focus, chyba że wywołanie
+// jawnie to wyłączy (`selectTextOnFocus={false}`).
+const NUMERIC_KEYBOARD_TYPES = new Set(["numeric", "decimal-pad", "number-pad"]);
+
 const Field = ({
   value,
   onChangeText,
@@ -445,6 +453,7 @@ const Field = ({
   // wszystkich pozostałych, jednowierszowych użyć tego komponentu.
   multiline,
   numberOfLines,
+  selectTextOnFocus,
 }: any) => (
   <TextInput
     value={value}
@@ -459,6 +468,7 @@ const Field = ({
     secureTextEntry={secureTextEntry}
     multiline={multiline}
     numberOfLines={numberOfLines}
+    selectTextOnFocus={selectTextOnFocus ?? NUMERIC_KEYBOARD_TYPES.has(keyboardType)}
     style={[
       {
         backgroundColor: COLORS.background,
@@ -559,6 +569,10 @@ const QuantityStepper = ({
         // niepełnej ilości (np. 2.5 l). Przecinek normalizujemy do kropki
         // przed przekazaniem dalej, bo cała reszta apki parsuje Number(x).
         keyboardType="decimal-pad"
+        // Zaznacz całą wartość (np. domyślne "0") po kliknięciu, żeby
+        // pierwsza wpisana cyfra ją zastępowała zamiast dopisywać się przed
+        // albo po niej.
+        selectTextOnFocus
         value={value}
         onChangeText={(v: string) => onChangeText(v.replace(",", "."))}
         style={{

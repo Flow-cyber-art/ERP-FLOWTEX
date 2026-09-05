@@ -253,7 +253,11 @@ export function PayrollSection() {
   th{text-align:left;color:#555;font-size:11px;text-transform:uppercase}
   .num{text-align:right}
   tfoot td{font-weight:700;border-top:2px solid #111;border-bottom:none}
+  .close-btn{position:fixed;top:12px;right:12px;width:32px;height:32px;border-radius:16px;
+    border:1px solid #ddd;background:#fff;color:#111;font-size:16px;line-height:1;cursor:pointer}
+  @media print{.close-btn{display:none}}
 </style></head><body>
+  <button class="close-btn" onclick="window.close()" aria-label="Zamknij" title="Zamknij">&times;</button>
   <h1>Lista płac</h1>
   <p>Okres: ${escapeHtml(rangeLabel)}</p>
   <table>
@@ -262,6 +266,11 @@ export function PayrollSection() {
     <tfoot><tr><td>RAZEM</td><td class="num">${totals.workedDays}</td><td class="num">${totals.leaveDays}</td><td class="num">${formatPLN(totals.payout)}</td></tr></tfoot>
   </table>
 </body></html>`;
+    // Ta strona otwiera się w nowej karcie/oknie przez window.open — na
+    // urządzeniach/przeglądarkach bez widocznego paska kart (np. WebView w
+    // apce mobilnej) użytkownik nie miał wcześniej ŻADNEGO sposobu, żeby ją
+    // zamknąć po wyświetleniu (nie było przycisku "X" w ogóle). Stąd
+    // powyższy przycisk .close-btn wywołujący window.close().
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       notify(

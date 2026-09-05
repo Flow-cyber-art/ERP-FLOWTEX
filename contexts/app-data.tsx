@@ -64,7 +64,6 @@ import {
   requestLeave as requestLeaveRemote,
   updateEmployeeLeaveDays as updateEmployeeLeaveDaysRemote,
   updateLeaveRequest as updateLeaveRequestRemote,
-  type LeaveRequestRow,
   type LeaveType,
 } from "@/lib/data/leave";
 import {
@@ -80,12 +79,7 @@ import {
 import { generateReportClientNote } from "@/lib/data/ai-summary";
 import { useRegisterPushToken } from "@/lib/notifications/use-register-push-token";
 import { useRegisterWebPush } from "@/lib/notifications/use-register-web-push";
-import {
-  listReports,
-  submitDailyReport,
-  updateReportStatus,
-  type ReportRow,
-} from "@/lib/data/reports";
+import { listReports, updateReportStatus, type ReportRow } from "@/lib/data/reports";
 import {
   getSettings,
   updateKmRate as updateKmRateRemote,
@@ -122,6 +116,24 @@ import {
   type BuildOrderRow,
   type ReceiveBuildOrderItemInput,
 } from "@/lib/data/build-orders";
+
+import {
+  todayISO,
+  initialMaterials,
+  initialBuilds,
+  initialAssignments,
+  initialEmployees,
+  initialTimeEntries,
+  type MaterialOrder,
+  type MaterialBatch,
+  type ExtraCost,
+  type Build,
+  type Material,
+  type Assignment,
+  type Employee,
+  confirmAction,
+  notify,
+} from "@/components/report-ui";
 export type SavedReportStatus = "submitted" | "approved";
 
 export type NewMaterialInput = {
@@ -211,25 +223,6 @@ export type SavedReport = {
   // podsumowanie_ai.sql.
   clientNote?: string | null;
 };
-
-import {
-  todayISO,
-  initialMaterials,
-  initialBuilds,
-  initialAssignments,
-  initialEmployees,
-  initialTimeEntries,
-  type MaterialOrder,
-  type MaterialBatch,
-  type ExtraCost,
-  type Build,
-  type BuildSettlement,
-  type Material,
-  type Assignment,
-  type Employee,
-  confirmAction,
-  notify,
-} from "@/components/report-ui";
 
 // Mapuje wiersz z bazy (reports + zagnieżdżone report_materials/
 // report_people/report_extra_costs/builds, patrz lib/data/reports.ts)
@@ -358,43 +351,7 @@ function useAppDataState(
       const value = rows.reduce((sum, b) => sum + b.quantity * b.unitPrice, 0);
       return { ...m, stock, unitPrice: stock > 0 ? value / stock : 0 };
     });
-  const addBatchPure = (
-    batches: MaterialBatch[],
-    batch: Omit<MaterialBatch, "id">,
-  ) => [
-    ...batches,
-    {
-      ...batch,
-      id: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    },
-  ];
-  // Zdejmuje ilość metodą FIFO — najpierw z najstarszych partii, żeby
-  // koszt zużycia odzwierciedlał realną cenę zakupu tego towaru.
-  const consumeFIFOPure = (
-    batches: MaterialBatch[],
-    materialId: string,
-    amount: number,
-  ) => {
-    let remaining = amount;
-    const sorted = batches
-      .filter((b) => b.materialId === materialId)
-      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id));
-    const consumedIds: Record<string, number> = {};
-    for (const b of sorted) {
-      if (remaining <= 0) break;
-      const take = Math.min(b.quantity, remaining);
-      consumedIds[b.id] = take;
-      remaining -= take;
-    }
-    return batches
-      .map((b) =>
-        consumedIds[b.id] !== undefined
-          ? { ...b, quantity: b.quantity - consumedIds[b.id] }
-          : b,
-      )
-      .filter((b) => b.quantity > 0.0001);
-  };
-  // Jak consumeFIFOPure, ale dodatkowo zwraca faktyczny koszt (PLN) tego
+  // Jak dawne consumeFIFOPure (usunięte — nieużywane), ale dodatkowo zwraca faktyczny koszt (PLN) tego
   // konkretnego zdjęcia — sumę quantity×unitPrice partii, z których
   // realnie zeszła ilość. To jest podstawa realnego kosztu budowy,
   // niezależna od jednej uśrednionej ceny materiału.
@@ -424,22 +381,6 @@ function useAppDataState(
       )
       .filter((b) => b.quantity > 0.0001);
     return { batches: nextBatches, cost };
-  };
-  // (przyjęcie zamówienia, ręczna korekta stanu — nie ma ryzyka utraty
-  // zmian z kilku wywołań pod rząd).
-  const addMaterialBatch = (batch: Omit<MaterialBatch, "id">) => {
-    const nextBatches = addBatchPure(materialBatches, batch);
-    setMaterialBatches(nextBatches);
-    setMaterials((prev) =>
-      recalcMaterialsFromBatches(prev, nextBatches, new Set([batch.materialId])),
-    );
-  };
-  const consumeMaterialBatchesFIFO = (materialId: string, amount: number) => {
-    const nextBatches = consumeFIFOPure(materialBatches, materialId, amount);
-    setMaterialBatches(nextBatches);
-    setMaterials((prev) =>
-      recalcMaterialsFromBatches(prev, nextBatches, new Set([materialId])),
-    );
   };
   const [builds, setBuilds] = useState(initialBuilds);
   // Skumulowany, RZECZYWISTY koszt materiału zużytego na danej budowie —
@@ -772,7 +713,7 @@ function useAppDataState(
         };
       }),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [buildsQuery.data]);
 
   useEffect(() => {
@@ -806,7 +747,7 @@ function useAppDataState(
           source: "stan początkowy",
         })),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [materialsQuery.data]);
 
   useEffect(() => {
@@ -824,7 +765,7 @@ function useAppDataState(
         active: e.active ?? true,
       })),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [employeesQuery.data]);
 
   // `time_entries` — godziny pracy per pracownik/budowa. Wstawiane przez
@@ -857,7 +798,7 @@ function useAppDataState(
         costRate: t.costRate != null ? Number(t.costRate) : null,
       })),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [timeEntriesQuery.data]);
 
   const ordersQuery = useQuery({
@@ -889,7 +830,7 @@ function useAppDataState(
         batchId: o.batchId ?? undefined,
       })),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [ordersQuery.data]);
 
   const buildMaterialsQuery = useQuery({
@@ -911,7 +852,7 @@ function useAppDataState(
         actualCost: Number(a.actualCost),
       })),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [buildMaterialsQuery.data]);
 
   // Raporty: dawniej WYŁĄCZNIE lokalny stan (savedReports), nigdy nie
@@ -961,7 +902,7 @@ function useAppDataState(
         b.updatedAt.localeCompare(a.updatedAt),
       );
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [reportsQuery.data]);
   // Do plakietek nawigacji (patrz app/(tabs)/index.tsx): ile raportów
   // czeka na admina, ile wróciło "do poprawy" do brygadzisty. Liczone z

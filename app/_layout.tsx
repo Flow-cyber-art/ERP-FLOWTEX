@@ -63,6 +63,26 @@ export default function RootLayout() {
     registerServiceWorker();
   }, []);
 
+  // WEB-ONLY: app/+html.tsx ma statyczny <title>ERP FLOWTEX</title>, ale
+  // expo-router/react-navigation nadpisuje document.title przy starcie i
+  // przy każdej nawigacji na podstawie nazwy aktualnej trasy — jeśli trasa
+  // nie ma jawnego tytułu, potrafi ustawić pusty string, przez co
+  // przeglądarka pokazuje w karcie samą domenę zamiast tytułu. Pilnujemy
+  // więc tytułu na stałe przez MutationObserver, niezależnie od tego, co
+  // (i kiedy) ustawi nawigacja.
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const APP_TITLE = "ERP FLOWTEX";
+    document.title = APP_TITLE;
+    const titleEl = document.querySelector("title");
+    if (!titleEl) return;
+    const observer = new MutationObserver(() => {
+      if (document.title !== APP_TITLE) document.title = APP_TITLE;
+    });
+    observer.observe(titleEl, { childList: true });
+    return () => observer.disconnect();
+  }, []);
+
   // WEB-ONLY: wymusza przeliczenie wysokości viewportu po starcie.
   // Bez tego w standalone PWA layout zostaje z wysokością zapamiętaną
   // przy hydratacji (dolny pasek nawigacji wisi w połowie ekranu)

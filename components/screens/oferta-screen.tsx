@@ -20,6 +20,7 @@ import {
   type OfferRow,
 } from "@/lib/data/offers";
 import { buildOfferPdf, type OfferPdfItem, type OfferPdfCustomItem } from "@/lib/pdf/build-offer-pdf";
+import { searchGusCompanies, type GusCompanyMatch } from "@/lib/data/gus";
 
 /**
  * Wizard Ofert — Faza 0 (pilotaż). Trasa: app/oferta.tsx (/oferta).
@@ -93,12 +94,14 @@ function OField({
   placeholder,
   keyboardType,
   style,
+  onFocus,
 }: {
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
   keyboardType?: "default" | "decimal-pad" | "phone-pad" | "email-address";
   style?: object;
+  onFocus?: () => void;
 }) {
   return (
     <TextInput
@@ -107,6 +110,7 @@ function OField({
       placeholder={placeholder}
       placeholderTextColor={OC.inkFaint}
       keyboardType={keyboardType}
+      onFocus={onFocus}
       style={[
         {
           backgroundColor: OC.bg,
@@ -307,6 +311,13 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
 
   const [client, setClient] = useState<ClientState>(blankClient);
   const [offerId, setOfferId] = useState<number | null>(null);
+  const [gusSuggestions, setGusSuggestions] = useState<GusCompanyMatch[]>([]);
+  const [gusOpen, setGusOpen] = useState(false);
+  const [gusLoading, setGusLoading] = useState(false);
+  // Blokuje ponowne wyszukiwanie tuż po wybraniu podpowiedzi (zmiana
+  // companyName przez samo wypełnienie pola nie powinna od razu otworzyć
+  // listy z powrotem).
+  const [gusSuppressNextSearch, setGusSuppressNextSearch] = useState(false);
   const [discountPercent, setDiscountPercent] = useState("0");
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [lines, setLines] = useState<Record<number, LineState>>({});
@@ -378,6 +389,48 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     const draft: Draft = { step, client, offerId, discountPercent, selected, lines, customItems };
     AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft)).catch(() => {});
   }, [draftLoaded, step, client, offerId, discountPercent, selected, lines, customItems]);
+
+  // Autouzupełnianie firmy z rejestru GUS REGON (edge function
+  // gus-search-company) — po min. 3 znakach, z odczekaniem 400ms na
+  // przerwę w pisaniu, żeby nie odpalać zapytania na każdy klawisz.
+  useEffect(() => {
+    if (gusSuppressNextSearch) {
+      setGusSuppressNextSearch(false);
+      return;
+    }
+    const query = client.companyName.trim();
+    if (query.length < 3) {
+      setGusSuggestions([]);
+      setGusOpen(false);
+      return;
+    }
+    setGusLoading(true);
+    const timer = setTimeout(() => {
+      searchGusCompanies(query)
+        .then((results) => {
+          setGusSuggestions(results);
+          setGusOpen(results.length > 0);
+        })
+        .catch(() => {
+          setGusSuggestions([]);
+          setGusOpen(false);
+        })
+        .finally(() => setGusLoading(false));
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.companyName]);
+
+  function pickGusCompany(match: GusCompanyMatch) {
+    setGusSuppressNextSearch(true);
+    setGusOpen(false);
+    setClient((prev) => ({
+      ...prev,
+      companyName: match.name,
+      nip: match.nip ?? prev.nip,
+      address: match.address ?? prev.address,
+    }));
+  }
 
   const canWrite = profile.role === "Admin";
 
@@ -738,9 +791,54 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
 
         {step === 1 && (
           <>
-            <OCard>
+            <OCard style={{ zIndex: 20, overflow: "visible" }}>
               <OLabel>Firma / kontrahent</OLabel>
-              <OField placeholder="Nazwa firmy *" value={client.companyName} onChangeText={(v) => setClient({ ...client, companyName: v })} />
+              <View style={{ position: "relative", zIndex: 20 }}>
+                <OField
+                  placeholder="Nazwa firmy * — wpisz min. 3 znaki, podpowie GUS"
+                  value={client.companyName}
+                  onChangeText={(v) => setClient({ ...client, companyName: v })}
+                  onFocus={() => gusSuggestions.length > 0 && setGusOpen(true)}
+                />
+                {gusLoading && (
+                  <View style={{ position: "absolute", right: 10, top: 10 }}>
+                    <ActivityIndicator size="small" color={OC.accent} />
+                  </View>
+                )}
+                {gusOpen && gusSuggestions.length > 0 && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      right: 0,
+                      marginTop: 4,
+                      backgroundColor: OC.surface,
+                      borderWidth: 1,
+                      borderColor: OC.borderStrong,
+                      borderRadius: RADIUS,
+                      maxHeight: 260,
+                      overflow: "hidden",
+                      zIndex: 30,
+                    }}
+                  >
+                    <ScrollView keyboardShouldPersistTaps="handled">
+                      {gusSuggestions.map((s, i) => (
+                        <Pressable
+                          key={`${s.nip ?? s.name}-${i}`}
+                          onPress={() => pickGusCompany(s)}
+                          style={{ padding: 11, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: OC.border }}
+                        >
+                          <Text style={{ color: OC.ink, fontWeight: "600", fontSize: 13 }}>{s.name}</Text>
+                          <Text style={{ color: OC.inkMuted, fontSize: 11, marginTop: 2 }}>
+                            {[s.nip ? `NIP ${s.nip}` : null, s.address].filter(Boolean).join(" — ") || "brak danych adresowych"}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
               <OField placeholder="NIP" value={client.nip} onChangeText={(v) => setClient({ ...client, nip: v })} style={{ marginTop: 10 }} />
               <OField placeholder="Adres siedziby" value={client.address} onChangeText={(v) => setClient({ ...client, address: v })} style={{ marginTop: 10 }} />
             </OCard>

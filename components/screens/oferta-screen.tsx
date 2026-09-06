@@ -9,6 +9,7 @@ import {
   listPilotTechnologies,
   listTechnologyDocumentPaths,
   getTechnologyPdfSignedUrl,
+  saveDefaultUnitPrices,
   searchOffers,
   getOfferWithItems,
   saveOffer,
@@ -381,7 +382,14 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   const canWrite = profile.role === "Admin";
 
   function ensureLine(techId: number) {
-    setLines((prev) => (prev[techId] ? prev : { ...prev, [techId]: { qty: "0", unitPrice: "0", materialCosts: {} } }));
+    setLines((prev) => {
+      if (prev[techId]) return prev;
+      // Podpowiedź ceny/j.m. z ostatniej oferty, w której użyto tej
+      // technologii (offer_pilot_technologies.default_unit_price) —
+      // edytowalna, nie wymuszona; patrz saveDefaultUnitPrices w handleSave.
+      const defaultUnitPrice = pilotTechnologies?.find((t) => t.id === techId)?.defaultUnitPrice;
+      return { ...prev, [techId]: { qty: "0", unitPrice: defaultUnitPrice ?? "0", materialCosts: {} } };
+    });
   }
 
   function toggleTechnology(techId: number) {
@@ -689,6 +697,11 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
         items,
       );
       setOfferId(id);
+      // Ceny/j.m. z tej oferty stają się podpowiedzią na następną — patrz
+      // ensureLine wyżej i saveDefaultUnitPrices w lib/data/offers.ts.
+      await saveDefaultUnitPrices(
+        selectedTechnologies.map((tech) => ({ technologyId: tech.id, unitPrice: num(lines[tech.id]?.unitPrice) })),
+      ).catch(() => {});
       notify("Zapisano", `Oferta ${client.ref} zapisana. Otwieram podgląd...`);
       await exportOfferPdf();
     } catch (e) {

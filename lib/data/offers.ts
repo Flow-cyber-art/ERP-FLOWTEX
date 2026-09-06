@@ -55,11 +55,16 @@ export type OfferPilotTechnologyRow = {
   description: string | null;
   workPhases: string[] | null;
   investorBenefits: string[] | null;
+  // Cena sprzedaży/j.m. z ostatniej oferty, w której użyto tej
+  // technologii — podpowiedź w kroku 4, edytowalna, patrz
+  // 100_faza0_domyslna_cena_sprzedazy.sql i saveDefaultUnitPrices niżej.
+  defaultUnitPrice: string | null;
   technology_stages: OfferPilotStageRow[];
 };
 
 const PILOT_TECH_SELECT =
-  "technology_id, categoryName:category_name, unit, technologies(id, code, name, company, " +
+  "technology_id, categoryName:category_name, unit, defaultUnitPrice:default_unit_price, " +
+  "technologies(id, code, name, company, " +
   "description, workPhases:work_phases, investorBenefits:investor_benefits, " +
   "technology_stages(id, name, orderIndex:order_index, " +
   "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, " +
@@ -85,6 +90,7 @@ export async function listPilotTechnologies(): Promise<OfferPilotTechnologyRow[]
         description: t.description ?? null,
         workPhases: t.workPhases ?? null,
         investorBenefits: t.investorBenefits ?? null,
+        defaultUnitPrice: row.defaultUnitPrice !== null && row.defaultUnitPrice !== undefined ? String(row.defaultUnitPrice) : null,
         technology_stages: (t.technology_stages ?? []).map((s: any) => ({
           id: s.id,
           name: s.name,
@@ -124,6 +130,21 @@ export async function getTechnologyPdfSignedUrl(storagePath: string): Promise<st
   const { data, error } = await supabase.storage.from(TECHNOLOGY_DOCUMENTS_BUCKET).createSignedUrl(storagePath, 3600);
   if (error) throw new Error(error.message);
   return data.signedUrl;
+}
+
+/**
+ * Zapamiętuje cenę sprzedaży/j.m. użytą przy zapisie oferty jako
+ * podpowiedź na następną ofertę (offer_pilot_technologies.default_unit_price)
+ * — patrz 100_faza0_domyslna_cena_sprzedazy.sql. Osobne od zapisu samej
+ * oferty: to nie jest historyczna cena TEJ oferty (ta zostaje
+ * nienaruszona w offer_items), tylko globalna podpowiedź per technologia.
+ */
+export async function saveDefaultUnitPrices(prices: { technologyId: number; unitPrice: number }[]): Promise<void> {
+  await Promise.all(
+    prices
+      .filter((p) => p.unitPrice > 0)
+      .map((p) => supabase.from("offer_pilot_technologies").update({ default_unit_price: p.unitPrice }).eq("technology_id", p.technologyId)),
+  );
 }
 
 /** Ustawia listę technologii dopuszczonych na pilotaż (Admin only — patrz RLS write_admin). */

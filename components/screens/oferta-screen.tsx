@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -7,6 +7,8 @@ import { formatPLN, notify, confirmAction } from "@/components/report-ui";
 import type { Profile } from "@/lib/data/auth";
 import {
   listPilotTechnologies,
+  listTechnologyDocumentPaths,
+  getTechnologyPdfSignedUrl,
   searchOffers,
   getOfferWithItems,
   saveOffer,
@@ -295,6 +297,8 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   const [step, setStep] = useState(1);
   const [pilotTechnologies, setPilotTechnologies] = useState<OfferPilotTechnologyRow[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [docPaths, setDocPaths] = useState<Record<number, string>>({});
+  const [openingPdfId, setOpeningPdfId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
 
@@ -314,7 +318,31 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     listPilotTechnologies()
       .then(setPilotTechnologies)
       .catch((e) => setLoadError(e instanceof Error ? e.message : String(e)));
+    // Ścieżki PDF-ów kart technicznych — osobny, cichy fetch: brak
+    // podpiętego pliku dla danej technologii nie jest błędem (Admin
+    // wgrywa je stopniowo), więc nie ustawiamy tu loadError.
+    listTechnologyDocumentPaths()
+      .then(setDocPaths)
+      .catch(() => {});
   }, []);
+
+  async function openTechnologyPdf(techId: number) {
+    const path = docPaths[techId];
+    if (!path) return;
+    setOpeningPdfId(techId);
+    try {
+      const url = await getTechnologyPdfSignedUrl(path);
+      if (Platform.OS === "web") {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (e) {
+      notify("Nie udało się otworzyć karty PDF", e instanceof Error ? e.message : String(e));
+    } finally {
+      setOpeningPdfId(null);
+    }
+  }
 
   // Wczytanie roboczej wersji z poprzedniej wizyty (raz, przy montowaniu).
   useEffect(() => {
@@ -759,6 +787,23 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                             <Text style={{ color: OC.accentStrong, fontSize: 11.5, fontWeight: "700", width: 84 }}>{tech.code}</Text>
                             <Text style={{ color: OC.ink, flex: 1 }}>{tech.name}</Text>
                             <Text style={{ color: OC.inkMuted, fontSize: 10, textTransform: "uppercase" }}>{unitLabel(tech)}</Text>
+                            {docPaths[tech.id] && (
+                              <Pressable
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  openTechnologyPdf(tech.id);
+                                }}
+                                hitSlop={8}
+                                style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: OC.borderStrong, borderRadius: RADIUS }}
+                              >
+                                {openingPdfId === tech.id ? (
+                                  <ActivityIndicator size="small" color={OC.accent} />
+                                ) : (
+                                  <MaterialIcons name="picture-as-pdf" size={15} color={OC.accentStrong} />
+                                )}
+                                <Text style={{ color: OC.accentStrong, fontSize: 10.5, fontWeight: "700" }}>karta</Text>
+                              </Pressable>
+                            )}
                           </Pressable>
                         ))}
                       </View>

@@ -92,6 +92,29 @@ export async function listPilotTechnologies(): Promise<OfferPilotTechnologyRow[]
     .filter((x): x is OfferPilotTechnologyRow => x !== null);
 }
 
+/**
+ * Realne PDF-y kart technicznych (Admin wgrał je ręcznie do prywatnego
+ * bucketu `karty technologiczne` — patrz 097/098_faza0_karty_pdf_*.sql).
+ * Mapowanie technology_id -> ścieżka w buckecie; osobne od
+ * listPilotTechnologies, bo to zwykła tabela 1:1 bez zagnieżdżania.
+ */
+const TECHNOLOGY_DOCUMENTS_BUCKET = "karty technologiczne";
+
+export async function listTechnologyDocumentPaths(): Promise<Record<number, string>> {
+  const { data, error } = await supabase.from("technology_documents").select("technologyId:technology_id, storagePath:storage_path");
+  if (error) throw new Error(error.message);
+  const map: Record<number, string> = {};
+  for (const row of (data ?? []) as any[]) map[row.technologyId] = row.storagePath;
+  return map;
+}
+
+/** Krótko żyjący (1h) podpisany URL do pobrania/otwarcia karty PDF z prywatnego bucketu. */
+export async function getTechnologyPdfSignedUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(TECHNOLOGY_DOCUMENTS_BUCKET).createSignedUrl(storagePath, 3600);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
 /** Ustawia listę technologii dopuszczonych na pilotaż (Admin only — patrz RLS write_admin). */
 export async function setPilotTechnologyIds(technologyIds: number[]): Promise<void> {
   const { error: delErr } = await supabase

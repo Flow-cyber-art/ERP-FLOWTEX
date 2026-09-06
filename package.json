@@ -50,6 +50,7 @@
     "expo-video": "~3.0.15",
     "expo-web-browser": "~15.0.10",
     "nativewind": "^4.2.1",
+    "pdf-lib": "^1.17.1",
     "postgres": "^3.4.5",
     "react": "19.1.0",
     "react-dom": "19.1.0",

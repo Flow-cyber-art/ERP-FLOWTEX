@@ -308,6 +308,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<OfferRow[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     listPilotTechnologies()
@@ -365,6 +366,37 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     () => (pilotTechnologies ?? []).filter((t) => selected[t.id]),
     [pilotTechnologies, selected],
   );
+
+  // m2/mb -> etykieta czytelna dla człowieka. Jednostka jest właściwością
+  // technologii (offer_pilot_technologies.unit) — kanały liniowe,
+  // dylatacje i cokoły rozliczają się w mb, reszta w m².
+  const unitLabel = (tech: OfferPilotTechnologyRow) => (tech.unit === "mb" ? "mb" : "m²");
+
+  // Grupowanie kroku 2 w rozwijane kategorie — jak w prototypie (foldery
+  // z Księgi Technicznej), po realnej kolumnie
+  // offer_pilot_technologies.category_name (pełna nazwa folderu z
+  // Dysku — dwa foldery na Dysku dzielą ten sam krótki kod "SS:0", więc
+  // pełna nazwa jest jedynym unikalnym kluczem, patrz
+  // 095_faza0_ksiega_techniczna_pilotaz_katalog.sql).
+  const technologyGroups = useMemo(() => {
+    const groups = new Map<string, OfferPilotTechnologyRow[]>();
+    for (const t of pilotTechnologies ?? []) {
+      const key = t.categoryName?.trim() || "Inne";
+      const list = groups.get(key) ?? [];
+      list.push(t);
+      groups.set(key, list);
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [pilotTechnologies]);
+
+  useEffect(() => {
+    if (technologyGroups.length === 0) return;
+    setOpenCategories((prev) => (Object.keys(prev).length > 0 ? prev : { [technologyGroups[0][0]]: true }));
+  }, [technologyGroups]);
+
+  function toggleCategory(categoryName: string) {
+    setOpenCategories((prev) => ({ ...prev, [categoryName]: !prev[categoryName] }));
+  }
 
   function lineMaterialCost(tech: OfferPilotTechnologyRow) {
     const line = lines[tech.id];
@@ -508,7 +540,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
         technologyId: tech.id,
         code: tech.code,
         name: tech.name,
-        unit: "m²",
+        unit: unitLabel(tech),
         qty: num(lines[tech.id]?.qty),
         unitPrice: num(lines[tech.id]?.unitPrice),
         isCustom: false,
@@ -673,40 +705,67 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                 Brak technologii dopuszczonych na pilotaż — Admin dodaje je w tabeli offer_pilot_technologies.
               </Text>
             ) : (
-              pilotTechnologies.map((tech) => (
-                <Pressable
-                  key={tech.id}
-                  onPress={() => toggleTechnology(tech.id)}
-                  style={{
-                    backgroundColor: OC.surface,
-                    borderWidth: 1,
-                    borderColor: selected[tech.id] ? OC.accent : OC.border,
-                    borderRadius: RADIUS,
-                    padding: 14,
-                    marginBottom: 10,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
+              technologyGroups.map(([categoryName, techs]) => {
+                const open = !!openCategories[categoryName];
+                const selectedCount = techs.filter((t) => selected[t.id]).length;
+                return (
                   <View
-                    style={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: 4,
-                      borderWidth: 1.5,
-                      borderColor: selected[tech.id] ? OC.accent : OC.borderStrong,
-                      backgroundColor: selected[tech.id] ? OC.accent : "transparent",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
+                    key={categoryName}
+                    style={{ backgroundColor: OC.surface, borderWidth: 1, borderColor: OC.border, borderRadius: RADIUS, marginBottom: 10, overflow: "hidden" }}
                   >
-                    {selected[tech.id] && <MaterialIcons name="check" size={14} color={OC.accentInk} />}
+                    <Pressable onPress={() => toggleCategory(categoryName)} style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}>
+                      <MaterialIcons name={open ? "expand-more" : "chevron-right"} size={20} color={OC.inkMuted} />
+                      <MaterialIcons name="folder" size={17} color={OC.accentStrong} />
+                      <Text style={{ color: OC.ink, fontWeight: "700", flex: 1 }}>{categoryName}</Text>
+                      {selectedCount > 0 && (
+                        <View style={{ borderWidth: 1, borderColor: OC.accent, backgroundColor: OC.accentSoft, borderRadius: 99, paddingHorizontal: 9, paddingVertical: 3 }}>
+                          <Text style={{ color: OC.accentStrong, fontSize: 10.5, fontWeight: "700" }}>wybrano {selectedCount}</Text>
+                        </View>
+                      )}
+                      <View style={{ borderWidth: 1, borderColor: OC.borderStrong, borderRadius: 99, paddingHorizontal: 9, paddingVertical: 3 }}>
+                        <Text style={{ color: OC.inkMuted, fontSize: 10.5, fontWeight: "700" }}>{techs.length} {techs.length === 1 ? "karta" : "kart"}</Text>
+                      </View>
+                    </Pressable>
+                    {open && (
+                      <View style={{ borderTopWidth: 1, borderTopColor: OC.border }}>
+                        {techs.map((tech) => (
+                          <Pressable
+                            key={tech.id}
+                            onPress={() => toggleTechnology(tech.id)}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 12,
+                              padding: 14,
+                              backgroundColor: selected[tech.id] ? OC.accentSoft : "transparent",
+                              borderTopWidth: 1,
+                              borderTopColor: OC.border,
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: 4,
+                                borderWidth: 1.5,
+                                borderColor: selected[tech.id] ? OC.accent : OC.borderStrong,
+                                backgroundColor: selected[tech.id] ? OC.accent : "transparent",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              {selected[tech.id] && <MaterialIcons name="check" size={14} color={OC.accentInk} />}
+                            </View>
+                            <Text style={{ color: OC.accentStrong, fontSize: 11.5, fontWeight: "700", width: 84 }}>{tech.code}</Text>
+                            <Text style={{ color: OC.ink, flex: 1 }}>{tech.name}</Text>
+                            <Text style={{ color: OC.inkMuted, fontSize: 10, textTransform: "uppercase" }}>{unitLabel(tech)}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
                   </View>
-                  <Text style={{ color: OC.accentStrong, fontSize: 11.5, fontWeight: "700", width: 84 }}>{tech.code}</Text>
-                  <Text style={{ color: OC.ink, flex: 1 }}>{tech.name}</Text>
-                </Pressable>
-              ))
+                );
+              })
             )}
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16 }}>
               <OButton label="← Wróć" secondary onPress={() => setStep(1)} />
@@ -730,7 +789,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                     {tech.code} — {tech.name}
                   </Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ color: OC.inkMuted, fontSize: 11.5, textTransform: "uppercase" }}>m²</Text>
+                    <Text style={{ color: OC.inkMuted, fontSize: 11.5, textTransform: "uppercase" }}>{unitLabel(tech)}</Text>
                     <OField
                       keyboardType="decimal-pad"
                       value={line.qty}
@@ -746,7 +805,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                     mat.rows.map((r) => (
                       <View key={r.materialId} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
                         <Text style={{ color: OC.inkMuted, fontSize: 11.5, flex: 1 }}>
-                          {r.stage} — {r.materialName} ({r.consumptionPerM2} {r.unit}/m² × {line.qty} m² = {r.totalQty.toFixed(2)} {r.unit})
+                          {r.stage} — {r.materialName} ({r.consumptionPerM2} {r.unit}/{unitLabel(tech)} × {line.qty} {unitLabel(tech)} = {r.totalQty.toFixed(2)} {r.unit})
                         </Text>
                         <OField
                           placeholder="Cena/j."
@@ -794,10 +853,10 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                   }}
                 >
                   <Text style={{ color: OC.ink, flex: 1 }}>
-                    {tech.code} — {tech.name} ({line.qty} m²)
+                    {tech.code} — {tech.name} ({line.qty} {unitLabel(tech)})
                   </Text>
                   <OField
-                    placeholder="Cena/m²"
+                    placeholder={`Cena/${unitLabel(tech)}`}
                     keyboardType="decimal-pad"
                     value={line.unitPrice}
                     onChangeText={(v) => setLines({ ...lines, [tech.id]: { ...line, unitPrice: v } })}

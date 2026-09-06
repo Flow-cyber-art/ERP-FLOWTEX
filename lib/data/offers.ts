@@ -39,16 +39,25 @@ export type OfferPilotTechnologyRow = {
   code: string;
   name: string;
   company: string | null;
+  // Pełna nazwa folderu z Księgi Technicznej (Dysk Google) — klucz
+  // grupowania w akordeonie kroku 2. Pełna nazwa, nie krótki kod: dwa
+  // różne foldery na Dysku dzielą ten sam krótki kod "SS:0" (patrz
+  // 095_faza0_ksiega_techniczna_pilotaz_katalog.sql).
+  categoryName: string | null;
+  // "m2" albo "mb" — część kategorii (kanały, dylatacje, cokoły)
+  // rozlicza się w mb, nie w m², więc jednostka jest właściwością samej
+  // technologii/pilotażowego przypisania, nie sztywnym założeniem wizardu.
+  unit: string;
   technology_stages: OfferPilotStageRow[];
 };
 
 const PILOT_TECH_SELECT =
-  "technology_id, technologies(id, code, name, company, " +
+  "technology_id, categoryName:category_name, unit, technologies(id, code, name, company, " +
   "technology_stages(id, name, orderIndex:order_index, " +
   "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, " +
   "linkedMaterialId:linked_material_id, materials(unitPrice))))";
 
-/** Technologie dopuszczone do wizardu ofert na pilotaż (na razie garstka, patrz offer_pilot_technologies). */
+/** Technologie dopuszczone do wizardu ofert na pilotaż (patrz offer_pilot_technologies). */
 export async function listPilotTechnologies(): Promise<OfferPilotTechnologyRow[]> {
   const { data, error } = await supabase
     .from("offer_pilot_technologies")
@@ -63,6 +72,8 @@ export async function listPilotTechnologies(): Promise<OfferPilotTechnologyRow[]
         code: t.code,
         name: t.name,
         company: t.company,
+        categoryName: row.categoryName ?? null,
+        unit: row.unit ?? "m2",
         technology_stages: (t.technology_stages ?? []).map((s: any) => ({
           id: s.id,
           name: s.name,

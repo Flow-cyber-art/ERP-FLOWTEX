@@ -473,6 +473,74 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   const discountAmount = subtotal * (num(discountPercent) / 100);
   const total = subtotal - discountAmount;
 
+  // Podgląd/PDF oferty — ten sam wzorzec co eksport listy płac
+  // (payroll-screen.tsx): wydruk-owalna strona HTML w nowym oknie +
+  // dialog druku przeglądarki (zapis jako PDF to jedna z jego opcji,
+  // bez dodatkowej biblioteki). To jedyny sposób, żeby "podejrzeć"
+  // zapisaną ofertę — sam zapis w bazie nie renderuje nic do obejrzenia.
+  function exportOfferPdf() {
+    if (Platform.OS !== "web" || typeof window === "undefined") {
+      notify("Podgląd niedostępny", "Podgląd/PDF oferty działa na razie tylko w wersji web.");
+      return;
+    }
+    const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const rowsHtml = [
+      ...selectedTechnologies.map((tech) => {
+        const line = lines[tech.id] ?? { qty: "0", unitPrice: "0", materialCosts: {} };
+        return `<tr><td>${escapeHtml(tech.code)} — ${escapeHtml(tech.name)}</td><td class="num">${escapeHtml(line.qty)} ${escapeHtml(unitLabel(tech))}</td><td class="num">${formatPLN(num(line.unitPrice))}</td><td class="num">${formatPLN(lineSellTotal(tech))}</td></tr>`;
+      }),
+      ...customItems.map(
+        (it) =>
+          `<tr><td>${escapeHtml(it.name)}</td><td class="num">${escapeHtml(it.qty)} ${escapeHtml(it.unit)}</td><td class="num">${formatPLN(num(it.price))}</td><td class="num">${formatPLN(num(it.qty) * num(it.price))}</td></tr>`,
+      ),
+    ].join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Oferta ${escapeHtml(client.ref)}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}
+  h1{font-size:18px;margin-bottom:2px}
+  p{color:#555;margin:2px 0}
+  .meta{margin-top:14px;margin-bottom:6px}
+  table{width:100%;border-collapse:collapse;margin-top:16px}
+  th,td{padding:8px 10px;border-bottom:1px solid #ddd;font-size:13px}
+  th{text-align:left;color:#555;font-size:11px;text-transform:uppercase}
+  .num{text-align:right}
+  tfoot td{font-weight:700;border-top:2px solid #111;border-bottom:none}
+  .close-btn{position:fixed;top:12px;right:12px;width:32px;height:32px;border-radius:16px;
+    border:1px solid #ddd;background:#fff;color:#111;font-size:16px;line-height:1;cursor:pointer}
+  @media print{.close-btn{display:none}}
+</style></head><body>
+  <button class="close-btn" onclick="window.close()" aria-label="Zamknij" title="Zamknij">&times;</button>
+  <h1>Oferta ${escapeHtml(client.ref)}</h1>
+  <div class="meta">
+    <p><strong>${escapeHtml(client.companyName)}</strong></p>
+    <p>Osoba kontaktowa: ${escapeHtml(client.contactPerson)}</p>
+    ${client.address ? `<p>Adres: ${escapeHtml(client.address)}</p>` : ""}
+    ${client.investmentAddress ? `<p>Adres inwestycji: ${escapeHtml(client.investmentAddress)}</p>` : ""}
+    ${client.nip ? `<p>NIP: ${escapeHtml(client.nip)}</p>` : ""}
+    ${client.email ? `<p>E-mail: ${escapeHtml(client.email)}</p>` : ""}
+    ${client.phone ? `<p>Telefon: ${escapeHtml(client.phone)}</p>` : ""}
+  </div>
+  <table>
+    <thead><tr><th>Pozycja</th><th class="num">Ilość</th><th class="num">Cena/j.</th><th class="num">Wartość</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr><td colspan="3">Suma pozycji</td><td class="num">${formatPLN(subtotal)}</td></tr>
+      ${num(discountPercent) > 0 ? `<tr><td colspan="3">Rabat ${escapeHtml(discountPercent)}%</td><td class="num">-${formatPLN(discountAmount)}</td></tr>` : ""}
+      <tr><td colspan="3">Razem netto</td><td class="num">${formatPLN(total)}</td></tr>
+    </tfoot>
+  </table>
+</body></html>`;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      notify("Nie udało się otworzyć okna", "Zezwól przeglądarce na wyskakujące okienka dla tej strony i spróbuj ponownie.");
+      return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
   function resetWizard() {
     setStep(1);
     setClient(blankClient());
@@ -614,7 +682,8 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
         items,
       );
       setOfferId(id);
-      notify("Zapisano", `Oferta ${client.ref} zapisana.`);
+      notify("Zapisano", `Oferta ${client.ref} zapisana. Otwieram podgląd...`);
+      exportOfferPdf();
     } catch (e) {
       notify("Błąd zapisu", e instanceof Error ? e.message : String(e));
     } finally {
@@ -950,7 +1019,15 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
 
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16 }}>
               <OButton label="← Wróć" secondary onPress={() => setStep(3)} />
-              <OButton label={saving ? "Zapisywanie..." : offerId ? "Zapisz zmiany" : "Zapisz ofertę"} disabled={saving} onPress={handleSave} />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <OButton
+                  label="Podgląd / PDF"
+                  secondary
+                  disabled={selectedTechnologies.length === 0 && customItems.length === 0}
+                  onPress={exportOfferPdf}
+                />
+                <OButton label={saving ? "Zapisywanie..." : offerId ? "Zapisz zmiany" : "Zapisz ofertę"} disabled={saving} onPress={handleSave} />
+              </View>
             </View>
           </>
         )}

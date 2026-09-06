@@ -476,59 +476,180 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   // Podgląd/PDF oferty — ten sam wzorzec co eksport listy płac
   // (payroll-screen.tsx): wydruk-owalna strona HTML w nowym oknie +
   // dialog druku przeglądarki (zapis jako PDF to jedna z jego opcji,
-  // bez dodatkowej biblioteki). To jedyny sposób, żeby "podejrzeć"
-  // zapisaną ofertę — sam zapis w bazie nie renderuje nic do obejrzenia.
+  // bez dodatkowej biblioteki). Struktura i treść odwzorowują 1:1
+  // realną ofertę FLOWTEX N/Ref 26103 (wzorzec dostarczony przez
+  // użytkownika): strona tytułowa z powitaniem, po jednej stronie
+  // "Karta Standardu Wykonawczego" na każdą wybraną technologię (tylko
+  // te z uzupełnionym description/workPhases/investorBenefits — patrz
+  // 099_faza0_tresc_dokumentu_oferty.sql), tabela cenowa, strona
+  // warunków.
   function exportOfferPdf() {
     if (Platform.OS !== "web" || typeof window === "undefined") {
       notify("Podgląd niedostępny", "Podgląd/PDF oferty działa na razie tylko w wersji web.");
       return;
     }
     const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const rowsHtml = [
+    const today = new Date().toLocaleDateString("pl-PL");
+
+    const cardPagesHtml = selectedTechnologies
+      .filter((t) => t.description && t.workPhases && t.investorBenefits)
+      .map(
+        (t) => `
+      <div class="doc-page">
+        <div class="doc-band">Dokument A: Karta Standardu Wykonawczego</div>
+        <div class="doc-card-title">${escapeHtml(t.code)} – ${escapeHtml(t.name)}</div>
+        <div class="doc-block-label">Opis technologii</div>
+        <p class="doc-p">${escapeHtml(t.description!)}</p>
+        <div class="doc-block-label">Przebieg prac</div>
+        <ol class="doc-ol">${t.workPhases!.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ol>
+        <div class="doc-block-label">Co zyskuje Inwestor?</div>
+        <ul class="doc-ul">${t.investorBenefits!.map((k) => `<li>${escapeHtml(k)}</li>`).join("")}</ul>
+        <div class="doc-footer"><span>Ciółkowo Małe 32, 07-215 Obryte — NIP: 7621744781</span><span>www.flowtex.pl</span></div>
+      </div>`,
+      )
+      .join("");
+
+    const priceRowsHtml = [
       ...selectedTechnologies.map((tech) => {
         const line = lines[tech.id] ?? { qty: "0", unitPrice: "0", materialCosts: {} };
-        return `<tr><td>${escapeHtml(tech.code)} — ${escapeHtml(tech.name)}</td><td class="num">${escapeHtml(line.qty)} ${escapeHtml(unitLabel(tech))}</td><td class="num">${formatPLN(num(line.unitPrice))}</td><td class="num">${formatPLN(lineSellTotal(tech))}</td></tr>`;
+        return `<tr><td class="mono">${escapeHtml(tech.code)}</td><td>${escapeHtml(tech.name)}</td><td>${escapeHtml(unitLabel(tech))}</td><td class="num mono">${escapeHtml(line.qty)}</td><td class="num mono">${formatPLN(num(line.unitPrice))}</td><td class="num mono">${formatPLN(lineSellTotal(tech))}</td></tr>`;
       }),
       ...customItems.map(
         (it) =>
-          `<tr><td>${escapeHtml(it.name)}</td><td class="num">${escapeHtml(it.qty)} ${escapeHtml(it.unit)}</td><td class="num">${formatPLN(num(it.price))}</td><td class="num">${formatPLN(num(it.qty) * num(it.price))}</td></tr>`,
+          `<tr><td class="mono">—</td><td>${escapeHtml(it.name || "Pozycja własna")}</td><td>${escapeHtml(it.unit)}</td><td class="num mono">${escapeHtml(it.qty)}</td><td class="num mono">${formatPLN(num(it.price))}</td><td class="num mono">${formatPLN(num(it.qty) * num(it.price))}</td></tr>`,
       ),
     ].join("");
+
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Oferta ${escapeHtml(client.ref)}</title>
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}
-  h1{font-size:18px;margin-bottom:2px}
-  p{color:#555;margin:2px 0}
-  .meta{margin-top:14px;margin-bottom:6px}
-  table{width:100%;border-collapse:collapse;margin-top:16px}
-  th,td{padding:8px 10px;border-bottom:1px solid #ddd;font-size:13px}
-  th{text-align:left;color:#555;font-size:11px;text-transform:uppercase}
-  .num{text-align:right}
-  tfoot td{font-weight:700;border-top:2px solid #111;border-bottom:none}
+  *{box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#e9e9e9;color:#1a1a1a}
+  .doc-sheet{background:#fff;max-width:780px;margin:0 auto}
+  .doc-page{padding:52px 56px;border-bottom:2px dashed #ddd;position:relative;min-height:900px}
+  .doc-page:last-child{border-bottom:none}
+  .doc-logo{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:20px;color:#0e2a3d;margin-bottom:34px}
+  .doc-logo span{color:#8A5F1E}
+  .doc-meta-row{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:30px;gap:20px}
+  .doc-meta-row b{display:block;margin-bottom:3px}
+  .doc-greeting p{font-size:13px;line-height:1.7;margin:0 0 14px}
+  .doc-band{background:#0e2a3d;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    padding:9px 16px;margin:0 -56px 22px}
+  .doc-card-title{font-size:15.5px;font-weight:700;margin-bottom:16px}
+  .doc-block-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8A5F1E;font-weight:700;
+    margin:18px 0 6px}
+  .doc-block-label:first-of-type{margin-top:0}
+  .doc-p{font-size:12.5px;line-height:1.65;margin:0 0 6px;text-align:justify}
+  .doc-ul,.doc-ol{margin:4px 0 0;padding-left:18px;font-size:12.5px;line-height:1.6}
+  .doc-ul li,.doc-ol li{margin-bottom:5px}
+  .doc-footer{position:absolute;bottom:20px;left:56px;right:56px;display:flex;justify-content:space-between;
+    font-size:9px;color:#888;border-top:1px solid #eee;padding-top:9px}
+  .doc-price-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  .doc-price-table caption{text-align:left;font-weight:700;font-size:13px;margin-bottom:12px;caption-side:top}
+  .doc-price-table th{background:#0e2a3d;color:#fff;font-weight:600;text-align:left;padding:8px 10px;font-size:11px}
+  .doc-price-table th.num,.doc-price-table td.num{text-align:right}
+  .doc-price-table td{padding:7px 10px;border-bottom:1px solid #e5e2d8}
+  .doc-price-table tfoot td{background:#0e2a3d;color:#fff;font-weight:700;padding:9px 10px}
+  .mono{font-family:'Courier New',monospace}
+  .doc-terms{font-size:11.5px;line-height:1.7;margin-top:24px}
+  .doc-terms h4{font-size:12px;margin:14px 0 4px;text-decoration:underline}
+  .doc-terms ul{margin:2px 0;padding-left:16px}
   .close-btn{position:fixed;top:12px;right:12px;width:32px;height:32px;border-radius:16px;
     border:1px solid #ddd;background:#fff;color:#111;font-size:16px;line-height:1;cursor:pointer}
-  @media print{.close-btn{display:none}}
+  @media print{
+    body{background:#fff}
+    .close-btn{display:none}
+    .doc-page{border-bottom:none;page-break-after:always}
+    .doc-page:last-child{page-break-after:auto}
+  }
 </style></head><body>
   <button class="close-btn" onclick="window.close()" aria-label="Zamknij" title="Zamknij">&times;</button>
-  <h1>Oferta ${escapeHtml(client.ref)}</h1>
-  <div class="meta">
-    <p><strong>${escapeHtml(client.companyName)}</strong></p>
-    <p>Osoba kontaktowa: ${escapeHtml(client.contactPerson)}</p>
-    ${client.address ? `<p>Adres: ${escapeHtml(client.address)}</p>` : ""}
-    ${client.investmentAddress ? `<p>Adres inwestycji: ${escapeHtml(client.investmentAddress)}</p>` : ""}
-    ${client.nip ? `<p>NIP: ${escapeHtml(client.nip)}</p>` : ""}
-    ${client.email ? `<p>E-mail: ${escapeHtml(client.email)}</p>` : ""}
-    ${client.phone ? `<p>Telefon: ${escapeHtml(client.phone)}</p>` : ""}
+  <div class="doc-sheet">
+    <div class="doc-page">
+      <div class="doc-logo">FLOWTEX <span>Polska</span></div>
+      <div class="doc-meta-row">
+        <div><b>N/Ref ${escapeHtml(client.ref)}</b>Oferta dotyczy: wykonanie prac wg pozycji poniżej${client.investmentAddress ? " — " + escapeHtml(client.investmentAddress) : ""}</div>
+        <div style="text-align:right">
+          <b>Sz. P. ${escapeHtml(client.contactPerson || "...")}</b>
+          ${escapeHtml(client.companyName)}<br>
+          ${escapeHtml(client.investmentAddress || client.address || "adres")}<br>
+          Ciółkowo Małe dn. ${today}
+        </div>
+      </div>
+      <div class="doc-greeting">
+        <p>Szanowni Państwo,</p>
+        <p>Dziękując za zapytanie ofertowe, pozwalamy sobie przesłać ofertę cenową powierzonego projektu.</p>
+        <p>Celem otrzymania dodatkowych informacji w przypadku złożenia zamówienia uprzejmie prosimy o podanie numeru referencyjnego: <b>${escapeHtml(client.ref)}</b>.</p>
+        <p>Pozostając do Państwa dyspozycji,</p>
+        <p style="margin-top:26px">Łączę wyrazy szacunku<br><b>Paweł Najduk</b></p>
+      </div>
+    </div>
+
+    ${cardPagesHtml}
+
+    <div class="doc-page">
+      <table class="doc-price-table">
+        <caption>Tabela cen Flowtex Polska N/Ref ${escapeHtml(client.ref)}</caption>
+        <thead><tr><th>Nr karty</th><th>Opis</th><th>j.m.</th><th class="num">Ilość</th><th class="num">Cena j.</th><th class="num">Suma</th></tr></thead>
+        <tbody>${priceRowsHtml}</tbody>
+        <tfoot>
+          <tr><td colspan="5">Suma pozycji Netto</td><td class="num">${formatPLN(subtotal)}</td></tr>
+          ${num(discountPercent) > 0 ? `<tr><td colspan="5">Rabat ${escapeHtml(discountPercent)}%</td><td class="num">-${formatPLN(discountAmount)}</td></tr>` : ""}
+          <tr><td colspan="5">Łącznie Netto</td><td class="num">${formatPLN(total)}</td></tr>
+        </tfoot>
+      </table>
+      <div class="doc-terms">
+        <p><b>Cena:</b> Podane ceny są Netto &nbsp; <b>Warunki płatności:</b> 14 dni &nbsp; <b>Termin wykonania:</b> do ustalenia &nbsp; <b>Ważność oferty:</b> 30 dni</p>
+        <p class="doc-p" style="margin-top:14px">W przypadku przestojów lub wstrzymania prac z przyczyn niezależnych od Wykonawcy, przysługuje mu wynagrodzenie za gotowość w wysokości 5000 zł netto za każdą rozpoczętą dobę przestoju (na jedną brygadę).</p>
+        <h4>Założenia do oferty</h4>
+        <ul>
+          <li>Wykonanie prac przewiduje się w 2 etapach.</li>
+          <li>Kontenery na odpady po stronie Zamawiającego.</li>
+        </ul>
+      </div>
+      <div class="doc-footer" style="position:static;margin-top:24px">
+        <span>Ciółkowo Małe 32, 07-215 Obryte — NIP: 7621744781</span><span>www.flowtex.pl</span>
+      </div>
+    </div>
+
+    <div class="doc-page">
+      <div class="doc-card-title">Warunki w miejscu wykonywania robót</div>
+      <div class="doc-block-label">Zabezpieczenia</div>
+      <ul class="doc-ul">
+        <li>Pomieszczenia zostaną całkowicie opróżnione z wszelkich materiałów, towarów i innych instalacji, za wyjątkiem instalacji stałych.</li>
+        <li>Celem uniknięcia jakichkolwiek zanieczyszczeń (pył, kurz, przeciągi itp.), strefy zostaną przez Państwa zabezpieczone oraz w trakcie wykonywania prac będą zamknięte dla innych wykonawców.</li>
+      </ul>
+      <div class="doc-block-label">Warunki wykonania</div>
+      <ul class="doc-ul">
+        <li>Strefy, w których wykonywane będą prace, muszą być ogrzane pomiędzy 12°C a 25°C.</li>
+        <li>Temperatura podłoża musi zawierać się pomiędzy 10°C a 25°C.</li>
+        <li>Wilgotność względna betonu nie może przekraczać 97% zgodnie z normą BS 8204 (beton powierzchniowo suchy).</li>
+      </ul>
+      <div class="doc-block-label">Stan podłoża</div>
+      <ul class="doc-ul">
+        <li>Podłoże musi charakteryzować się odpornością na odrywanie minimum 1,5 MPa (badania pull-off) i powinno być klasy min. C20/25.</li>
+        <li>Podłoże (beton/wylewka) musi charakteryzować się gładkim wykończeniem, najlepiej zatarte mechanicznie zacieraczką do betonu.</li>
+        <li>Pod płytą betonową powinna istnieć skuteczna izolacja przeciwwodna.</li>
+        <li>Podczas wykonywania płyty betonowej nie stosować utwardzaczy chemicznych pod żywicę.</li>
+        <li>W przypadku zastosowania utwardzaczy chemicznych do wykończenia posadzki betonowej lub zbyt grubej warstwy mleczka cementowego konieczny będzie podwójny przejazd śrutownicy — takie prace będą przedmiotem dodatkowego kosztorysu.</li>
+        <li>Posadzka żywiczna jest odzwierciedleniem betonowego podłoża. Ceny nie zawierają ewentualnych dodatkowych równań betonu.</li>
+        <li>Firma Flowtex nie jest zobowiązana do kontroli kształtu oraz równości podłoża przed przystąpieniem do prac, za wyjątkiem odrębnych postanowień pisemnych — przyjmuje się, że podłoże betonowe zostało wykonane zgodnie z normami/planami/projektami oraz odebrane przez Zamawiającego.</li>
+      </ul>
+      <div class="doc-block-label">Warunki po stronie Zamawiającego</div>
+      <ul class="doc-ul">
+        <li>Bieżąca woda.</li>
+        <li>Energia elektryczna jednofazowa 220V 16 A i trójfazowa 220/380V 32 A z zabezpieczeniem C35.</li>
+        <li>Zapewnienie warunków do rozładunku materiałów i ich transportu.</li>
+        <li>Odpowiednie oświetlenie górne.</li>
+        <li>Strefa składowania materiałów z temperaturą pomiędzy 10°C a 25°C.</li>
+      </ul>
+      <div class="doc-block-label">Warunki naszej oferty</div>
+      <ul class="doc-ul">
+        <li>Ceny opierają się na ilościach wskazanych w kosztorysie (m² – mb).</li>
+        <li>Podane ceny są bez VAT.</li>
+      </ul>
+      <div class="doc-footer"><span>Ciółkowo Małe 32, 07-215 Obryte — NIP: 7621744781</span><span>www.flowtex.pl</span></div>
+    </div>
   </div>
-  <table>
-    <thead><tr><th>Pozycja</th><th class="num">Ilość</th><th class="num">Cena/j.</th><th class="num">Wartość</th></tr></thead>
-    <tbody>${rowsHtml}</tbody>
-    <tfoot>
-      <tr><td colspan="3">Suma pozycji</td><td class="num">${formatPLN(subtotal)}</td></tr>
-      ${num(discountPercent) > 0 ? `<tr><td colspan="3">Rabat ${escapeHtml(discountPercent)}%</td><td class="num">-${formatPLN(discountAmount)}</td></tr>` : ""}
-      <tr><td colspan="3">Razem netto</td><td class="num">${formatPLN(total)}</td></tr>
-    </tfoot>
-  </table>
 </body></html>`;
     const printWindow = window.open("", "_blank");
     if (!printWindow) {

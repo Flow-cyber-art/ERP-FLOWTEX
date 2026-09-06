@@ -48,11 +48,19 @@ export type OfferPilotTechnologyRow = {
   // rozlicza się w mb, nie w m², więc jednostka jest właściwością samej
   // technologii/pilotażowego przypisania, nie sztywnym założeniem wizardu.
   unit: string;
+  // Treść "Karty Standardu Wykonawczego" do dokumentu oferty — patrz
+  // 099_faza0_tresc_dokumentu_oferty.sql. Nullable: nie każda z 27 kart
+  // pilotażu ma dziś tę treść uzupełnioną, sekcja po prostu nie
+  // renderuje się w dokumencie, gdy jej brak.
+  description: string | null;
+  workPhases: string[] | null;
+  investorBenefits: string[] | null;
   technology_stages: OfferPilotStageRow[];
 };
 
 const PILOT_TECH_SELECT =
   "technology_id, categoryName:category_name, unit, technologies(id, code, name, company, " +
+  "description, workPhases:work_phases, investorBenefits:investor_benefits, " +
   "technology_stages(id, name, orderIndex:order_index, " +
   "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, " +
   "linkedMaterialId:linked_material_id, materials(unitPrice))))";
@@ -74,6 +82,9 @@ export async function listPilotTechnologies(): Promise<OfferPilotTechnologyRow[]
         company: t.company,
         categoryName: row.categoryName ?? null,
         unit: row.unit ?? "m2",
+        description: t.description ?? null,
+        workPhases: t.workPhases ?? null,
+        investorBenefits: t.investorBenefits ?? null,
         technology_stages: (t.technology_stages ?? []).map((s: any) => ({
           id: s.id,
           name: s.name,

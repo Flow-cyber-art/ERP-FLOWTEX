@@ -232,6 +232,15 @@ const WIZARD_STEPS = [
   { n: 4, label: "Ceny i zapis" },
 ];
 
+// Nagłówek nad treścią kroku (eyebrow + tytuł + opis) — jak w prototypie
+// (content-head), gdzie każdy krok tłumaczył jednym zdaniem, po co jest.
+const STEP_CONTENT: Record<number, { title: string; desc: string }> = {
+  1: { title: "Dane zleceniodawcy", desc: "Dane firmy i osoby kontaktowej, do których trafi oferta." },
+  2: { title: "Wybierz karty technologii", desc: "Rozwiń kategorię i zaznacz karty z katalogu Księgi Technicznej, które mają się znaleźć w ofercie." },
+  3: { title: "Metraż i materiały", desc: "Podaj ilość dla każdej wybranej karty — zużycie materiału przeliczy się automatycznie." },
+  4: { title: "Ceny i zapis oferty", desc: "Ustal ceny sprzedaży i ewentualny rabat, po czym zapisz gotową ofertę." },
+};
+
 const DRAFT_KEY = "oferta-wizard-draft-v1";
 
 type ClientState = {
@@ -788,6 +797,43 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
         </View>
 
         <OStepper steps={WIZARD_STEPS} current={step} />
+
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            marginBottom: 20,
+            flexWrap: "wrap",
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={{ fontSize: 10.5, letterSpacing: 1, textTransform: "uppercase", color: OC.accentStrong, fontWeight: "700", marginBottom: 4 }}>
+              Krok {step} z {WIZARD_STEPS.length}
+            </Text>
+            <Text style={{ fontSize: 20, fontWeight: "800", color: OC.ink }}>{STEP_CONTENT[step].title}</Text>
+            <Text style={{ color: OC.inkMuted, fontSize: 12.5, marginTop: 4, maxWidth: 520 }}>{STEP_CONTENT[step].desc}</Text>
+          </View>
+          {(selectedTechnologies.length > 0 || customItems.length > 0) && (
+            <View
+              style={{
+                backgroundColor: OC.surface,
+                borderWidth: 1,
+                borderColor: OC.border,
+                borderRadius: RADIUS,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                minWidth: 160,
+              }}
+            >
+              <Text style={{ color: OC.inkMuted, fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 2 }}>
+                Suma oferty {num(discountPercent) > 0 ? `(−${discountPercent}%)` : ""}
+              </Text>
+              <Text style={{ color: OC.accentStrong, fontSize: 17, fontWeight: "800" }}>{formatPLN(total)}</Text>
+            </View>
+          )}
+        </View>
 
         {step === 1 && (
           <>

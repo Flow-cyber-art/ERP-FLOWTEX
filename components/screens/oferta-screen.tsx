@@ -473,10 +473,11 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     [pilotTechnologies, selected],
   );
 
-  // m2/mb -> etykieta czytelna dla człowieka. Jednostka jest właściwością
-  // technologii (offer_pilot_technologies.unit) — kanały liniowe,
-  // dylatacje i cokoły rozliczają się w mb, reszta w m².
-  const unitLabel = (tech: OfferPilotTechnologyRow) => (tech.unit === "mb" ? "mb" : "m²");
+  // m2/mb/szt -> etykieta czytelna dla człowieka. Jednostka jest
+  // właściwością technologii (offer_pilot_technologies.unit) — kanały
+  // liniowe, dylatacje i cokoły rozliczają się w mb, wpusty (np. ACO/W/1)
+  // sztukowo, reszta w m².
+  const unitLabel = (tech: OfferPilotTechnologyRow) => (tech.unit === "mb" ? "mb" : tech.unit === "szt" ? "szt" : "m²");
 
   // Grupowanie kroku 2 w rozwijane kategorie — jak w prototypie (foldery
   // z Księgi Technicznej), po realnej kolumnie

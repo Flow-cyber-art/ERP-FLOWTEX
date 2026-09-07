@@ -20,7 +20,7 @@ import {
   type OfferRow,
 } from "@/lib/data/offers";
 import { buildOfferPdf, type OfferPdfItem, type OfferPdfCustomItem } from "@/lib/pdf/build-offer-pdf";
-import { searchGusCompanies, type GusCompanyMatch } from "@/lib/data/gus";
+import { autocompleteCompanies, getPlaceCompanyDetails, type PlaceSuggestion } from "@/lib/data/places";
 
 /**
  * Wizard Ofert — Faza 0 (pilotaż). Trasa: app/oferta.tsx (/oferta).
@@ -320,13 +320,13 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
 
   const [client, setClient] = useState<ClientState>(blankClient);
   const [offerId, setOfferId] = useState<number | null>(null);
-  const [gusSuggestions, setGusSuggestions] = useState<GusCompanyMatch[]>([]);
-  const [gusOpen, setGusOpen] = useState(false);
-  const [gusLoading, setGusLoading] = useState(false);
+  const [placeSuggestions, setPlaceSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [placeOpen, setPlaceOpen] = useState(false);
+  const [placeLoading, setPlaceLoading] = useState(false);
   // Blokuje ponowne wyszukiwanie tuż po wybraniu podpowiedzi (zmiana
   // companyName przez samo wypełnienie pola nie powinna od razu otworzyć
   // listy z powrotem).
-  const [gusSuppressNextSearch, setGusSuppressNextSearch] = useState(false);
+  const [placeSuppressNextSearch, setPlaceSuppressNextSearch] = useState(false);
   const [discountPercent, setDiscountPercent] = useState("0");
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [lines, setLines] = useState<Record<number, LineState>>({});
@@ -399,46 +399,52 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft)).catch(() => {});
   }, [draftLoaded, step, client, offerId, discountPercent, selected, lines, customItems]);
 
-  // Autouzupełnianie firmy z rejestru GUS REGON (edge function
-  // gus-search-company) — po min. 3 znakach, z odczekaniem 400ms na
-  // przerwę w pisaniu, żeby nie odpalać zapytania na każdy klawisz.
+  // Autouzupełnianie firmy przez Google Places (edge function
+  // google-places-search) — po min. 3 znakach, z odczekaniem 400ms na
+  // przerwę w pisaniu. Google nie zwraca NIP-u (tylko GUS by to miał) —
+  // pole NIP zostaje ręczne, wypełnia się tu tylko nazwa i, po wybraniu
+  // podpowiedzi, adres (dociągany osobnym zapytaniem o szczegóły, żeby
+  // nie płacić za pełne dane przy każdej literze).
   useEffect(() => {
-    if (gusSuppressNextSearch) {
-      setGusSuppressNextSearch(false);
+    if (placeSuppressNextSearch) {
+      setPlaceSuppressNextSearch(false);
       return;
     }
     const query = client.companyName.trim();
     if (query.length < 3) {
-      setGusSuggestions([]);
-      setGusOpen(false);
+      setPlaceSuggestions([]);
+      setPlaceOpen(false);
       return;
     }
-    setGusLoading(true);
+    setPlaceLoading(true);
     const timer = setTimeout(() => {
-      searchGusCompanies(query)
+      autocompleteCompanies(query)
         .then((results) => {
-          setGusSuggestions(results);
-          setGusOpen(results.length > 0);
+          setPlaceSuggestions(results);
+          setPlaceOpen(results.length > 0);
         })
         .catch(() => {
-          setGusSuggestions([]);
-          setGusOpen(false);
+          setPlaceSuggestions([]);
+          setPlaceOpen(false);
         })
-        .finally(() => setGusLoading(false));
+        .finally(() => setPlaceLoading(false));
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.companyName]);
 
-  function pickGusCompany(match: GusCompanyMatch) {
-    setGusSuppressNextSearch(true);
-    setGusOpen(false);
-    setClient((prev) => ({
-      ...prev,
-      companyName: match.name,
-      nip: match.nip ?? prev.nip,
-      address: match.address ?? prev.address,
-    }));
+  function pickPlaceCompany(match: PlaceSuggestion) {
+    setPlaceSuppressNextSearch(true);
+    setPlaceOpen(false);
+    setClient((prev) => ({ ...prev, companyName: match.name }));
+    setPlaceLoading(true);
+    getPlaceCompanyDetails(match.placeId)
+      .then((details) => {
+        setPlaceSuppressNextSearch(true);
+        setClient((prev) => ({ ...prev, companyName: details.name || prev.companyName, address: details.address ?? prev.address }));
+      })
+      .catch(() => {})
+      .finally(() => setPlaceLoading(false));
   }
 
   const canWrite = profile.role === "Admin";
@@ -841,17 +847,17 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
               <OLabel>Firma / kontrahent</OLabel>
               <View style={{ position: "relative", zIndex: 20 }}>
                 <OField
-                  placeholder="Nazwa firmy * — wpisz min. 3 znaki, podpowie GUS"
+                  placeholder="Nazwa firmy * — wpisz min. 3 znaki, podpowie Google"
                   value={client.companyName}
                   onChangeText={(v) => setClient({ ...client, companyName: v })}
-                  onFocus={() => gusSuggestions.length > 0 && setGusOpen(true)}
+                  onFocus={() => placeSuggestions.length > 0 && setPlaceOpen(true)}
                 />
-                {gusLoading && (
+                {placeLoading && (
                   <View style={{ position: "absolute", right: 10, top: 10 }}>
                     <ActivityIndicator size="small" color={OC.accent} />
                   </View>
                 )}
-                {gusOpen && gusSuggestions.length > 0 && (
+                {placeOpen && placeSuggestions.length > 0 && (
                   <View
                     style={{
                       position: "absolute",
@@ -869,16 +875,14 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                     }}
                   >
                     <ScrollView keyboardShouldPersistTaps="handled">
-                      {gusSuggestions.map((s, i) => (
+                      {placeSuggestions.map((s, i) => (
                         <Pressable
-                          key={`${s.nip ?? s.name}-${i}`}
-                          onPress={() => pickGusCompany(s)}
+                          key={`${s.placeId}-${i}`}
+                          onPress={() => pickPlaceCompany(s)}
                           style={{ padding: 11, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: OC.border }}
                         >
                           <Text style={{ color: OC.ink, fontWeight: "600", fontSize: 13 }}>{s.name}</Text>
-                          <Text style={{ color: OC.inkMuted, fontSize: 11, marginTop: 2 }}>
-                            {[s.nip ? `NIP ${s.nip}` : null, s.address].filter(Boolean).join(" — ") || "brak danych adresowych"}
-                          </Text>
+                          {s.secondary && <Text style={{ color: OC.inkMuted, fontSize: 11, marginTop: 2 }}>{s.secondary}</Text>}
                         </Pressable>
                       ))}
                     </ScrollView>

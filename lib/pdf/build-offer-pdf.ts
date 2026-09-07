@@ -1,4 +1,5 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 
 /**
  * Składa finalny PDF oferty: strona tytułowa + PRAWDZIWE pliki PDF kart
@@ -9,11 +10,15 @@ import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
  * linkiem do otwarcia osobno.
  *
  * Standardowe fonty PDF (WinAnsi) nie obsługują polskich ogonków/kresek
- * (ą ć ę ł ń ó ś ź ż) — d s tego tekst, który SAMI rysujemy (strona
- * tytułowa, tabela cen, warunki, karta zastępcza gdy brak realnego
- * PDF-a) jest transliterowany do ASCII. Treść PRAWDZIWYCH kart PDF
- * (kopiowanych stronami, nie rysowanych) zachowuje pełne polskie znaki
- * bez zmian — to one niosą właściwy tekst kart.
+ * (ą ć ę ł ń ó ś ź ż), więc tekst, który SAMI rysujemy (strona tytułowa,
+ * tabela cen, warunki, karta zastępcza gdy brak realnego PDF-a) osadza
+ * prawdziwy font Unicode — DejaVu Sans (public/fonts/, licencja
+ * pozwala na redystrybucję/embedowanie), ładowany przez pdf-lib +
+ * @pdf-lib/fontkit. Gdyby ładowanie fontu z jakiegoś powodu zawiodło
+ * (np. plik niedostępny), spadamy na standardowy Helvetica +
+ * transliterację do ASCII — degradacja czytelna, nie twardy błąd.
+ * Treść PRAWDZIWYCH kart PDF (kopiowanych stronami, nie rysowanych)
+ * zawsze ma pełne polskie znaki, niezależnie od tego fallbacku.
  */
 
 const PAGE_W = 595.28;
@@ -33,6 +38,31 @@ const ASCII_MAP: Record<string, string> = {
 
 function toAscii(s: string): string {
   return s.replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ„”‚''–—…]/g, (c) => ASCII_MAP[c] ?? c);
+}
+
+async function embedFonts(doc: PDFDocument): Promise<{ font: PDFFont; fontBold: PDFFont; polish: boolean }> {
+  try {
+    doc.registerFontkit(fontkit);
+    const [regularBytes, boldBytes] = await Promise.all([
+      fetch("/fonts/DejaVuSans.ttf").then((r) => {
+        if (!r.ok) throw new Error(`fetch DejaVuSans.ttf: HTTP ${r.status}`);
+        return r.arrayBuffer();
+      }),
+      fetch("/fonts/DejaVuSans-Bold.ttf").then((r) => {
+        if (!r.ok) throw new Error(`fetch DejaVuSans-Bold.ttf: HTTP ${r.status}`);
+        return r.arrayBuffer();
+      }),
+    ]);
+    const font = await doc.embedFont(regularBytes, { subset: true });
+    const fontBold = await doc.embedFont(boldBytes, { subset: true });
+    return { font, fontBold, polish: true };
+  } catch {
+    // Font niedostępny (np. offline / błąd sieci) — fallback: standardowy
+    // Helvetica, tekst transliterowany do ASCII (patrz toAscii/text()).
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+    return { font, fontBold, polish: false };
+  }
 }
 
 function wrapText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
@@ -56,16 +86,26 @@ class DocWriter {
   doc: PDFDocument;
   font: PDFFont;
   fontBold: PDFFont;
+  polish: boolean;
   page!: PDFPage;
   y = 0;
   ref: string;
 
-  constructor(doc: PDFDocument, font: PDFFont, fontBold: PDFFont, ref: string) {
+  constructor(doc: PDFDocument, font: PDFFont, fontBold: PDFFont, polish: boolean, ref: string) {
     this.doc = doc;
     this.font = font;
     this.fontBold = fontBold;
+    this.polish = polish;
     this.ref = ref;
     this.newPage();
+  }
+
+  // Ostatnia linia obrony: jeśli osadzony font nie obsłużył jakiegoś
+  // Unicode (np. nietypowy znak), zamiast wywalić cały render tekstu
+  // transliterujemy tylko wtedy do ASCII — normalnie (polish=true) tekst
+  // przechodzi bez zmian.
+  private text(s: string): string {
+    return this.polish ? s : toAscii(s);
   }
 
   newPage() {
@@ -76,13 +116,8 @@ class DocWriter {
 
   drawFooter() {
     const size = 8;
-    this.page.drawText(toAscii("Ciolkowo Male 32, 07-215 Obryte  --  NIP: 7621744781"), {
-      x: MARGIN,
-      y: MARGIN - 24,
-      size,
-      font: this.font,
-      color: GREY,
-    });
+    const left = this.text("Ciółkowo Małe 32, 07-215 Obryte — NIP: 7621744781");
+    this.page.drawText(left, { x: MARGIN, y: MARGIN - 24, size, font: this.font, color: GREY });
     const right = "www.flowtex.pl";
     this.page.drawText(right, {
       x: PAGE_W - MARGIN - this.font.widthOfTextAtSize(right, size),
@@ -101,7 +136,7 @@ class DocWriter {
     const h = 24;
     this.ensureSpace(h + 20);
     this.page.drawRectangle({ x: 0, y: this.y - h, width: PAGE_W, height: h, color: NAVY });
-    this.page.drawText(toAscii(text.toUpperCase()), {
+    this.page.drawText(this.text(text.toUpperCase()), {
       x: MARGIN,
       y: this.y - h + 8,
       size: 10,
@@ -113,13 +148,13 @@ class DocWriter {
 
   heading(text: string, size = 14) {
     this.ensureSpace(size + 10);
-    this.page.drawText(toAscii(text), { x: MARGIN, y: this.y - size, size, font: this.fontBold, color: INK });
+    this.page.drawText(this.text(text), { x: MARGIN, y: this.y - size, size, font: this.fontBold, color: INK });
     this.y -= size + 12;
   }
 
   label(text: string) {
     this.ensureSpace(20);
-    this.page.drawText(toAscii(text.toUpperCase()), { x: MARGIN, y: this.y - 9, size: 9, font: this.fontBold, color: GOLD });
+    this.page.drawText(this.text(text.toUpperCase()), { x: MARGIN, y: this.y - 9, size: 9, font: this.fontBold, color: GOLD });
     this.y -= 18;
   }
 
@@ -129,7 +164,7 @@ class DocWriter {
     const indent = opts.indent ?? 0;
     const maxWidth = PAGE_W - 2 * MARGIN - indent;
     const lineH = size * 1.45;
-    for (const line of wrapText(font, toAscii(text), size, maxWidth)) {
+    for (const line of wrapText(font, this.text(text), size, maxWidth)) {
       this.ensureSpace(lineH);
       this.page.drawText(line, { x: MARGIN + indent, y: this.y - size, size, font, color: INK });
       this.y -= lineH;
@@ -144,7 +179,7 @@ class DocWriter {
     const lineH = size * 1.45;
     items.forEach((item, i) => {
       const prefix = ordered ? `${i + 1}. ` : "-  ";
-      const lines = wrapText(this.font, toAscii(item), size, maxWidth - this.font.widthOfTextAtSize(prefix, size));
+      const lines = wrapText(this.font, this.text(item), size, maxWidth - this.font.widthOfTextAtSize(prefix, size));
       lines.forEach((line, li) => {
         this.ensureSpace(lineH);
         this.page.drawText(li === 0 ? prefix + line : line, {
@@ -200,31 +235,30 @@ export type BuildOfferPdfInput = {
 
 export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const w = new DocWriter(doc, font, fontBold, input.ref);
+  const { font, fontBold, polish } = await embedFonts(doc);
+  const w = new DocWriter(doc, font, fontBold, polish, input.ref);
 
-  // ---- Strona tytulowa ----
+  // ---- Strona tytułowa ----
   w.page.drawText("FLOWTEX", { x: MARGIN, y: w.y - 22, size: 22, font: fontBold, color: NAVY });
   w.page.drawText("Polska", { x: MARGIN + fontBold.widthOfTextAtSize("FLOWTEX ", 22), y: w.y - 22, size: 22, font: fontBold, color: GOLD });
   w.y -= 50;
   w.paragraph(`N/Ref ${input.ref}`, { bold: true, size: 11, gapAfter: 2 });
   w.paragraph(
-    `Oferta dotyczy: wykonanie prac wg pozycji ponizej${input.investmentAddress ? " -- " + input.investmentAddress : ""}`,
+    `Oferta dotyczy: wykonanie prac wg pozycji poniżej${input.investmentAddress ? " — " + input.investmentAddress : ""}`,
     { size: 10.5, gapAfter: 16 },
   );
   w.paragraph(`Sz. P. ${input.contactPerson || "..."}`, { bold: true, size: 11, gapAfter: 2 });
   if (input.companyName) w.paragraph(input.companyName, { size: 10.5, gapAfter: 2 });
   w.paragraph(input.investmentAddress || input.address || "adres", { size: 10.5, gapAfter: 2 });
-  w.paragraph(`Ciolkowo Male dn. ${input.date}`, { size: 10.5, gapAfter: 24 });
-  w.paragraph("Szanowni Panstwo,", { gapAfter: 10 });
-  w.paragraph("Dziekujac za zapytanie ofertowe, pozwalamy sobie przeslac oferte cenowa powierzonego projektu.", { gapAfter: 10 });
-  w.paragraph(`Celem otrzymania dodatkowych informacji w przypadku zlozenia zamowienia uprzejmie prosimy o podanie numeru referencyjnego: ${input.ref}.`, {
+  w.paragraph(`Ciółkowo Małe dn. ${input.date}`, { size: 10.5, gapAfter: 24 });
+  w.paragraph("Szanowni Państwo,", { gapAfter: 10 });
+  w.paragraph("Dziękując za zapytanie ofertowe, pozwalamy sobie przesłać ofertę cenową powierzonego projektu.", { gapAfter: 10 });
+  w.paragraph(`Celem otrzymania dodatkowych informacji w przypadku złożenia zamówienia uprzejmie prosimy o podanie numeru referencyjnego: ${input.ref}.`, {
     gapAfter: 10,
   });
-  w.paragraph("Pozostajac do Panstwa dyspozycji,", { gapAfter: 24 });
-  w.paragraph("Lacze wyrazy szacunku", { gapAfter: 2 });
-  w.paragraph("Pawel Najduk", { bold: true, gapAfter: 0 });
+  w.paragraph("Pozostając do Państwa dyspozycji,", { gapAfter: 24 });
+  w.paragraph("Łączę wyrazy szacunku", { gapAfter: 2 });
+  w.paragraph("Paweł Najduk", { bold: true, gapAfter: 0 });
 
   // ---- Karty technologii: prawdziwy PDF jesli jest, inaczej wygenerowana karta zastepcza ----
   for (const item of input.items) {
@@ -258,7 +292,12 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
   // ---- Tabela cenowa ----
   w.newPage();
   w.heading(`Tabela cen Flowtex Polska N/Ref ${input.ref}`, 13);
-  const colX = [MARGIN, MARGIN + 70, MARGIN + 300, MARGIN + 335, MARGIN + 400, MARGIN + 465];
+  // Kolumna "Suma" liczona względem colRight (prawy margines strony), a
+  // poprzednie wartości colX zostawiały jej realnie ~18-28pt — stąd
+  // duże kwoty (np. "211 950,00 zł", 62pt szerokości) nachodziły na
+  // kolumnę "Cena j.". Przeliczone tak, by każda kolumna cenowa miała
+  // realny zapas (Cena j. 70pt, Suma 83pt) na kwoty do 7 cyfr.
+  const colX = [MARGIN, MARGIN + 55, MARGIN + 250, MARGIN + 280, MARGIN + 330, MARGIN + 400];
   const colRight = PAGE_W - MARGIN;
   const colEnd = [...colX.slice(1), colRight];
   const rowH = 16;
@@ -266,10 +305,9 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
   const drawTableHeader = () => {
     w.ensureSpace(headerH + rowH);
     w.page.drawRectangle({ x: MARGIN, y: w.y - headerH, width: colRight - MARGIN, height: headerH, color: NAVY });
-    const heads = ["Nr karty", "Opis", "j.m.", "Ilosc", "Cena j.", "Suma"];
+    const heads = ["Nr karty", "Opis", "j.m.", "Ilość", "Cena j.", "Suma"];
     heads.forEach((h, i) => {
-      const x = colX[i] + (i >= 3 ? 0 : 0);
-      w.page.drawText(h, { x: x + 4, y: w.y - headerH + 6, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+      w.page.drawText(polish ? h : toAscii(h), { x: colX[i] + 4, y: w.y - headerH + 6, size: 9, font: fontBold, color: rgb(1, 1, 1) });
     });
     w.y -= headerH;
   };
@@ -281,7 +319,7 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
     cells.forEach((c, i) => {
       const size = 9;
       const isNum = i >= 3;
-      const text = toAscii(c);
+      const text = polish ? c : toAscii(c);
       const x = isNum ? colEnd[i] - 4 - font.widthOfTextAtSize(text, size) : colX[i] + 4;
       w.page.drawText(text, { x, y: w.y - rowH + 5, size, font, color: INK });
     });
@@ -292,11 +330,11 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
     drawRow([it.code, it.name, it.unit, it.qty, it.unitPriceLabel, it.totalLabel]);
   }
   for (const it of input.customItems) {
-    drawRow(["--", it.name || "Pozycja wlasna", it.unit, it.qty, it.priceLabel, it.totalLabel]);
+    drawRow(["—", it.name || "Pozycja własna", it.unit, it.qty, it.priceLabel, it.totalLabel]);
   }
   const drawTotalRow = (labelTextRaw: string, valueTextRaw: string) => {
-    const labelText = toAscii(labelTextRaw);
-    const valueText = toAscii(valueTextRaw);
+    const labelText = polish ? labelTextRaw : toAscii(labelTextRaw);
+    const valueText = polish ? valueTextRaw : toAscii(valueTextRaw);
     w.ensureSpace(rowH + 6);
     w.page.drawRectangle({ x: MARGIN, y: w.y - rowH - 2, width: colRight - MARGIN, height: rowH + 2, color: NAVY });
     w.page.drawText(labelText, { x: MARGIN + 4, y: w.y - rowH + 4, size: 9.5, font: fontBold, color: rgb(1, 1, 1) });
@@ -312,66 +350,84 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
   w.y -= 4;
   drawTotalRow("Suma pozycji Netto", input.subtotalLabel);
   if (input.discountPercent > 0) drawTotalRow(`Rabat ${input.discountPercent}%`, `-${input.discountLabel}`);
-  drawTotalRow("Lacznie Netto", input.totalLabel);
+  drawTotalRow("Łącznie Netto", input.totalLabel);
   w.y -= 20;
 
-  w.paragraph("Cena: Podane ceny sa Netto   Warunki platnosci: 14 dni   Termin wykonania: do ustalenia   Waznosc oferty: 30 dni", {
+  w.paragraph("Cena: Podane ceny są Netto   Warunki płatności: 14 dni   Termin wykonania: do ustalenia   Ważność oferty: 30 dni", {
     size: 9.5,
     gapAfter: 10,
   });
   w.paragraph(
-    "W przypadku przestojow lub wstrzymania prac z przyczyn niezaleznych od Wykonawcy, przysluguje mu wynagrodzenie za gotowosc w wysokosci 5000 zl netto za kazda rozpoczeta dobe przestoju (na jedna brygade).",
+    "W przypadku przestojów lub wstrzymania prac z przyczyn niezależnych od Wykonawcy, przysługuje mu wynagrodzenie za gotowość w wysokości 5000 zł netto za każdą rozpoczętą dobę przestoju (na jedną brygadę).",
     { size: 9.5, gapAfter: 14 },
   );
-  w.label("Zalozenia do oferty");
-  w.list(["Wykonanie prac przewiduje sie w 2 etapach.", "Kontenery na odpady po stronie Zamawiajacego."], false);
+  w.label("Założenia do oferty");
+  w.list(["Wykonanie prac przewiduje się w 2 etapach.", "Kontenery na odpady po stronie Zamawiającego."], false);
 
   // ---- Warunki ----
   w.newPage();
-  w.heading("Warunki w miejscu wykonywania robot", 14);
+  w.heading("Warunki w miejscu wykonywania robót", 14);
   w.label("Zabezpieczenia");
   w.list(
     [
-      "Pomieszczenia zostana calkowicie oprozniona z wszelkich materialow, towarow i innych instalacji, za wyjatkiem instalacji stalych.",
-      "Celem uniknieia jakichkolwiek zanieczyszczen (pyl, kurz, przeciagi itp.), strefy zostana przez Panstwa zabezpieczone oraz w trakcie wykonywania prac beda zamkniete dla innych wykonawcow.",
+      "Pomieszczenia zostaną całkowicie opróżnione z wszelkich materiałów, towarów i innych instalacji, za wyjątkiem instalacji stałych.",
+      "Celem uniknięcia jakichkolwiek zanieczyszczeń (pył, kurz, przeciągi itp.), strefy zostaną przez Państwa zabezpieczone oraz w trakcie wykonywania prac będą zamknięte dla innych wykonawców.",
     ],
     false,
   );
   w.label("Warunki wykonania");
   w.list(
     [
-      "Strefy, w ktorych wykonywane beda prace, musza byc ogrzane pomiedzy 12C a 25C.",
-      "Temperatura podloza musi zawierac sie pomiedzy 10C a 25C.",
-      "Wilgotnosc wzgledna betonu nie moze przekraczac 97% zgodnie z norma BS 8204 (beton powierzchniowo suchy).",
+      "Strefy, w których wykonywane będą prace, muszą być ogrzane pomiędzy 12°C a 25°C.",
+      "Temperatura podłoża musi zawierać się pomiędzy 10°C a 25°C.",
+      "Wilgotność względna betonu nie może przekraczać 97% zgodnie z normą BS 8204 (beton powierzchniowo suchy).",
     ],
     false,
   );
-  w.label("Stan podloza");
+  w.label("Stan podłoża");
   w.list(
     [
-      "Podloze musi charakteryzowac sie odpornoscia na odrywanie minimum 1,5 MPa (badania pull-off) i powinno byc klasy min. C20/25.",
-      "Podloze (beton/wylewka) musi charakteryzowac sie gladkim wykonczeniem, najlepiej zatarte mechanicznie zacieraczka do betonu.",
-      "Pod plyta betonowa powinna istniec skuteczna izolacja przeciwwodna.",
-      "Podczas wykonywania plyty betonowej nie stosowac utwardzaczy chemicznych pod zywice.",
-      "W przypadku zastosowania utwardzaczy chemicznych do wykonczenia posadzki betonowej lub zbyt grubej warstwy mleczka cementowego konieczny bedzie podwojny przejazd srutownicy -- takie prace beda przedmiotem dodatkowego kosztorysu.",
-      "Posadzka zywiczna jest odzwierciedleniem betonowego podloza. Ceny nie zawieraja ewentualnych dodatkowych rownan betonu.",
-      "Firma Flowtex nie jest zobowiazana do kontroli ksztaltu oraz rownosci podloza przed przystapieniem do prac, za wyjatkiem odrebnych postanowien pisemnych -- przyjmuje sie, ze podloze betonowe zostalo wykonane zgodnie z normami/planami/projektami oraz odebrane przez Zamawiajacego.",
+      "Podłoże musi charakteryzować się odpornością na odrywanie minimum 1,5 MPa (badania pull-off) i powinno być klasy min. C20/25.",
+      "Podłoże (beton/wylewka) musi charakteryzować się gładkim wykończeniem, najlepiej zatarte mechanicznie zacieraczką do betonu.",
+      "Pod płytą betonową powinna istnieć skuteczna izolacja przeciwwodna.",
+      "Podczas wykonywania płyty betonowej nie stosować utwardzaczy chemicznych pod żywicę.",
+      "W przypadku zastosowania utwardzaczy chemicznych do wykończenia posadzki betonowej lub zbyt grubej warstwy mleczka cementowego konieczny będzie podwójny przejazd śrutownicy — takie prace będą przedmiotem dodatkowego kosztorysu.",
+      "Posadzka żywiczna jest odzwierciedleniem betonowego podłoża. Ceny nie zawierają ewentualnych dodatkowych równań betonu.",
+      "Firma Flowtex nie jest zobowiązana do kontroli kształtu oraz równości podłoża przed przystąpieniem do prac, za wyjątkiem odrębnych postanowień pisemnych — przyjmuje się, że podłoże betonowe zostało wykonane zgodnie z normami/planami/projektami oraz odebrane przez Zamawiającego.",
     ],
     false,
   );
-  w.label("Warunki po stronie Zamawiajacego");
+  w.label("Warunki po stronie Zamawiającego");
   w.list(
     [
-      "Biezaca woda.",
-      "Energia elektryczna jednofazowa 220V 16 A i trojfazowa 220/380V 32 A z zabezpieczeniem C35.",
-      "Zapewnienie warunkow do rozladunku materialow i ich transportu.",
-      "Odpowiednie oswietlenie gorne.",
-      "Strefa skladowania materialow z temperatura pomiedzy 10C a 25C.",
+      "Bieżąca woda.",
+      "Energia elektryczna jednofazowa 220V 16 A i trójfazowa 220/380V 32 A z zabezpieczeniem C35.",
+      "Zapewnienie warunków do rozładunku materiałów i ich transportu.",
+      "Odpowiednie oświetlenie górne.",
+      "Strefa składowania materiałów z temperaturą pomiędzy 10°C a 25°C.",
     ],
     false,
   );
   w.label("Warunki naszej oferty");
-  w.list(["Ceny opieraja sie na ilosciach wskazanych w kosztorysie (m2 - mb).", "Podane ceny sa bez VAT."], false);
+  w.list(["Ceny opierają się na ilościach wskazanych w kosztorysie (m² – mb).", "Podane ceny są bez VAT."], false);
+
+  // Numeracja stron, prawy dolny róg — jednym przebiegiem na końcu, po
+  // tym jak znany jest już finalny komplet stron (łącznie z doklejonymi
+  // realnymi kartami PDF). Rozmiar każdej strony liczony osobno
+  // (page.getWidth/Height), bo doklejone realne karty mogą mieć inny
+  // format niż nasze własne strony A4.
+  const allPages = doc.getPages();
+  allPages.forEach((page, i) => {
+    const label = `${i + 1} / ${allPages.length}`;
+    const size = 8;
+    page.drawText(polish ? label : toAscii(label), {
+      x: page.getWidth() - MARGIN - font.widthOfTextAtSize(label, size),
+      y: 20,
+      size,
+      font,
+      color: GREY,
+    });
+  });
 
   return doc.save();
 }

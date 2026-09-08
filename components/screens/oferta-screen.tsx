@@ -863,7 +863,15 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
               <Text style={{ color: OC.inkMuted, fontSize: 9.5, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 2 }}>
                 Suma oferty {num(discountPercent) > 0 ? `(−${discountPercent}%)` : ""}
               </Text>
-              <Text style={{ color: OC.accentStrong, fontSize: 17, fontWeight: "800" }}>{formatPLN(total)}</Text>
+              {total > 0 || step >= 4 ? (
+                <Text style={{ color: OC.accentStrong, fontSize: 17, fontWeight: "800" }}>{formatPLN(total)}</Text>
+              ) : (
+                // Suma = ilość × CENA SPRZEDAŻY (krok 4), nie koszt materiału
+                // (widoczny osobno w kroku 3) — dopóki cena nie jest wpisana,
+                // "0,00 zł" wygląda jak błąd liczenia, mimo że matematycznie
+                // jest poprawne. Jawna podpowiedź zamiast mylącego zera.
+                <Text style={{ color: OC.inkMuted, fontSize: 12, fontStyle: "italic" }}>Ceny wpiszesz w kroku 4</Text>
+              )}
             </View>
           )}
         </View>

@@ -525,11 +525,6 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pilotTechnologies, thicknessFrom, thicknessTo]);
 
-  useEffect(() => {
-    if (technologyGroups.length === 0) return;
-    setOpenCategories((prev) => (Object.keys(prev).length > 0 ? prev : { [technologyGroups[0][0]]: true }));
-  }, [technologyGroups]);
-
   function toggleCategory(categoryName: string) {
     setOpenCategories((prev) => ({ ...prev, [categoryName]: !prev[categoryName] }));
   }

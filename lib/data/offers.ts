@@ -59,6 +59,12 @@ export type OfferPilotTechnologyRow = {
   // technologii — podpowiedź w kroku 4, edytowalna, patrz
   // 100_faza0_domyslna_cena_sprzedazy.sql i saveDefaultUnitPrices niżej.
   defaultUnitPrice: string | null;
+  // Zakres grubości (mm) — te same kolumny co w zakładce "Technologie"
+  // (tam ma już filtr "od-do" po nakładaniu się przedziałów), patrz
+  // 102_faza0_grubosc_posadzek.sql. Null = brak danych (technologia
+  // znika przy aktywnym filtrze grubości, tak jak w Technologiach).
+  thicknessMinMm: string | null;
+  thicknessMaxMm: string | null;
   technology_stages: OfferPilotStageRow[];
 };
 
@@ -66,6 +72,7 @@ const PILOT_TECH_SELECT =
   "technology_id, categoryName:category_name, unit, defaultUnitPrice:default_unit_price, " +
   "technologies(id, code, name, company, " +
   "description, workPhases:work_phases, investorBenefits:investor_benefits, " +
+  "thicknessMinMm:thickness_min_mm, thicknessMaxMm:thickness_max_mm, " +
   "technology_stages(id, name, orderIndex:order_index, " +
   "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, " +
   "linkedMaterialId:linked_material_id, materials(unitPrice))))";
@@ -91,6 +98,8 @@ export async function listPilotTechnologies(): Promise<OfferPilotTechnologyRow[]
         workPhases: t.workPhases ?? null,
         investorBenefits: t.investorBenefits ?? null,
         defaultUnitPrice: row.defaultUnitPrice !== null && row.defaultUnitPrice !== undefined ? String(row.defaultUnitPrice) : null,
+        thicknessMinMm: t.thicknessMinMm !== null && t.thicknessMinMm !== undefined ? String(t.thicknessMinMm) : null,
+        thicknessMaxMm: t.thicknessMaxMm !== null && t.thicknessMaxMm !== undefined ? String(t.thicknessMaxMm) : null,
         technology_stages: (t.technology_stages ?? []).map((s: any) => ({
           id: s.id,
           name: s.name,

@@ -479,6 +479,30 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   // sztukowo, reszta w m².
   const unitLabel = (tech: OfferPilotTechnologyRow) => (tech.unit === "mb" ? "mb" : tech.unit === "szt" ? "szt" : "m²");
 
+  // Filtr grubości (mm) w kroku 2 — ten sam mechanizm co w zakładce
+  // "Technologie" (nakładanie się przedziałów, nie tylko "wartość w
+  // środku"): dopasowanie po thicknessMinMm/thicknessMaxMm, patrz
+  // 102_faza0_grubosc_posadzek.sql. Głównie po to, żeby dało się zawęzić
+  // duże kategorie (ST:0 TREMCO — 43 karty, SS:0 SIKA — 13) po grubości
+  // posadzki zamiast przewijać cały akordeon.
+  const [thicknessFrom, setThicknessFrom] = useState("");
+  const [thicknessTo, setThicknessTo] = useState("");
+  const thicknessFilterActive = thicknessFrom.trim() !== "" || thicknessTo.trim() !== "";
+
+  function matchesThicknessFilter(tech: OfferPilotTechnologyRow): boolean {
+    if (!thicknessFilterActive) return true;
+    const techMin = tech.thicknessMinMm != null ? num(tech.thicknessMinMm) : null;
+    const techMax = tech.thicknessMaxMm != null ? num(tech.thicknessMaxMm) : null;
+    // Brak zdefiniowanej grubości = nie da się ocenić dopasowania — nie
+    // pokazujemy przy aktywnym filtrze (tak samo jak w Technologiach).
+    if (techMin === null || techMax === null) return false;
+    const from = thicknessFrom.trim() !== "" ? num(thicknessFrom) : null;
+    const to = thicknessTo.trim() !== "" ? num(thicknessTo) : null;
+    if (to !== null && techMin > to) return false;
+    if (from !== null && techMax < from) return false;
+    return true;
+  }
+
   // Grupowanie kroku 2 w rozwijane kategorie — jak w prototypie (foldery
   // z Księgi Technicznej), po realnej kolumnie
   // offer_pilot_technologies.category_name (pełna nazwa folderu z
@@ -488,13 +512,15 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   const technologyGroups = useMemo(() => {
     const groups = new Map<string, OfferPilotTechnologyRow[]>();
     for (const t of pilotTechnologies ?? []) {
+      if (!matchesThicknessFilter(t)) continue;
       const key = t.categoryName?.trim() || "Inne";
       const list = groups.get(key) ?? [];
       list.push(t);
       groups.set(key, list);
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [pilotTechnologies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pilotTechnologies, thicknessFrom, thicknessTo]);
 
   useEffect(() => {
     if (technologyGroups.length === 0) return;
@@ -964,11 +990,53 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
         {step === 2 && (
           <>
             {loadError && <Text style={{ color: OC.danger, marginBottom: 10 }}>{loadError}</Text>}
+            {pilotTechnologies && pilotTechnologies.length > 0 && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: OC.surface,
+                  borderWidth: 1,
+                  borderColor: OC.border,
+                  borderRadius: RADIUS,
+                  padding: 12,
+                  marginBottom: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <MaterialIcons name="filter-alt" size={16} color={OC.inkMuted} />
+                <Text style={{ color: OC.inkMuted, fontSize: 11.5 }}>Grubość posadzki (mm)</Text>
+                <OField placeholder="od" keyboardType="decimal-pad" value={thicknessFrom} onChangeText={setThicknessFrom} style={{ width: 60 }} />
+                <Text style={{ color: OC.inkMuted, fontSize: 11.5 }}>—</Text>
+                <OField placeholder="do" keyboardType="decimal-pad" value={thicknessTo} onChangeText={setThicknessTo} style={{ width: 60 }} />
+                {thicknessFilterActive && (
+                  <Pressable
+                    onPress={() => {
+                      setThicknessFrom("");
+                      setThicknessTo("");
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text style={{ color: OC.accentStrong, fontSize: 11.5, fontWeight: "700" }}>Wyczyść</Text>
+                  </Pressable>
+                )}
+                {thicknessFilterActive && (
+                  <Text style={{ color: OC.inkMuted, fontSize: 10.5, marginLeft: "auto" }}>
+                    Ukrywa karty bez zdefiniowanej grubości.
+                  </Text>
+                )}
+              </View>
+            )}
             {!pilotTechnologies ? (
               <ActivityIndicator color={OC.accent} />
             ) : pilotTechnologies.length === 0 ? (
               <Text style={{ color: OC.inkMuted, fontSize: 13 }}>
                 Brak technologii dopuszczonych na pilotaż — Admin dodaje je w tabeli offer_pilot_technologies.
+              </Text>
+            ) : technologyGroups.length === 0 ? (
+              <Text style={{ color: OC.inkMuted, fontSize: 13 }}>
+                Żadna karta nie pasuje do wybranego zakresu grubości — zmień filtr albo go wyczyść.
               </Text>
             ) : (
               technologyGroups.map(([categoryName, techs]) => {

@@ -479,12 +479,15 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
   // sztukowo, reszta w m².
   const unitLabel = (tech: OfferPilotTechnologyRow) => (tech.unit === "mb" ? "mb" : tech.unit === "szt" ? "szt" : "m²");
 
-  // Filtr grubości (mm) w kroku 2 — ten sam mechanizm co w zakładce
-  // "Technologie" (nakładanie się przedziałów, nie tylko "wartość w
-  // środku"): dopasowanie po thicknessMinMm/thicknessMaxMm, patrz
+  // Filtr grubości (mm) w kroku 2 — dopasowanie po nakładaniu się
+  // przedziałów (thicknessMinMm/thicknessMaxMm), patrz
   // 102_faza0_grubosc_posadzek.sql. Głównie po to, żeby dało się zawęzić
-  // duże kategorie (ST:0 TREMCO — 43 karty, SS:0 SIKA — 13) po grubości
-  // posadzki zamiast przewijać cały akordeon.
+  // duże kategorie systemów posadzkowych (ST:0 TREMCO — 43 karty, SS:0
+  // SIKA — 13) po grubości. W odróżnieniu od zakładki "Technologie",
+  // karty BEZ zdefiniowanej grubości (naprawy, przygotowanie podłoża,
+  // cokoły, dylatacje — te po prostu nie mają "grubości posadzki" jako
+  // pojęcia) NIE znikają przy aktywnym filtrze — filtr ma tylko zawężać
+  // wybór systemu posadzkowego, a nie chować resztę katalogu.
   const [thicknessFrom, setThicknessFrom] = useState("");
   const [thicknessTo, setThicknessTo] = useState("");
   const thicknessFilterActive = thicknessFrom.trim() !== "" || thicknessTo.trim() !== "";
@@ -493,9 +496,9 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     if (!thicknessFilterActive) return true;
     const techMin = tech.thicknessMinMm != null ? num(tech.thicknessMinMm) : null;
     const techMax = tech.thicknessMaxMm != null ? num(tech.thicknessMaxMm) : null;
-    // Brak zdefiniowanej grubości = nie da się ocenić dopasowania — nie
-    // pokazujemy przy aktywnym filtrze (tak samo jak w Technologiach).
-    if (techMin === null || techMax === null) return false;
+    // Brak zdefiniowanej grubości = filtr grubości jej po prostu nie
+    // dotyczy — karta zostaje widoczna niezależnie od zakresu.
+    if (techMin === null || techMax === null) return true;
     const from = thicknessFrom.trim() !== "" ? num(thicknessFrom) : null;
     const to = thicknessTo.trim() !== "" ? num(thicknessTo) : null;
     if (to !== null && techMin > to) return false;
@@ -1031,7 +1034,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                 )}
                 {thicknessFilterActive && (
                   <Text style={{ color: OC.inkMuted, fontSize: 10.5, marginLeft: "auto" }}>
-                    Ukrywa karty bez zdefiniowanej grubości.
+                    Zawęża tylko systemy posadzkowe — naprawy, cokoły itd. zostają widoczne.
                   </Text>
                 )}
               </View>

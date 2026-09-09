@@ -1,4 +1,4 @@
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
 /**
@@ -63,6 +63,28 @@ async function embedFonts(doc: PDFDocument): Promise<{ font: PDFFont; fontBold: 
     const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
     return { font, fontBold, polish: false };
   }
+}
+
+/**
+ * Prawdziwy logotyp FLOWTEX i pieczątka "Certyfikowany Wykonawca Systemów
+ * Flowcrete" na stronie tytułowej (public/logo/ — wgrane przez Admina,
+ * ustalenie z rozmowy: strona 1 ma wyglądać jak realnie wysyłana oferta, nie
+ * tylko rysowany tekstem napis "FLOWTEX"). Jeśli plik z jakiegoś powodu nie
+ * da się pobrać/osadzić, wracamy do starego tekstowego logo zamiast wywalać
+ * cały eksport — patrz drawTitleLogo/badgeImage niżej.
+ */
+async function embedBrandImages(doc: PDFDocument): Promise<{ logo: PDFImage | null; badge: PDFImage | null }> {
+  async function tryEmbed(path: string): Promise<PDFImage | null> {
+    try {
+      const res = await fetch(path);
+      if (!res.ok) return null;
+      return await doc.embedPng(await res.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+  const [logo, badge] = await Promise.all([tryEmbed("/logo/logo.png"), tryEmbed("/logo/certyfikat-flowcrete.png")]);
+  return { logo, badge };
 }
 
 function wrapText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
@@ -242,12 +264,26 @@ export type BuildOfferPdfResult = {
 export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<BuildOfferPdfResult> {
   const doc = await PDFDocument.create();
   const { font, fontBold, polish } = await embedFonts(doc);
+  const { logo, badge } = await embedBrandImages(doc);
   const w = new DocWriter(doc, font, fontBold, polish, input.ref);
 
   // ---- Strona tytułowa ----
-  w.page.drawText("FLOWTEX", { x: MARGIN, y: w.y - 22, size: 22, font: fontBold, color: NAVY });
-  w.page.drawText("Polska", { x: MARGIN + fontBold.widthOfTextAtSize("FLOWTEX ", 22), y: w.y - 22, size: 22, font: fontBold, color: GOLD });
-  w.y -= 50;
+  if (logo) {
+    const logoW = 160;
+    const logoH = (logo.height / logo.width) * logoW;
+    w.page.drawImage(logo, { x: MARGIN, y: w.y - logoH, width: logoW, height: logoH });
+    w.y -= logoH + 34; // 34pt zapasu, żeby tekst zaczynał się poniżej pieczątki w prawym górnym rogu (badgeH ~74pt)
+  } else {
+    // Fallback tekstowy — gdyby plik logo z jakiegoś powodu nie dał się pobrać/osadzić.
+    w.page.drawText("FLOWTEX", { x: MARGIN, y: w.y - 22, size: 22, font: fontBold, color: NAVY });
+    w.page.drawText("Polska", { x: MARGIN + fontBold.widthOfTextAtSize("FLOWTEX ", 22), y: w.y - 22, size: 22, font: fontBold, color: GOLD });
+    w.y -= 50;
+  }
+  if (badge) {
+    const badgeW = 74;
+    const badgeH = (badge.height / badge.width) * badgeW;
+    w.page.drawImage(badge, { x: PAGE_W - MARGIN - badgeW, y: PAGE_H - MARGIN - badgeH, width: badgeW, height: badgeH });
+  }
   w.paragraph(`N/Ref ${input.ref}`, { bold: true, size: 11, gapAfter: 2 });
   w.paragraph(
     `Oferta dotyczy: wykonanie prac wg pozycji poniżej${input.investmentAddress ? " — " + input.investmentAddress : ""}`,

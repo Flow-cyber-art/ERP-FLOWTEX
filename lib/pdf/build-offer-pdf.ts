@@ -233,7 +233,13 @@ export type BuildOfferPdfInput = {
   totalLabel: string;
 };
 
-export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Array> {
+export type BuildOfferPdfResult = {
+  bytes: Uint8Array;
+  /** Pozycje, dla których nie udało się dokleić realnego pliku karty PDF ze Storage — UI powinien o tym poinformować, bo zamiast realnej karty poszła minimalna zastępcza. */
+  missingRealPdf: string[];
+};
+
+export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<BuildOfferPdfResult> {
   const doc = await PDFDocument.create();
   const { font, fontBold, polish } = await embedFonts(doc);
   const w = new DocWriter(doc, font, fontBold, polish, input.ref);
@@ -261,6 +267,13 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
   w.paragraph("Paweł Najduk", { bold: true, gapAfter: 0 });
 
   // ---- Karty technologii: prawdziwy PDF jesli jest, inaczej wygenerowana karta zastepcza ----
+  // Karta MUSI trafić do oferty dla każdej wybranej technologii — jeśli
+  // pobranie realnego pliku zawiedzie (sieć, uszkodzony plik) i w bazie nie
+  // ma opisu do narysowania, dawniej pozycja znikała z PDF-u bez śladu.
+  // Teraz zawsze dorysowujemy przynajmniej minimalną kartę zastępczą, a
+  // niepowodzenia realnych plików zbieramy do missingRealPdf, żeby UI mógł
+  // o tym poinformować.
+  const missingRealPdf: string[] = [];
   for (const item of input.items) {
     let attachedReal = false;
     if (item.fetchRealPdf) {
@@ -271,21 +284,33 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
           const copied = await doc.copyPages(src, src.getPageIndices());
           copied.forEach((p) => doc.addPage(p));
           attachedReal = true;
+        } else {
+          missingRealPdf.push(`${item.code} - ${item.name}`);
         }
       } catch {
         // realny plik nie do wczytania (np. uszkodzony/niedostępny) — spadamy na kartę generowaną poniżej
+        missingRealPdf.push(`${item.code} - ${item.name}`);
       }
     }
-    if (!attachedReal && item.description && item.workPhases && item.investorBenefits) {
+    if (!attachedReal) {
       w.newPage();
       w.band("Dokument A: Karta Standardu Wykonawczego");
       w.heading(`${item.code} - ${item.name}`, 13.5);
-      w.label("Opis technologii");
-      w.paragraph(item.description);
-      w.label("Przebieg prac");
-      w.list(item.workPhases, true);
-      w.label("Co zyskuje Inwestor?");
-      w.list(item.investorBenefits, false);
+      if (item.description) {
+        w.label("Opis technologii");
+        w.paragraph(item.description);
+      }
+      if (item.workPhases && item.workPhases.length > 0) {
+        w.label("Przebieg prac");
+        w.list(item.workPhases, true);
+      }
+      if (item.investorBenefits && item.investorBenefits.length > 0) {
+        w.label("Co zyskuje Inwestor?");
+        w.list(item.investorBenefits, false);
+      }
+      if (!item.description && !item.workPhases && !item.investorBenefits) {
+        w.paragraph("Pełna karta techniczna tej technologii nie jest jeszcze dostępna w systemie.");
+      }
     }
   }
 
@@ -429,5 +454,5 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<Uint8Arr
     });
   });
 
-  return doc.save();
+  return { bytes: await doc.save(), missingRealPdf };
 }

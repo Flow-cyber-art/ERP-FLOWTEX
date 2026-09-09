@@ -566,9 +566,13 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
     return { rows, total };
   }
 
+  // Suma pozycji = koszt materiału (krok 3, policzony z receptury) + cena
+  // robocizny × ilość (krok 4) — oferta jest złożona z tych dwóch
+  // składników, więc finalna cena w PDF-ie musi je sumować, a nie pokazywać
+  // wyłącznie robociznę.
   function lineSellTotal(tech: OfferPilotTechnologyRow) {
     const line = lines[tech.id];
-    return num(line?.qty) * num(line?.unitPrice);
+    return lineMaterialCost(tech).total + num(line?.qty) * num(line?.unitPrice);
   }
 
   const customItemsTotal = customItems.reduce((sum, it) => sum + num(it.qty) * num(it.price), 0);
@@ -595,13 +599,18 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
       const items: OfferPdfItem[] = selectedTechnologies.map((tech) => {
         const line = lines[tech.id] ?? { qty: "0", unitPrice: "0", materialCosts: {} };
         const storagePath = docPaths[tech.id];
+        const qty = num(line.qty);
+        const lineTotal = lineSellTotal(tech);
+        // Cena j. w PDF-ie ma być pełną ceną sprzedaży (materiał + robocizna
+        // razem podzielone przez ilość), nie samą stawką robocizny wpisaną w
+        // kroku 4 — inaczej suma w tabeli nie zgadzałaby się z ceną × ilość.
         return {
           code: tech.code,
           name: tech.name,
           unit: unitLabel(tech),
           qty: line.qty,
-          unitPriceLabel: formatPLN(num(line.unitPrice)),
-          totalLabel: formatPLN(lineSellTotal(tech)),
+          unitPriceLabel: formatPLN(qty > 0 ? lineTotal / qty : 0),
+          totalLabel: formatPLN(lineTotal),
           description: tech.description,
           workPhases: tech.workPhases,
           investorBenefits: tech.investorBenefits,
@@ -622,7 +631,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
         priceLabel: formatPLN(num(it.price)),
         totalLabel: formatPLN(num(it.qty) * num(it.price)),
       }));
-      const bytes = await buildOfferPdf({
+      const { bytes, missingRealPdf } = await buildOfferPdf({
         ref: client.ref,
         date: new Date().toLocaleDateString("pl-PL"),
         companyName: client.companyName,
@@ -641,6 +650,12 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
       const opened = window.open(url, "_blank");
       if (!opened) {
         notify("Nie udało się otworzyć okna", "Zezwól przeglądarce na wyskakujące okienka dla tej strony i spróbuj ponownie.");
+      }
+      if (missingRealPdf.length > 0) {
+        notify(
+          "Część kart wygenerowana zastępczo",
+          `Nie udało się dociągnąć realnego pliku PDF ze Storage dla: ${missingRealPdf.join(", ")}. W ofercie użyto uproszczonej karty zamiast oryginalnego pliku.`,
+        );
       }
     } catch (e) {
       notify("Nie udało się wygenerować PDF-u oferty", e instanceof Error ? e.message : String(e));
@@ -864,10 +879,10 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
               {total > 0 || step >= 4 ? (
                 <Text style={{ color: OC.accentStrong, fontSize: 17, fontWeight: "800" }}>{formatPLN(total)}</Text>
               ) : (
-                // Suma = ilość × CENA SPRZEDAŻY (krok 4), nie koszt materiału
-                // (widoczny osobno w kroku 3) — dopóki cena nie jest wpisana,
-                // "0,00 zł" wygląda jak błąd liczenia, mimo że matematycznie
-                // jest poprawne. Jawna podpowiedź zamiast mylącego zera.
+                // Suma = koszt materiału (krok 3) + ilość × cena robocizny
+                // (krok 4) — dopóki cena robocizny nie jest wpisana, "0,00 zł"
+                // wygląda jak błąd liczenia, mimo że matematycznie jest
+                // poprawne. Jawna podpowiedź zamiast mylącego zera.
                 <Text style={{ color: OC.inkMuted, fontSize: 12, fontStyle: "italic" }}>Ceny wpiszesz w kroku 4</Text>
               )}
             </View>
@@ -1178,7 +1193,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                     ))
                   )}
                   <Text style={{ color: OC.inkMuted, fontSize: 11.5, marginTop: 10 }}>
-                    Koszt materiału razem: {formatPLN(mat.total)} (punkt odniesienia — cena sprzedaży w kroku 4 zawsze wpisywana ręcznie)
+                    Koszt materiału razem: {formatPLN(mat.total)} — doliczany automatycznie do ceny robocizny wpisanej w kroku 4.
                   </Text>
                 </OCard>
               );
@@ -1194,6 +1209,7 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
           <>
             {selectedTechnologies.map((tech) => {
               const line = lines[tech.id] ?? { qty: "0", unitPrice: "0", materialCosts: {} };
+              const materialTotal = lineMaterialCost(tech).total;
               return (
                 <View
                   key={tech.id}
@@ -1204,22 +1220,24 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
                     borderRadius: RADIUS,
                     padding: 14,
                     marginBottom: 10,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
                   }}
                 >
-                  <Text style={{ color: OC.ink, flex: 1 }}>
-                    {tech.code} — {tech.name} ({line.qty} {unitLabel(tech)})
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Text style={{ color: OC.ink, flex: 1 }}>
+                      {tech.code} — {tech.name} ({line.qty} {unitLabel(tech)})
+                    </Text>
+                    <OField
+                      placeholder={`Robocizna/${unitLabel(tech)}`}
+                      keyboardType="decimal-pad"
+                      value={line.unitPrice}
+                      onChangeText={(v) => setLines({ ...lines, [tech.id]: { ...line, unitPrice: v } })}
+                      style={{ width: 100 }}
+                    />
+                    <Text style={{ color: OC.ink, fontWeight: "700", width: 100, textAlign: "right" }}>{formatPLN(lineSellTotal(tech))}</Text>
+                  </View>
+                  <Text style={{ color: OC.inkMuted, fontSize: 11, marginTop: 6, textAlign: "right" }}>
+                    materiał {formatPLN(materialTotal)} + robocizna {formatPLN(num(line.qty) * num(line.unitPrice))} = {formatPLN(lineSellTotal(tech))}
                   </Text>
-                  <OField
-                    placeholder={`Cena/${unitLabel(tech)}`}
-                    keyboardType="decimal-pad"
-                    value={line.unitPrice}
-                    onChangeText={(v) => setLines({ ...lines, [tech.id]: { ...line, unitPrice: v } })}
-                    style={{ width: 90 }}
-                  />
-                  <Text style={{ color: OC.ink, fontWeight: "700", width: 100, textAlign: "right" }}>{formatPLN(lineSellTotal(tech))}</Text>
                 </View>
               );
             })}

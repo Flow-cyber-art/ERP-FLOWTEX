@@ -280,7 +280,13 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<BuildOff
       try {
         const bytes = await item.fetchRealPdf();
         if (bytes) {
-          const src = await PDFDocument.load(bytes);
+          // ignoreEncryption: karty wgrywane przez Admina bywają zapisane z
+          // ograniczeniami wydruku/edycji (typowe dla PDF-ów robionych w
+          // Wordzie/InDesignie) bez hasła do otwarcia — pdf-lib domyślnie
+          // odmawia wczytania KAŻDEGO zaszyfrowanego pliku, nawet takiego,
+          // który każda przeglądarka otwiera bez pytania o hasło (dlatego
+          // link "otwórz" w kroku 2 działał, a doklejanie do PDF-u — nie).
+          const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
           const copied = await doc.copyPages(src, src.getPageIndices());
           copied.forEach((p) => doc.addPage(p));
           attachedReal = true;
@@ -337,19 +343,36 @@ export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<BuildOff
     w.y -= headerH;
   };
   drawTableHeader();
+  // Kolumna "Opis" (indeks 1) dostawała nazwy technologii dłuższe niż jej
+  // szerokość (np. "Systemowa posadzka epoksydowa Fontefloor EP Sand") i bez
+  // zawijania nachodziła jedną linią na kolumny j.m./Ilość obok — stąd
+  // "rozjeżdżająca się" tabela. Opis jest teraz zawijany do szerokości
+  // własnej kolumny, a wysokość wiersza rośnie wraz z liczbą linii; reszta
+  // kolumn (liczbowe, jednolinijkowe) jest rysowana przy górnej krawędzi
+  // wiersza, na wysokości pierwszej linii opisu.
+  const opisWidth = colEnd[1] - colX[1] - 8;
   const drawRow = (cells: string[]) => {
+    const size = 9;
+    const opisLines = wrapText(font, polish ? cells[1] : toAscii(cells[1]), size, opisWidth);
+    const lineH = size * 1.35;
+    const h = Math.max(rowH, opisLines.length * lineH + 6);
     const pageBefore = w.page;
-    w.ensureSpace(rowH + 4);
+    w.ensureSpace(h + 4);
     if (w.page !== pageBefore) drawTableHeader(); // ensureSpace rolled to a fresh page — repeat header there
     cells.forEach((c, i) => {
-      const size = 9;
+      if (i === 1) {
+        opisLines.forEach((line, li) => {
+          w.page.drawText(line, { x: colX[1] + 4, y: w.y - size - 4 - li * lineH, size, font, color: INK });
+        });
+        return;
+      }
       const isNum = i >= 3;
       const text = polish ? c : toAscii(c);
       const x = isNum ? colEnd[i] - 4 - font.widthOfTextAtSize(text, size) : colX[i] + 4;
-      w.page.drawText(text, { x, y: w.y - rowH + 5, size, font, color: INK });
+      w.page.drawText(text, { x, y: w.y - size - 4, size, font, color: INK });
     });
-    w.page.drawLine({ start: { x: MARGIN, y: w.y - rowH }, end: { x: colRight, y: w.y - rowH }, thickness: 0.5, color: LINE });
-    w.y -= rowH;
+    w.page.drawLine({ start: { x: MARGIN, y: w.y - h }, end: { x: colRight, y: w.y - h }, thickness: 0.5, color: LINE });
+    w.y -= h;
   };
   for (const it of input.items) {
     drawRow([it.code, it.name, it.unit, it.qty, it.unitPriceLabel, it.totalLabel]);

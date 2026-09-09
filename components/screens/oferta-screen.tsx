@@ -298,6 +298,26 @@ const num = (v: string | number | null | undefined): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** Usuwa znaki niedozwolone/kłopotliwe w nazwach plików (Windows/macOS/Linux) i ścieśnia białe znaki do "_". */
+function sanitizeFileNamePart(s: string): string {
+  return s
+    .trim()
+    .replace(/[/\\:*?"<>|]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+// Nazwa pliku PDF oferty: nr_oferty_nazwa_firmy_nazwisko_imię.pdf — "osoba
+// kontaktowa" jest jednym polem wpisywanym jako "Imię Nazwisko", więc dla
+// dwuwyrazowego wpisu odwracamy kolejność na "Nazwisko Imię"; dla innej
+// liczby słów (jedno imię, więcej imion/nazwisk) zostawiamy tak, jak
+// wpisano, żeby nie zgadywać błędnie który wyraz jest nazwiskiem.
+function buildOfferFileName(ref: string, companyName: string, contactPerson: string): string {
+  const words = contactPerson.trim().split(/\s+/).filter(Boolean);
+  const nameOrdered = words.length === 2 ? `${words[1]} ${words[0]}` : contactPerson;
+  const parts = [ref, companyName, nameOrdered].map((p) => sanitizeFileNamePart(p)).filter(Boolean);
+  return `${parts.join("_")}.pdf`;
+}
+
 type Draft = {
   step: number;
   client: ClientState;
@@ -647,10 +667,17 @@ export function OfertaScreen({ profile }: { profile: Profile }) {
       });
       const blob = new Blob([bytes] as BlobPart[], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
-      const opened = window.open(url, "_blank");
-      if (!opened) {
-        notify("Nie udało się otworzyć okna", "Zezwól przeglądarce na wyskakujące okienka dla tej strony i spróbuj ponownie.");
-      }
+      // Otwarcie w nowej karcie zostawia przeglądarce domyślną nazwę pliku
+      // przy zapisie (np. "document.pdf") — link z atrybutem download
+      // wymusza realną nazwę zgodną z ustalonym formatem: nr oferty _ nazwa
+      // firmy _ nazwisko imię.pdf.
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = buildOfferFileName(client.ref, client.companyName, client.contactPerson);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
       if (missingRealPdf.length > 0) {
         notify(
           "Część kart wygenerowana zastępczo",

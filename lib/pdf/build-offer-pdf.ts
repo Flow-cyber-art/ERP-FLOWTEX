@@ -1,4 +1,4 @@
-import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFArray, PDFDocument, PDFFont, PDFImage, PDFName, PDFPage, PDFString, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
 /**
@@ -29,6 +29,49 @@ const GOLD = rgb(0x8a / 255, 0x5f / 255, 0x1e / 255);
 const GREY = rgb(0.45, 0.45, 0.45);
 const INK = rgb(0.1, 0.1, 0.1);
 const LINE = rgb(0.87, 0.87, 0.87);
+const LINK_BLUE = rgb(0.16, 0.4, 0.7);
+const PIN_RED = rgb(0.85, 0.25, 0.2);
+const GLOBE_TEAL = rgb(0.15, 0.55, 0.55);
+
+/**
+ * Klikalny link "www.flowtex.pl" w stopce — na kartach PDF wgrywanych przez
+ * Admina (Word/inne narzędzie) ten link jest realną, klikalną hiperłączem, a
+ * nie samym niebieskim tekstem, więc stopka rysowana przez nas (strona
+ * tytułowa/tabela cen/warunki) ma dostać dokładnie taką samą adnotację —
+ * pdf-lib nie ma do tego gotowego helpera, więc budujemy adnotację Link
+ * ręcznie na poziomie PDF-a.
+ */
+function addLinkAnnotation(page: PDFPage, url: string, rect: [number, number, number, number]) {
+  const doc = page.doc;
+  const annotRef = doc.context.register(
+    doc.context.obj({
+      Type: "Annot",
+      Subtype: "Link",
+      Rect: rect,
+      Border: [0, 0, 0],
+      A: { Type: "Action", S: "URI", URI: PDFString.of(url) },
+    }),
+  );
+  const existing = page.node.lookup(PDFName.of("Annots"));
+  if (existing instanceof PDFArray) {
+    existing.push(annotRef);
+  } else {
+    page.node.set(PDFName.of("Annots"), doc.context.obj([annotRef]));
+  }
+}
+
+/** Mała pieczątka lokalizacji (kropka) przed adresem w stopce — patrz drawFooter. */
+function drawPinIcon(page: PDFPage, x: number, y: number) {
+  page.drawCircle({ x: x + 2, y: y + 2.5, size: 2.2, color: PIN_RED });
+}
+
+/** Mały "globus" (okrąg + równik/południk) przed linkiem w stopce — patrz drawFooter. */
+function drawGlobeIcon(page: PDFPage, x: number, y: number) {
+  const cx = x + 3, cy = y + 2.8, r = 3;
+  page.drawCircle({ x: cx, y: cy, size: r, borderColor: GLOBE_TEAL, borderWidth: 0.6, color: undefined });
+  page.drawLine({ start: { x: cx, y: cy - r }, end: { x: cx, y: cy + r }, thickness: 0.5, color: GLOBE_TEAL });
+  page.drawLine({ start: { x: cx - r, y: cy }, end: { x: cx + r, y: cy }, thickness: 0.5, color: GLOBE_TEAL });
+}
 
 const ASCII_MAP: Record<string, string> = {
   ą: "a", ć: "c", ę: "e", ł: "l", ń: "n", ó: "o", ś: "s", ź: "z", ż: "z",
@@ -136,18 +179,30 @@ class DocWriter {
     this.drawFooter();
   }
 
+  // Stopka ma wygladać identycznie jak w kartach PDF wgrywanych przez Admina
+  // (pinezka + adres, NIP na środku, globus + klikalny link po prawej) —
+  // dawniej rysowaliśmy adres+NIP jednym ciągiem z myślnikiem po lewej i
+  // "www.flowtex.pl" jako martwy tekst po prawej, więc nasze strony
+  // (tytułowa/tabela cen/warunki) wizualnie odstawały od doklejonych
+  // realnych kart.
   drawFooter() {
     const size = 8;
-    const left = this.text("Ciółkowo Małe 32, 07-215 Obryte — NIP: 7621744781");
-    this.page.drawText(left, { x: MARGIN, y: MARGIN - 24, size, font: this.font, color: GREY });
-    const right = "www.flowtex.pl";
-    this.page.drawText(right, {
-      x: PAGE_W - MARGIN - this.font.widthOfTextAtSize(right, size),
-      y: MARGIN - 24,
-      size,
-      font: this.font,
-      color: GREY,
-    });
+    const y = MARGIN - 24;
+    const address = this.text("Ciółkowo Małe 32, 07-215 Obryte");
+    drawPinIcon(this.page, MARGIN, y);
+    this.page.drawText(address, { x: MARGIN + 9, y, size, font: this.font, color: GREY });
+
+    const nip = "NIP: 7621744781";
+    const nipX = PAGE_W / 2 - this.font.widthOfTextAtSize(nip, size) / 2;
+    this.page.drawText(nip, { x: nipX, y, size, font: this.font, color: GREY });
+
+    const url = "www.flowtex.pl";
+    const urlW = this.font.widthOfTextAtSize(url, size);
+    const urlX = PAGE_W - MARGIN - urlW;
+    drawGlobeIcon(this.page, urlX - 11, y);
+    this.page.drawText(url, { x: urlX, y, size, font: this.font, color: LINK_BLUE });
+    this.page.drawLine({ start: { x: urlX, y: y - 1.5 }, end: { x: urlX + urlW, y: y - 1.5 }, thickness: 0.5, color: LINK_BLUE });
+    addLinkAnnotation(this.page, "https://www.flowtex.pl", [urlX, y - 2, urlX + urlW, y + size]);
   }
 
   ensureSpace(h: number) {

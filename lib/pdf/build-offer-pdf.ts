@@ -60,9 +60,15 @@ function addLinkAnnotation(page: PDFPage, url: string, rect: [number, number, nu
   }
 }
 
-/** Mała pieczątka lokalizacji (kropka) przed adresem w stopce — patrz drawFooter. */
+// Kształt pinezki lokalizacji (Font Awesome map-marker, viewBox 384x512) —
+// zwykła wypełniona kropka nie czytała się jako "pin", tylko jako plamka.
+const PIN_SVG_PATH =
+  "M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0S384 85.961 384 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0zM192 272c44.183 0 80-35.817 80-80s-35.817-80-80-80-80 35.817-80 80 35.817 80 80 80z";
+
+/** Prawdziwa pinezka lokalizacji (nie kropka) przed adresem w stopce — patrz drawFooter. (x, y) = lewy dolny róg, czubek pinezki siada na y (linii bazowej tekstu). */
 function drawPinIcon(page: PDFPage, x: number, y: number) {
-  page.drawCircle({ x: x + 2, y: y + 2.5, size: 2.2, color: PIN_RED });
+  const scale = 8 / 512;
+  page.drawSvgPath(PIN_SVG_PATH, { x, y, scale, color: PIN_RED, borderWidth: 0 });
 }
 
 /** Mały "globus" (okrąg + równik/południk) przed linkiem w stopce — patrz drawFooter. */

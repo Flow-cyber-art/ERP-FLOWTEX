@@ -30,8 +30,6 @@ const GREY = rgb(0.45, 0.45, 0.45);
 const INK = rgb(0.1, 0.1, 0.1);
 const LINE = rgb(0.87, 0.87, 0.87);
 const LINK_BLUE = rgb(0.16, 0.4, 0.7);
-const PIN_RED = rgb(0.85, 0.25, 0.2);
-const GLOBE_TEAL = rgb(0.15, 0.55, 0.55);
 
 /**
  * Klikalny link "www.flowtex.pl" w stopce — na kartach PDF wgrywanych przez
@@ -60,24 +58,6 @@ function addLinkAnnotation(page: PDFPage, url: string, rect: [number, number, nu
   }
 }
 
-// Kształt pinezki lokalizacji (Font Awesome map-marker, viewBox 384x512) —
-// zwykła wypełniona kropka nie czytała się jako "pin", tylko jako plamka.
-const PIN_SVG_PATH =
-  "M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0S384 85.961 384 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0zM192 272c44.183 0 80-35.817 80-80s-35.817-80-80-80-80 35.817-80 80 35.817 80 80 80z";
-
-/** Prawdziwa pinezka lokalizacji (nie kropka) przed adresem w stopce — patrz drawFooter. (x, y) = lewy dolny róg, czubek pinezki siada na y (linii bazowej tekstu). */
-function drawPinIcon(page: PDFPage, x: number, y: number) {
-  const scale = 8 / 512;
-  page.drawSvgPath(PIN_SVG_PATH, { x, y, scale, color: PIN_RED, borderWidth: 0 });
-}
-
-/** Mały "globus" (okrąg + równik/południk) przed linkiem w stopce — patrz drawFooter. */
-function drawGlobeIcon(page: PDFPage, x: number, y: number) {
-  const cx = x + 3, cy = y + 2.8, r = 3;
-  page.drawCircle({ x: cx, y: cy, size: r, borderColor: GLOBE_TEAL, borderWidth: 0.6, color: undefined });
-  page.drawLine({ start: { x: cx, y: cy - r }, end: { x: cx, y: cy + r }, thickness: 0.5, color: GLOBE_TEAL });
-  page.drawLine({ start: { x: cx - r, y: cy }, end: { x: cx + r, y: cy }, thickness: 0.5, color: GLOBE_TEAL });
-}
 
 const ASCII_MAP: Record<string, string> = {
   ą: "a", ć: "c", ę: "e", ł: "l", ń: "n", ó: "o", ś: "s", ź: "z", ż: "z",
@@ -121,8 +101,18 @@ async function embedFonts(doc: PDFDocument): Promise<{ font: PDFFont; fontBold: 
  * tylko rysowany tekstem napis "FLOWTEX"). Jeśli plik z jakiegoś powodu nie
  * da się pobrać/osadzić, wracamy do starego tekstowego logo zamiast wywalać
  * cały eksport — patrz drawTitleLogo/badgeImage niżej.
+ *
+ * pin/globe: te same emoji (📍/🌐), które wzorcowy makro VBA
+ * (ZamianaStopek_v2.bas) wpisuje w stopce dokumentów Word — DejaVu Sans
+ * (font, którym SAMI rysujemy tekst) nie ma dla nich glyphów (wychodzi
+ * "tofu box"), więc muszą być bitmapą, tak jak logo/pieczątka. Pliki PNG z
+ * pakietu emoji-datasource-twitter (public/logo/pin-emoji.png,
+ * globe-emoji.png) wizualnie odpowiadają tym samym Unicode punktom
+ * (U+1F4CD, U+1F310).
  */
-async function embedBrandImages(doc: PDFDocument): Promise<{ logo: PDFImage | null; badge: PDFImage | null }> {
+async function embedBrandImages(
+  doc: PDFDocument,
+): Promise<{ logo: PDFImage | null; badge: PDFImage | null; pin: PDFImage | null; globe: PDFImage | null }> {
   async function tryEmbed(path: string): Promise<PDFImage | null> {
     try {
       const res = await fetch(path);
@@ -132,8 +122,13 @@ async function embedBrandImages(doc: PDFDocument): Promise<{ logo: PDFImage | nu
       return null;
     }
   }
-  const [logo, badge] = await Promise.all([tryEmbed("/logo/logo.png"), tryEmbed("/logo/certyfikat-flowcrete.png")]);
-  return { logo, badge };
+  const [logo, badge, pin, globe] = await Promise.all([
+    tryEmbed("/logo/logo.png"),
+    tryEmbed("/logo/certyfikat-flowcrete.png"),
+    tryEmbed("/logo/pin-emoji.png"),
+    tryEmbed("/logo/globe-emoji.png"),
+  ]);
+  return { logo, badge, pin, globe };
 }
 
 function wrapText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
@@ -158,15 +153,27 @@ class DocWriter {
   font: PDFFont;
   fontBold: PDFFont;
   polish: boolean;
+  pin: PDFImage | null;
+  globe: PDFImage | null;
   page!: PDFPage;
   y = 0;
   ref: string;
 
-  constructor(doc: PDFDocument, font: PDFFont, fontBold: PDFFont, polish: boolean, ref: string) {
+  constructor(
+    doc: PDFDocument,
+    font: PDFFont,
+    fontBold: PDFFont,
+    polish: boolean,
+    ref: string,
+    pin: PDFImage | null,
+    globe: PDFImage | null,
+  ) {
     this.doc = doc;
     this.font = font;
     this.fontBold = fontBold;
     this.polish = polish;
+    this.pin = pin;
+    this.globe = globe;
     this.ref = ref;
     this.newPage();
   }
@@ -185,30 +192,39 @@ class DocWriter {
     this.drawFooter();
   }
 
-  // Stopka ma wygladać identycznie jak w kartach PDF wgrywanych przez Admina
-  // (pinezka + adres, NIP na środku, globus + klikalny link po prawej) —
-  // dawniej rysowaliśmy adres+NIP jednym ciągiem z myślnikiem po lewej i
-  // "www.flowtex.pl" jako martwy tekst po prawej, więc nasze strony
-  // (tytułowa/tabela cen/warunki) wizualnie odstawały od doklejonych
-  // realnych kart.
+  // Stopka odtwarza DOSŁOWNIE ten sam standard, którym firmowe makro VBA
+  // (ZamianaStopek_v2.bas) nadpisuje stopki w dokumentach Word: pinezka
+  // 📍 + adres, potem 22 spacje, NIP, potem 18 spacji, globus 🌐 +
+  // klikalny link "www.flowtex.pl". Same odstępy budujemy z prawdziwych
+  // spacji (Space(22)/Space(18)) w rozmiarze 9pt jak w makrze — nie z
+  // arbitralnie wyliczonego centrowania/wyrównania do prawej, którego
+  // wynik nie miał żadnego wspólnego pochodzenia z resztą kart.
+  // Pinezka/globus to bitmapy (emoji-datasource-twitter), bo DejaVu Sans
+  // (font, którym rysujemy TEN tekst) nie ma glyphów dla 📍/🌐.
   drawFooter() {
-    const size = 8;
+    const size = 9;
     const y = MARGIN - 24;
+    const iconSize = 9;
+
+    let x = MARGIN;
+    if (this.pin) {
+      this.page.drawImage(this.pin, { x, y: y - 1.5, width: iconSize, height: iconSize });
+      x += iconSize + 3;
+    }
     const address = this.text("Ciółkowo Małe 32, 07-215 Obryte");
-    drawPinIcon(this.page, MARGIN, y);
-    this.page.drawText(address, { x: MARGIN + 9, y, size, font: this.font, color: GREY });
+    const middle = address + " ".repeat(22) + "NIP: 7621744781" + " ".repeat(18);
+    this.page.drawText(middle, { x, y, size, font: this.font, color: GREY });
+    x += this.font.widthOfTextAtSize(middle, size);
 
-    const nip = "NIP: 7621744781";
-    const nipX = PAGE_W / 2 - this.font.widthOfTextAtSize(nip, size) / 2;
-    this.page.drawText(nip, { x: nipX, y, size, font: this.font, color: GREY });
-
+    if (this.globe) {
+      this.page.drawImage(this.globe, { x, y: y - 1.5, width: iconSize, height: iconSize });
+      x += iconSize + 3;
+    }
     const url = "www.flowtex.pl";
     const urlW = this.font.widthOfTextAtSize(url, size);
-    const urlX = PAGE_W - MARGIN - urlW;
-    drawGlobeIcon(this.page, urlX - 11, y);
-    this.page.drawText(url, { x: urlX, y, size, font: this.font, color: LINK_BLUE });
-    this.page.drawLine({ start: { x: urlX, y: y - 1.5 }, end: { x: urlX + urlW, y: y - 1.5 }, thickness: 0.5, color: LINK_BLUE });
-    addLinkAnnotation(this.page, "https://www.flowtex.pl", [urlX, y - 2, urlX + urlW, y + size]);
+    this.page.drawText(url, { x, y, size, font: this.font, color: LINK_BLUE });
+    this.page.drawLine({ start: { x, y: y - 1.5 }, end: { x: x + urlW, y: y - 1.5 }, thickness: 0.5, color: LINK_BLUE });
+    addLinkAnnotation(this.page, "https://www.flowtex.pl", [x, y - 2, x + urlW, y + size]);
   }
 
   ensureSpace(h: number) {
@@ -325,8 +341,8 @@ export type BuildOfferPdfResult = {
 export async function buildOfferPdf(input: BuildOfferPdfInput): Promise<BuildOfferPdfResult> {
   const doc = await PDFDocument.create();
   const { font, fontBold, polish } = await embedFonts(doc);
-  const { logo, badge } = await embedBrandImages(doc);
-  const w = new DocWriter(doc, font, fontBold, polish, input.ref);
+  const { logo, badge, pin, globe } = await embedBrandImages(doc);
+  const w = new DocWriter(doc, font, fontBold, polish, input.ref, pin, globe);
 
   // ---- Strona tytułowa ----
   if (logo) {

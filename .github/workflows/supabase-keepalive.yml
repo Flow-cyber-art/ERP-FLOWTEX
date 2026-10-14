@@ -1,0 +1,29 @@
+name: Supabase keep-alive
+
+# Darmowe projekty Supabase są wstrzymywane po tygodniu bez aktywności.
+# Ten workflow co kilka dni wykonuje zapytanie do bazy, żeby tego uniknąć.
+# Wymagane sekrety repo: SUPABASE_URL, SUPABASE_ANON_KEY.
+
+on:
+  schedule:
+    - cron: "17 6 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Zapytanie do bazy Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          # Zapytanie do PostgREST trafia w bazę (404/401 na tabeli też liczy się jako ruch,
+          # ale wymagamy 2xx na schemacie API).
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 \
+            "$SUPABASE_URL/rest/v1/" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "HTTP $code"
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]

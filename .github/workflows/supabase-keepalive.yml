@@ -27,4 +27,7 @@ jobs:
             -H "Authorization: Bearer $SUPABASE_ANON_KEY")
           echo "HTTP $code"
           head -c 500 body.txt; echo
-          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]
+          # 2xx = zapytanie przeszło. 42501 (brak uprawnień anon do tabeli) też dowodzi,
+          # że zapytanie dotarło do Postgresa, więc liczy się jako aktywność bazy.
+          if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then exit 0; fi
+          grep -q '"code":"42501"' body.txt

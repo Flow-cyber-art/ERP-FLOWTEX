@@ -24,6 +24,7 @@ import { useAppData, type NewBuildInput } from "@/contexts/app-data";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { BuildPortalSection } from "@/components/build-portal-section";
+import { TechnologyPicker } from "@/components/technology-picker";
 import { todayISO } from "@/components/report-ui";
 
 // Wartość kontraktu bywa 6-7 cyfrowa (setki tysięcy) — bez separatora
@@ -629,34 +630,11 @@ export function BuildsScreen() {
               </Text>
             ) : (
               <>
-                <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                  {technologies.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => setWizardTechId(t.id)}
-                      style={{
-                        backgroundColor:
-                          wizardTechId === t.id ? COLORS.primary : COLORS.background,
-                        borderRadius: 8,
-                        paddingHorizontal: 9,
-                        paddingVertical: 7,
-                        borderWidth: 1,
-                        borderColor: wizardTechId === t.id ? COLORS.primary : COLORS.border,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color:
-                            wizardTechId === t.id ? COLORS.background : COLORS.foreground,
-                          fontWeight: "700",
-                          fontSize: 12,
-                        }}
-                      >
-                        {t.name} · v{t.version}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                <TechnologyPicker
+                  technologies={technologies}
+                  selectedId={wizardTechId}
+                  onSelect={setWizardTechId}
+                />
                 <Text className="text-xs text-muted uppercase mb-2 mt-3">
                   Powierzchnia (m²)
                 </Text>
@@ -1566,37 +1544,11 @@ export function BuildsScreen() {
                       </Text>
                     ) : (
                       <>
-                        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                          {technologies.map((t) => (
-                            <Pressable
-                              key={t.id}
-                              onPress={() => setTechPickerId(t.id)}
-                              style={{
-                                backgroundColor:
-                                  techPickerId === t.id ? COLORS.primary : COLORS.background,
-                                borderRadius: 8,
-                                paddingHorizontal: 9,
-                                paddingVertical: 7,
-                                borderWidth: 1,
-                                borderColor:
-                                  techPickerId === t.id ? COLORS.primary : COLORS.border,
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  color:
-                                    techPickerId === t.id
-                                      ? COLORS.background
-                                      : COLORS.foreground,
-                                  fontWeight: "700",
-                                  fontSize: 12,
-                                }}
-                              >
-                                {t.name} · v{t.version}
-                              </Text>
-                            </Pressable>
-                          ))}
-                        </View>
+                        <TechnologyPicker
+                          technologies={technologies}
+                          selectedId={techPickerId}
+                          onSelect={setTechPickerId}
+                        />
                         <Text className="text-xs text-muted uppercase mb-2 mt-3">
                           Powierzchnia (m²)
                         </Text>

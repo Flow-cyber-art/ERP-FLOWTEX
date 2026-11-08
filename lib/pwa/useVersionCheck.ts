@@ -3,6 +3,9 @@ import { AppState, Platform } from "react-native";
 import { BUILD_VERSION } from "@/constants/build-version";
 import { clearServiceWorkerCache } from "@/lib/pwa/registerServiceWorker";
 
+// Co ile dodatkowo sprawdzać wersję, gdy appka stoi otwarta bez przełączania.
+const VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
 /**
  * Wykrywanie nowej wersji appki wdrożonej na serwerze.
  *
@@ -17,10 +20,9 @@ import { clearServiceWorkerCache } from "@/lib/pwa/registerServiceWorker";
  *
  * Sprawdzane: od razu przy montowaniu i za każdym razem, gdy apka wraca
  * na pierwszy plan (np. przełączenie karty/aplikacji z powrotem —
- * `AppState` → `"active"`). Bez osobnego interwału cyklicznego: apkę
- * odłożoną w tło (nie zamkniętą) sprawdzamy dokładnie w momencie, kiedy
- * ktoś do niej wraca, więc dobijanie co kilka minut w tle i tak nie
- * wykryje nic wcześniej niż to zdarzenie — tylko zużywa baterię/dane.
+ * `AppState` → `"active"`). Dodatkowo co VERSION_CHECK_INTERVAL_MS (4 h),
+ * tylko gdy karta jest widoczna — dla apki otwartej cały dzień bez
+ * przełączania. Częściej nie ma sensu: wdrożenia są rzadkie.
  *
  * W ODRÓŻNIENIU OD POPRZEDNIEJ WERSJI: nie czyści cache'a i nie
  * przeładowuje strony automatycznie — tylko zgłasza, że jest nowa wersja
@@ -63,9 +65,18 @@ export function useVersionCheck() {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") checkVersion();
     });
+    // Zapas dla karty/PWA otwartej cały dzień bez przełączania się (typowo
+    // desktop): wdrożenia są rzadkie, więc wystarczy sprawdzenie co kilka
+    // godzin, tylko gdy karta jest widoczna.
+    const interval = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        checkVersion();
+      }
+    }, VERSION_CHECK_INTERVAL_MS);
 
     return () => {
       subscription.remove();
+      clearInterval(interval);
     };
   }, []);
 

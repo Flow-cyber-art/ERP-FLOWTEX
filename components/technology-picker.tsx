@@ -3,13 +3,19 @@ import { Pressable, Text, View } from "react-native";
 import { COLORS, Field } from "@/components/report-ui";
 import type { TechnologyRow } from "@/lib/data/technologies";
 
-// Wybór technologii z filtrami (wyszukiwarka, firma, grubość od–do) —
-// wspólny dla kreatora budowy (krok 2) i zmiany technologii na karcie
-// budowy. Po wyborze lista zwija się do jednej karty z przyciskiem "Zmień".
+// Wybór technologii w dwóch krokach (wspólny dla kreatora budowy i zmiany
+// technologii na karcie budowy): najpierw firma (kafelki z liczbą pozycji),
+// dopiero potem lista technologii tej firmy w pionowych wierszach. Lista
+// pojawia się też od razu, gdy ktoś wpisze nazwę albo zakres grubości —
+// wtedy firma nie jest wymagana. Po wyborze lista zwija się do jednej
+// karty z przyciskiem "Zmień".
+//
+// Technologie bez firmy (demontaż, naprawy, iniekcje itp.) lądują pod
+// kafelkiem "Inne / bez firmy" — inaczej byłyby nieosiągalne.
 //
 // Filtr grubości dopasowuje po nakładaniu się przedziałów, tak jak w
-// ofercie: technologie BEZ zdefiniowanej grubości (naprawy, cokoły,
-// dylatacje) nie znikają przy aktywnym filtrze.
+// ofercie: technologie BEZ zdefiniowanej grubości nie znikają przy
+// aktywnym filtrze.
 
 type Props = {
   technologies: TechnologyRow[];
@@ -17,7 +23,9 @@ type Props = {
   onSelect: (id: number | null) => void;
 };
 
+const NO_COMPANY = "__none__";
 const norm = (s: string) => s.toLocaleLowerCase("pl").trim();
+const companyKey = (t: TechnologyRow) => t.company?.trim() || NO_COMPANY;
 
 export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) {
   const [query, setQuery] = useState("");
@@ -25,23 +33,17 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  const companies = useMemo(
-    () =>
-      Array.from(
-        new Set(technologies.map((t) => t.company?.trim()).filter((c): c is string => !!c)),
-      ).sort((a, b) => a.localeCompare(b, "pl")),
-    [technologies],
-  );
-
   const toNum = (v: string) => Number(v.trim().replace(",", "."));
   const fromN = from.trim() !== "" && !isNaN(toNum(from)) ? toNum(from) : null;
   const toN = to.trim() !== "" && !isNaN(toNum(to)) ? toNum(to) : null;
+  const searchActive = query.trim() !== "" || fromN !== null || toN !== null;
 
-  const filtered = useMemo(() => {
+  // Szukajka + grubość — bez firmy; to z tego liczymy kafelki firm, żeby
+  // liczby na nich odpowiadały aktualnym filtrom.
+  const baseFiltered = useMemo(() => {
     const q = norm(query);
     return technologies.filter((t) => {
       if (q && !norm(`${t.name} ${t.code}`).includes(q)) return false;
-      if (company && t.company?.trim() !== company) return false;
       if (fromN !== null || toN !== null) {
         const min = t.thicknessMinMm != null ? Number(t.thicknessMinMm) : null;
         const max = t.thicknessMaxMm != null ? Number(t.thicknessMaxMm) : null;
@@ -52,7 +54,19 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
       }
       return true;
     });
-  }, [technologies, query, company, fromN, toN]);
+  }, [technologies, query, fromN, toN]);
+
+  const companyCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of baseFiltered) map.set(companyKey(t), (map.get(companyKey(t)) ?? 0) + 1);
+    const named = Array.from(map.entries())
+      .filter(([k]) => k !== NO_COMPANY)
+      .sort((a, b) => a[0].localeCompare(b[0], "pl"));
+    const none = map.get(NO_COMPANY) ?? 0;
+    return none > 0 ? [...named, [NO_COMPANY, none] as [string, number]] : named;
+  }, [baseFiltered]);
+
+  const companyLabel = (key: string) => (key === NO_COMPANY ? "Inne / bez firmy" : key);
 
   const selected = technologies.find((t) => t.id === selectedId) ?? null;
 
@@ -93,43 +107,12 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
     );
   }
 
-  const chip = (label: string, active: boolean, onPress: () => void, key: string) => (
-    <Pressable
-      key={key}
-      onPress={onPress}
-      style={{
-        backgroundColor: active ? COLORS.primary : COLORS.background,
-        borderRadius: 8,
-        paddingHorizontal: 9,
-        paddingVertical: 7,
-        borderWidth: 1,
-        borderColor: active ? COLORS.primary : COLORS.border,
-      }}
-    >
-      <Text
-        style={{
-          color: active ? COLORS.background : COLORS.foreground,
-          fontWeight: "700",
-          fontSize: 12,
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-
-  const filtersActive = query.trim() !== "" || company !== null || fromN !== null || toN !== null;
+  const results = company ? baseFiltered.filter((t) => companyKey(t) === company) : baseFiltered;
+  const showList = company !== null || searchActive;
 
   return (
     <View>
       <Field placeholder="Szukaj technologii…" value={query} onChangeText={setQuery} />
-
-      {companies.length > 0 && (
-        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-          {chip("Wszystkie", company === null, () => setCompany(null), "__all")}
-          {companies.map((c) => chip(c, company === c, () => setCompany(company === c ? null : c), c))}
-        </View>
-      )}
 
       <Text className="text-xs text-muted uppercase mb-2 mt-3">Grubość (mm)</Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
@@ -141,41 +124,109 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
         </View>
       </View>
 
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: 12,
-          marginBottom: 8,
-        }}
-      >
-        <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-          {filtered.length} z {technologies.length}
-        </Text>
-        {filtersActive && (
-          <Pressable
-            onPress={() => {
-              setQuery("");
-              setCompany(null);
-              setFrom("");
-              setTo("");
-            }}
-          >
-            <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
-              Wyczyść filtry
+      <Text className="text-xs text-muted uppercase mb-2 mt-4">Firma</Text>
+      {company === null ? (
+        companyCounts.length === 0 ? (
+          <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+            Brak technologii pasujących do filtrów.
+          </Text>
+        ) : (
+          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+            {companyCounts.map(([key, count]) => (
+              <Pressable
+                key={key}
+                onPress={() => setCompany(key)}
+                style={{
+                  backgroundColor: COLORS.surface,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  paddingHorizontal: 14,
+                  paddingVertical: 11,
+                  minWidth: 110,
+                }}
+              >
+                <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+                  {companyLabel(key)}
+                </Text>
+                <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                  {count} {count === 1 ? "technologia" : "technologii"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )
+      ) : (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            backgroundColor: COLORS.surface,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: COLORS.primary,
+            paddingHorizontal: 14,
+            paddingVertical: 11,
+          }}
+        >
+          <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+            {companyLabel(company)}
+          </Text>
+          <Pressable onPress={() => setCompany(null)}>
+            <Text
+              style={{
+                color: COLORS.primary,
+                fontWeight: "700",
+                fontSize: 12,
+                textDecorationLine: "underline",
+              }}
+            >
+              Zmień
             </Text>
           </Pressable>
-        )}
-      </View>
+        </View>
+      )}
 
-      {filtered.length === 0 ? (
-        <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-          Brak technologii pasujących do filtrów.
+      {!showList ? (
+        <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 12 }}>
+          Wybierz firmę albo wpisz nazwę / grubość, żeby zobaczyć technologie.
         </Text>
       ) : (
-        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-          {filtered.map((t) => chip(`${t.name} · v${t.version}`, false, () => onSelect(t.id), String(t.id)))}
+        <View style={{ marginTop: 14 }}>
+          <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 6 }}>
+            {results.length} {results.length === 1 ? "technologia" : "technologii"}
+          </Text>
+          {results.length === 0 ? (
+            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+              Brak technologii pasujących do filtrów.
+            </Text>
+          ) : (
+            results.map((t) => (
+              <Pressable
+                key={t.id}
+                onPress={() => onSelect(t.id)}
+                style={{
+                  paddingVertical: 11,
+                  paddingHorizontal: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  backgroundColor: COLORS.background,
+                  marginBottom: 6,
+                }}
+              >
+                <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+                  {t.name} · v{t.version}
+                </Text>
+                {company === null && (
+                  <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                    {companyLabel(companyKey(t))}
+                  </Text>
+                )}
+              </Pressable>
+            ))
+          )}
         </View>
       )}
     </View>

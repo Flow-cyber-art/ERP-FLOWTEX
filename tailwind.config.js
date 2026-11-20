@@ -29,9 +29,9 @@ module.exports = {
       colors: tailwindColors,
       // Skala zaokrągleń — te same wartości co constants/radius.ts.
       borderRadius: {
-        card: "10px",
-        control: "8px",
-        chip: "6px",
+        card: "8px",
+        control: "6px",
+        chip: "4px",
       },
     },
   },

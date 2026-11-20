@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import { COLORS, formatPLN, ScreenHeader, SearchablePicker } from "@/components/report-ui";
+import { COLORS, formatPLN, ScreenHeader, SearchablePicker, ToggleChip } from "@/components/report-ui";
 import { ComparisonBarChart, DonutChart, KpiTile } from "@/components/charts";
 import { useAppData } from "@/contexts/app-data";
 import { normalizeMaterialName } from "@/lib/material-name-match";
@@ -312,29 +312,7 @@ export function SettlementScreen() {
         </Pressable>
         {/* Mały przełącznik zamiast pełnowymiarowego wiersza tekstu — ten
             sam wzorzec co "Archiwum" w warehouse-screen.tsx/manager-screen.tsx. */}
-        <Pressable
-          onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
-          hitSlop={8}
-          style={{ alignItems: "center", gap: 4 }}
-        >
-          <View
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: RADIUS.chip,
-              borderWidth: 1,
-              borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
-              backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {showArchivedBuilds && (
-              <Icon name="check" size={14} color={COLORS.background} />
-            )}
-          </View>
-          <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>
-        </Pressable>
+        <ToggleChip label="Archiwum" value={showArchivedBuilds} onChange={setShowArchivedBuilds} />
       </View>
 
       <SearchablePicker

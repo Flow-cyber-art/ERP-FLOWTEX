@@ -12,6 +12,7 @@ import {
   formatPLN,
   QuantityStepper,
   ScreenHeader,
+  ToggleChip,
   UNIT_OPTIONS,
 } from "@/components/report-ui";
 import { useAppData, type NewMaterialInput } from "@/contexts/app-data";
@@ -281,29 +282,7 @@ export function WarehouseScreen() {
           szerokość — to rzadko używana opcja (archiwum), nie jedno z
           głównych pytań, na które ekran ma odpowiadać (patrz filtr
           przypisania niżej), więc nie zasługuje na tyle samo miejsca. */}
-      <Pressable
-        onPress={() => setShowArchivedMaterials(!showArchivedMaterials)}
-        hitSlop={8}
-        style={{ alignItems: "center", gap: 4 }}
-      >
-        <View
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: RADIUS.chip,
-            borderWidth: 1,
-            borderColor: showArchivedMaterials ? COLORS.primary : COLORS.border,
-            backgroundColor: showArchivedMaterials ? COLORS.primary : "transparent",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {showArchivedMaterials && (
-            <Icon name="check" size={14} color={COLORS.background} />
-          )}
-        </View>
-        <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>
-      </Pressable>
+      <ToggleChip label="Archiwum" value={showArchivedMaterials} onChange={setShowArchivedMaterials} />
     </View>
     <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
       {(

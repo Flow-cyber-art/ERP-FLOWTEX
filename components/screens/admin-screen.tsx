@@ -10,6 +10,7 @@ import {
   QuantityStepper,
   StatusBadge,
   pluralPL,
+  ToggleChip,
 } from "@/components/report-ui";
 import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
 import {
@@ -423,31 +424,7 @@ export function AdminTeamSection() {
           Zespół ({visibleEmployees.filter((e) => e.active).length})
         </Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-          <Pressable
-            onPress={() => setShowArchived(!showArchived)}
-            hitSlop={8}
-            style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-          >
-            <View
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 4,
-                borderWidth: 1,
-                borderColor: showArchived ? COLORS.primary : COLORS.border,
-                backgroundColor: showArchived ? COLORS.primary : "transparent",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {showArchived && (
-                <Icon name="check" size={12} color={COLORS.background} />
-              )}
-            </View>
-            <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "600" }}>
-              Archiwum
-            </Text>
-          </Pressable>
+          <ToggleChip label="Archiwum" value={showArchived} onChange={setShowArchived} />
           <Pressable onPress={() => setAddEmployeeOpen(!addEmployeeOpen)}>
             <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
               {addEmployeeOpen ? "Anuluj" : "+ Dodaj pracownika"}

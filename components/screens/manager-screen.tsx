@@ -6,6 +6,7 @@ import {
   ReportCard,
   ScreenHeader,
   SearchablePicker,
+  ToggleChip,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
@@ -108,29 +109,7 @@ export function ManagerScreen() {
         {/* Mały przełącznik zamiast pełnowymiarowego wiersza tekstu — rzadko
             używana opcja (czy budowa jest w wyszukiwarce budowy do wyboru
             wyżej), ten sam wzorzec co "Archiwum" w warehouse-screen.tsx. */}
-        <Pressable
-          onPress={() => setShowArchivedBuilds(!showArchivedBuilds)}
-          hitSlop={8}
-          style={{ alignItems: "center", gap: 4 }}
-        >
-          <View
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: RADIUS.chip,
-              borderWidth: 1,
-              borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
-              backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {showArchivedBuilds && (
-              <Icon name="check" size={14} color={COLORS.background} />
-            )}
-          </View>
-          <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>
-        </Pressable>
+        <ToggleChip label="Archiwum" value={showArchivedBuilds} onChange={setShowArchivedBuilds} />
       </View>
 
       <SearchablePicker

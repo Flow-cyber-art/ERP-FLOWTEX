@@ -13,7 +13,7 @@
  * (borderRadius = połowa rozmiaru) i nie należą do skali.
  */
 export const RADIUS = {
-  card: 10,
-  control: 8,
-  chip: 6,
+  card: 8,
+  control: 6,
+  chip: 4,
 } as const;

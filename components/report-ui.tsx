@@ -512,6 +512,51 @@ const SearchField = ({ style, ...props }: any) => (
   </View>
 );
 
+// Przełącznik "pokaż także…" (np. archiwalne): obrys, ikona i etykieta;
+// włączony ma jaśniejsze tło i tekst. Zastępuje checkbox z podpisem pod
+// spodem, który wyglądał jak osobne ustawienie, a nie filtr listy.
+const ToggleChip = ({
+  label,
+  icon = "archive",
+  value,
+  onChange,
+}: {
+  label: string;
+  icon?: IconName;
+  value: boolean;
+  onChange: (next: boolean) => void;
+}) => (
+  <Pressable
+    onPress={() => onChange(!value)}
+    hitSlop={6}
+    accessibilityRole="switch"
+    accessibilityState={{ checked: value }}
+    style={({ pressed }) => ({
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: RADIUS.control,
+      borderWidth: 1,
+      borderColor: value ? COLORS.muted : COLORS.border,
+      backgroundColor: value ? COLORS.border : "transparent",
+      opacity: pressed ? 0.75 : 1,
+    })}
+  >
+    <Icon name={icon} size={14} color={value ? COLORS.foreground : COLORS.muted} />
+    <Text
+      style={{
+        color: value ? COLORS.foreground : COLORS.muted,
+        fontSize: 13,
+        fontWeight: "600",
+      }}
+    >
+      {label}
+    </Text>
+  </Pressable>
+);
+
 // Kompaktowy stepper ilości (− / wpisz / +), ten sam wzorzec co w kroku
 // "Zużycie dzienne" brygadzisty — używamy go teraz wszędzie tam, gdzie
 // wpisuje się jakąś ilość (magazyn, budowy, zamówienia), zamiast samego
@@ -1943,6 +1988,7 @@ export {
   Button,
   Field,
   SearchField,
+  ToggleChip,
   QuantityStepper,
   ExtraCostsSection,
   TimeOptionsList,

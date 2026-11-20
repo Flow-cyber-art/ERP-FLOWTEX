@@ -20,6 +20,7 @@ import {
   UNIT_OPTIONS,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 import {
   type SaveTechnologyStageInput,
   type TechnologyRow,
@@ -77,6 +78,8 @@ export function TechnologiesScreen() {
   const [technologies, setTechnologies] = useState<TechnologyRow[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const isWide = useWideLayout();
+  const [techQuery, setTechQuery] = useState("");
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
@@ -155,7 +158,18 @@ export function TechnologiesScreen() {
   )].sort((a, b) => a.localeCompare(b));
   const thicknessFrom = filterThicknessFrom ? Number(filterThicknessFrom) : null;
   const thicknessTo = filterThicknessTo ? Number(filterThicknessTo) : null;
+  const techQueryNormalized = techQuery.trim().toLowerCase();
   const filteredFamilies = families.filter(([active]) => {
+    if (
+      techQueryNormalized &&
+      !(
+        active.name.toLowerCase().includes(techQueryNormalized) ||
+        active.code.toLowerCase().includes(techQueryNormalized) ||
+        (active.company ?? "").toLowerCase().includes(techQueryNormalized)
+      )
+    ) {
+      return false;
+    }
     if (filterCompany !== "all" && (active.company?.trim() || "") !== filterCompany) {
       return false;
     }
@@ -840,6 +854,15 @@ export function TechnologiesScreen() {
 
       {families.length > 0 && (
         <>
+          <View style={{ marginBottom: 12 }}>
+            <SearchField
+              placeholder="Szukaj technologii (nazwa, kod, firma)…"
+              value={techQuery}
+              onChangeText={setTechQuery}
+              autoCapitalize="none"
+              style={{ marginTop: 0 }}
+            />
+          </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -853,13 +876,13 @@ export function TechnologiesScreen() {
                   paddingVertical: 8,
                   borderRadius: RADIUS.control,
                   borderWidth: 1,
-                  borderColor: filterCompany === "all" ? COLORS.primary : COLORS.border,
-                  backgroundColor: filterCompany === "all" ? COLORS.primary : COLORS.surface,
+                  borderColor: filterCompany === "all" ? COLORS.muted : COLORS.border,
+                  backgroundColor: filterCompany === "all" ? COLORS.border : "transparent",
                 }}
               >
                 <Text
                   style={{
-                    color: filterCompany === "all" ? COLORS.background : COLORS.foreground,
+                    color: filterCompany === "all" ? COLORS.foreground : COLORS.muted,
                     fontSize: 13,
                     fontWeight: "700",
                   }}
@@ -878,15 +901,15 @@ export function TechnologiesScreen() {
                       paddingVertical: 8,
                       borderRadius: RADIUS.control,
                       borderWidth: 1,
-                      borderColor: active ? COLORS.primary : COLORS.border,
-                      backgroundColor: active ? COLORS.primary : COLORS.surface,
+                      borderColor: active ? COLORS.muted : COLORS.border,
+                      backgroundColor: active ? COLORS.border : "transparent",
                     }}
                   >
                     <Text
                       style={{
-                        color: active ? COLORS.background : COLORS.foreground,
+                        color: active ? COLORS.foreground : COLORS.muted,
                         fontSize: 13,
-                        fontWeight: "700",
+                        fontWeight: "600",
                       }}
                     >
                       {c}
@@ -945,6 +968,27 @@ export function TechnologiesScreen() {
         </View>
       )}
 
+      {filteredFamilies.length > 0 && isWide && (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingBottom: 8 }}>
+          {[
+            { label: "Technologia", flex: 4 },
+            { label: "Firma", flex: 2 },
+          ].map((c) => (
+            <Text key={c.label} style={{ flex: c.flex, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>
+              {c.label}
+            </Text>
+          ))}
+          <Text style={{ width: 96, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>
+            Grubość
+          </Text>
+          <Text style={{ width: 90, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>
+            Wersja
+          </Text>
+          <View style={{ width: 84 }} />
+          <View style={{ width: 30 }} />
+        </View>
+      )}
+
       {filteredFamilies.length > 0 && (
         <View className="bg-surface border border-border rounded-card overflow-hidden mb-5">
           {filteredFamilies.map(([active, ...history], i) => (
@@ -961,21 +1005,48 @@ export function TechnologiesScreen() {
                   paddingVertical: 12,
                 }}
               >
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
-                    {active.name}
-                  </Text>
-                  <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                    {active.code} · v{active.version}
-                    {history.length > 0 ? ` · ${history.length} starszych wersji` : ""}
-                    {active.company ? ` · ${active.company}` : ""}
-                    {active.thicknessMinMm && active.thicknessMaxMm
-                      ? active.thicknessMinMm === active.thicknessMaxMm
-                        ? ` · ${active.thicknessMinMm} mm`
-                        : ` · ${active.thicknessMinMm}–${active.thicknessMaxMm} mm`
-                      : ""}
-                  </Text>
-                </View>
+                {isWide ? (
+                  <>
+                    <View style={{ flex: 4, paddingRight: 12 }}>
+                      <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+                        {active.name}
+                      </Text>
+                      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                        {active.code}
+                      </Text>
+                    </View>
+                    <Text numberOfLines={1} style={{ flex: 2, color: COLORS.foreground, fontSize: 13, paddingRight: 12 }}>
+                      {active.company || "—"}
+                    </Text>
+                    <Text style={{ width: 96, color: COLORS.foreground, fontSize: 13 }}>
+                      {active.thicknessMinMm && active.thicknessMaxMm
+                        ? active.thicknessMinMm === active.thicknessMaxMm
+                          ? `${active.thicknessMinMm} mm`
+                          : `${active.thicknessMinMm}–${active.thicknessMaxMm} mm`
+                        : "—"}
+                    </Text>
+                    <Text style={{ width: 90, color: COLORS.muted, fontSize: 13 }}>
+                      v{active.version}
+                      {history.length > 0 ? ` (+${history.length})` : ""}
+                    </Text>
+                  </>
+                ) : (
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+                      {active.name}
+                    </Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                      {active.code} · v{active.version}
+                      {history.length > 0 ? ` · ${history.length} starszych wersji` : ""}
+                      {active.company ? ` · ${active.company}` : ""}
+                      {active.thicknessMinMm && active.thicknessMaxMm
+                        ? active.thicknessMinMm === active.thicknessMaxMm
+                          ? ` · ${active.thicknessMinMm} mm`
+                          : ` · ${active.thicknessMinMm}–${active.thicknessMaxMm} mm`
+                        : ""}
+                    </Text>
+                  </View>
+                )}
                 <Pressable
                   onPress={() => startEdit(active)}
                   style={{
@@ -984,6 +1055,7 @@ export function TechnologiesScreen() {
                     paddingHorizontal: 12,
                     paddingVertical: 6,
                     marginRight: 10,
+                    ...(isWide ? { width: 74, alignItems: "center" as const } : null),
                   }}
                 >
                   <Text style={{ color: COLORS.background, fontWeight: "700", fontSize: 12 }}>

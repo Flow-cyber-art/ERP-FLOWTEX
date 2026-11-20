@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Dimensions, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { DateField } from "@/components/date-field";
 import {
   COLORS,
@@ -28,6 +28,7 @@ import { TechnologyPicker } from "@/components/technology-picker";
 import { todayISO } from "@/components/report-ui";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 
 // Wartość kontraktu bywa 6-7 cyfrowa (setki tysięcy) — bez separatora
 // tysięcznego zera się zlewają w jeden ciąg trudny do odczytania na
@@ -60,24 +61,6 @@ const formatDatePL = (iso: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
   return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
 };
-
-// Szeroki układ (zwarta lista) tylko na webie od 900px — ta sama zasada co
-// isDesktop w app/(tabs)/index.tsx. `mounted` jest false w pierwszym
-// renderze (eksport statyczny i hydratacja), żeby drzewo JSX było
-// identyczne po stronie serwera i klienta (błąd hydratacji React #418).
-function useWideLayout() {
-  const [mounted, setMounted] = useState(false);
-  const [width, setWidth] = useState(() => Dimensions.get("window").width);
-  useEffect(() => {
-    setWidth(Dimensions.get("window").width);
-    setMounted(true);
-    const sub = Dimensions.addEventListener("change", ({ window }) =>
-      setWidth(window.width),
-    );
-    return () => sub.remove();
-  }, []);
-  return mounted && Platform.OS === "web" && width >= 900;
-}
 
 export function BuildsScreen() {
   const {

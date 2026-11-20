@@ -131,6 +131,7 @@ export function BuildsScreen() {
   const [wizardBuildId, setWizardBuildId] = useState<string | null>(null);
   const [wizardTechId, setWizardTechId] = useState<number | null>(null);
   const [wizardAreaInput, setWizardAreaInput] = useState("");
+  const [wizardQty2Input, setWizardQty2Input] = useState("");
   const [wizardAssigning, setWizardAssigning] = useState(false);
   const [wizardGenerateOrder, setWizardGenerateOrder] = useState(true);
   const [wizardOrderGenerating, setWizardOrderGenerating] = useState(false);
@@ -151,6 +152,7 @@ export function BuildsScreen() {
     setWizardBuildId(null);
     setWizardTechId(null);
     setWizardAreaInput("");
+    setWizardQty2Input("");
     setWizardOrderGenerated(false);
     setAssignBuildId(null);
   };
@@ -260,8 +262,11 @@ export function BuildsScreen() {
   const [techPickerId, setTechPickerId] = useState<number | null>(null);
   // Jednostka wybranej technologii (m2/mb/szt) — etykieta i walidacja pola ilości.
   const techPickerUnit: TechnologyUnit = technologies.find((t) => t.id === techPickerId)?.unit ?? "m2";
-  const wizardUnit: TechnologyUnit = technologies.find((t) => t.id === wizardTechId)?.unit ?? "m2";
+  const wizardTech = technologies.find((t) => t.id === wizardTechId);
+  const wizardUnit: TechnologyUnit = wizardTech?.unit ?? "m2";
+  const techPickerTech = technologies.find((t) => t.id === techPickerId);
   const [techAreaInput, setTechAreaInput] = useState("");
+  const [techQty2Input, setTechQty2Input] = useState("");
   const [techBusy, setTechBusy] = useState(false);
   // Zamówienia z planu materiałowego (Faza 3) — jeden formularz przyjęcia
   // dostawy na raz (ten sam wzorzec co przypisanie technologii wyżej),
@@ -647,6 +652,19 @@ export function BuildsScreen() {
                   onChangeText={setWizardAreaInput}
                   keyboardType="decimal-pad"
                 />
+                {wizardTech?.secondaryUnit && (
+                  <>
+                    <Text className="text-xs text-muted uppercase mb-2 mt-3">
+                      {wizardTech.secondaryLabel ?? "Druga miara"} ({TECHNOLOGY_UNIT_LABEL[wizardTech.secondaryUnit]})
+                    </Text>
+                    <Field
+                      placeholder="np. 40"
+                      value={wizardQty2Input}
+                      onChangeText={setWizardQty2Input}
+                      keyboardType="decimal-pad"
+                    />
+                  </>
+                )}
               </>
             )}
             <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
@@ -678,6 +696,7 @@ export function BuildsScreen() {
                         wizardBuildId,
                         wizardTechId,
                         Number(wizardAreaInput),
+                        wizardTech?.secondaryUnit ? Number(wizardQty2Input) || null : null,
                       );
                       setWizardStep(3);
                     } finally {
@@ -1570,6 +1589,7 @@ export function BuildsScreen() {
                       setTechEditBuildId(b.id);
                       setTechPickerId(null);
                       setTechAreaInput(b.areaM2 ?? "");
+                      setTechQty2Input(b.quantity2 ?? "");
                       return;
                     }
                     // Technologia już przypisana — dotknięcie
@@ -1599,6 +1619,9 @@ export function BuildsScreen() {
                         </Text>
                         <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
                           v{snapshot.technologyVersion} · {b.areaM2 ?? "—"} {TECHNOLOGY_UNIT_LABEL[snapshot.unit ?? "m2"]}
+                          {snapshot.unit2 && b.quantity2
+                            ? ` · ${snapshot.label2 ?? "Druga miara"} ${b.quantity2} ${TECHNOLOGY_UNIT_LABEL[snapshot.unit2]}`
+                            : ""}
                         </Text>
                       </>
                     ) : (
@@ -1616,6 +1639,7 @@ export function BuildsScreen() {
                       setTechEditBuildId(b.id);
                       setTechPickerId(null);
                       setTechAreaInput(b.areaM2 ?? "");
+                      setTechQty2Input(b.quantity2 ?? "");
                     }}
                     style={{ marginTop: 8 }}
                   >
@@ -1642,6 +1666,14 @@ export function BuildsScreen() {
                           {TECHNOLOGY_QUANTITY_NOUN[techPickerUnit]} ({TECHNOLOGY_UNIT_LABEL[techPickerUnit]})
                         </Text>
                         <QuantityStepper value={techAreaInput} onChangeText={setTechAreaInput} />
+                        {techPickerTech?.secondaryUnit && (
+                          <>
+                            <Text className="text-xs text-muted uppercase mb-2 mt-3">
+                              {techPickerTech.secondaryLabel ?? "Druga miara"} ({TECHNOLOGY_UNIT_LABEL[techPickerTech.secondaryUnit]})
+                            </Text>
+                            <QuantityStepper value={techQty2Input} onChangeText={setTechQty2Input} />
+                          </>
+                        )}
                         <View style={{ marginTop: 10 }}>
                           {techBusy ? (
                             <Text style={{ color: COLORS.muted, fontSize: 12 }}>Zapisywanie…</Text>
@@ -1666,6 +1698,7 @@ export function BuildsScreen() {
                                     b.id,
                                     techPickerId,
                                     Number(techAreaInput),
+                                    techPickerTech?.secondaryUnit ? Number(techQty2Input) || null : null,
                                   );
                                   setTechEditBuildId(null);
                                   setTechMaterialsExpandedBuildId(b.id);
@@ -1741,7 +1774,7 @@ export function BuildsScreen() {
                               {row.materialName}
                             </Text>
                             <Text style={{ flex: 0.9, color: COLORS.muted, fontSize: 12, textAlign: "right" }}>
-                              {row.consumptionPerM2} {row.unit}/{TECHNOLOGY_UNIT_LABEL[snapshot?.unit ?? "m2"]}
+                              {row.consumptionPerM2} {row.unit}/{TECHNOLOGY_UNIT_LABEL[(row.basis === "secondary" ? snapshot?.unit2 : snapshot?.unit) ?? "m2"]}
                             </Text>
                             <Text
                               style={{ flex: 0.8, color: COLORS.foreground, fontWeight: "700", fontSize: 13, textAlign: "right" }}

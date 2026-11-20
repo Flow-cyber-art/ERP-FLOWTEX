@@ -709,6 +709,7 @@ function useAppDataState(
           clientName: b.clientName,
           address: b.address,
           areaM2: b.areaM2,
+          quantity2: b.quantity2,
           contractValue: b.contractValue,
         };
       }),
@@ -1005,8 +1006,8 @@ function useAppDataState(
       updateBuildPhotosUrlRemote(vars.buildId, vars.photosUrl),
   });
   const assignTechnologyMutation = useMutation({
-    mutationFn: (vars: { buildId: number; technologyId: number; areaM2: number }) =>
-      assignTechnologyToBuild(vars.buildId, vars.technologyId, vars.areaM2),
+    mutationFn: (vars: { buildId: number; technologyId: number; areaM2: number; quantity2?: number | null }) =>
+      assignTechnologyToBuild(vars.buildId, vars.technologyId, vars.areaM2, vars.quantity2 ?? null),
   });
   // Ręczny wybór partii (Faza 5) — zastępuje dawny commitBuildMaterials
   // (materiał + ilość planowana, bez partii) dla materiałów spoza planu
@@ -1733,12 +1734,14 @@ function useAppDataState(
     buildId: string,
     technologyId: number,
     areaM2: number,
+    quantity2?: number | null,
   ) => {
     try {
       await assignTechnologyMutation.mutateAsync({
         buildId: Number(buildId),
         technologyId,
         areaM2,
+        quantity2,
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["builds", "list"] }),

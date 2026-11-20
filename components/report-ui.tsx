@@ -108,6 +108,7 @@ type Build = {
   clientName?: string | null;
   address?: string | null;
   areaM2?: string | null;
+  quantity2?: string | null;
   contractValue?: string | null;
   // Planowany koszt robocizny (patrz supabase/sql/040_planowany_koszt_
   // robocizny.sql).

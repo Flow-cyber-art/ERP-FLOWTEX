@@ -27,13 +27,15 @@ export type BuildRow = {
   clientName: string | null;
   address: string | null;
   areaM2: string | null;
+  // Ilość drugiej miary technologii (np. mb dylatacji); null = brak.
+  quantity2: string | null;
   contractValue: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 const BUILD_COLUMNS =
-  "id, number, name, manager, teamId, startDate, durationDays, plannedHoursPerDay, status, photosUrl, driveFolderId:drive_folder_id, clientName, address, areaM2, contractValue, createdAt, updatedAt";
+  "id, number, name, manager, teamId, startDate, durationDays, plannedHoursPerDay, status, photosUrl, driveFolderId:drive_folder_id, clientName, address, areaM2, quantity2, contractValue, createdAt, updatedAt";
 
 export async function listBuilds(): Promise<BuildRow[]> {
   const { data, error } = await supabase

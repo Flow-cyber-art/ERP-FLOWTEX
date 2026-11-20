@@ -29,6 +29,7 @@ import {
   saveTechnology,
   updateTechnologyMeta,
   updateTechnologyUnit,
+  updateTechnologySecondary,
   TECHNOLOGY_UNIT_LABEL,
   type TechnologyUnit,
 } from "@/lib/data/technologies";
@@ -52,6 +53,8 @@ type DraftMaterial = {
   linkedMaterialId: string;
   // Materiał główny: technologia jest też tym materiałem (1 jedn. = 1 jedn.).
   isPrimary: boolean;
+  // Zużycie liczone na jednostkę podstawową czy na drugą miarę technologii.
+  basis: "primary" | "secondary";
 };
 
 type DraftStage = {
@@ -70,6 +73,7 @@ const emptyMaterial = (): DraftMaterial => ({
   consumptionPerM2: "",
   linkedMaterialId: "",
   isPrimary: false,
+  basis: "primary",
 });
 
 const emptyStage = (): DraftStage => ({
@@ -96,6 +100,9 @@ export function TechnologiesScreen() {
   // Jednostka rozliczenia technologii (m2/mb/szt): ilość na budowie i zużycie
   // materiałów w recepturze liczone są na tę jednostkę.
   const [unit, setUnit] = useState<TechnologyUnit>("m2");
+  // Druga miara (opcjonalna), np. renowacja: m² posadzki + mb dylatacji.
+  const [secondaryUnit, setSecondaryUnit] = useState<TechnologyUnit | null>(null);
+  const [secondaryLabel, setSecondaryLabel] = useState("");
   const [thicknessMinMm, setThicknessMinMm] = useState("");
   const [thicknessMaxMm, setThicknessMaxMm] = useState("");
   // Zdecydowana większość technologii ma JEDNĄ grubość, nie zakres —
@@ -202,6 +209,8 @@ export function TechnologiesScreen() {
     setName("");
     setCompany("");
     setUnit("m2");
+    setSecondaryUnit(null);
+    setSecondaryLabel("");
     setThicknessMinMm("");
     setThicknessMaxMm("");
     setThicknessRangeMode(false);
@@ -238,6 +247,7 @@ export function TechnologiesScreen() {
               consumptionPerM2: String(m.consumptionPerM2),
               linkedMaterialId: "",
               isPrimary: false,
+              basis: "primary" as const,
             }))
           : [emptyMaterial()],
       }));
@@ -258,6 +268,8 @@ export function TechnologiesScreen() {
     setName(t.name);
     setCompany(t.company ?? "");
     setUnit(t.unit ?? "m2");
+    setSecondaryUnit(t.secondaryUnit ?? null);
+    setSecondaryLabel(t.secondaryLabel ?? "");
     setThicknessMinMm(t.thicknessMinMm ?? "");
     setThicknessMaxMm(t.thicknessMaxMm ?? "");
     // Autodetekcja: jeśli min i max już się różnią, otwórz od razu w
@@ -282,6 +294,7 @@ export function TechnologiesScreen() {
                   consumptionPerM2: m.consumptionPerM2,
                   linkedMaterialId: m.linkedMaterialId != null ? String(m.linkedMaterialId) : "",
                   isPrimary: m.isPrimary,
+                  basis: m.basis ?? "primary",
                 }))
               : [emptyMaterial()],
           }))
@@ -314,6 +327,7 @@ export function TechnologiesScreen() {
             consumptionPerM2: Number(m.consumptionPerM2) || 0,
             linkedMaterialId: m.linkedMaterialId ? Number(m.linkedMaterialId) : null,
             isPrimary: m.isPrimary,
+            basis: secondaryUnit ? m.basis : ("primary" as const),
           })),
       }));
     if (payload.length === 0) {
@@ -343,6 +357,7 @@ export function TechnologiesScreen() {
         // — zapisywane osobnym wywołaniem na ŚWIEŻO utworzonej wersji
         // (newId), nie na editingSourceId (ten zaraz zostanie zdezaktywowany).
         await updateTechnologyUnit(newId, unit);
+        await updateTechnologySecondary(newId, secondaryUnit, secondaryLabel.trim() || null);
         await updateTechnologyMeta(
           newId,
           company.trim() || null,
@@ -559,6 +574,45 @@ export function TechnologiesScreen() {
             Ilość na budowie i zużycie materiałów liczone są na {TECHNOLOGY_UNIT_LABEL[unit]}.
           </Text>
           <Text className="text-xs text-muted uppercase mb-2 mt-3">
+            Druga miara (opcjonalnie)
+          </Text>
+          <SegmentedControl
+            options={[
+              { key: "none", label: "Brak" },
+              { key: "m2", label: "m²" },
+              { key: "mb", label: "mb" },
+              { key: "szt", label: "szt" },
+            ] as const}
+            value={secondaryUnit ?? "none"}
+            onChange={(k) => {
+              if (k === "none") {
+                setSecondaryUnit(null);
+                setSecondaryLabel("");
+                // Bez drugiej miary żaden materiał nie może się na niej opierać.
+                setStages((prev) =>
+                  prev.map((st) => ({
+                    ...st,
+                    materials: st.materials.map((mt) => ({ ...mt, basis: "primary" as const })),
+                  })),
+                );
+              } else {
+                setSecondaryUnit(k);
+              }
+            }}
+          />
+          {secondaryUnit && (
+            <>
+              <Field
+                placeholder="Nazwa drugiej miary (np. Dylatacje)"
+                value={secondaryLabel}
+                onChangeText={setSecondaryLabel}
+              />
+              <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>
+                Przy budowie podasz dwie ilości: {TECHNOLOGY_UNIT_LABEL[unit]} i {secondaryLabel.trim() || "druga miara"} ({TECHNOLOGY_UNIT_LABEL[secondaryUnit]}). Każdy materiał receptury możesz liczyć na jedną z nich.
+              </Text>
+            </>
+          )}
+          <Text className="text-xs text-muted uppercase mb-2 mt-3">
             Grubość posadzki (mm)
           </Text>
           {thicknessRangeMode ? (
@@ -748,6 +802,19 @@ export function TechnologiesScreen() {
                               Materiał główny — sama technologia jest też tym materiałem (1 {TECHNOLOGY_UNIT_LABEL[unit]} = 1 {TECHNOLOGY_UNIT_LABEL[unit]} materiału)
                             </Text>
                           </Pressable>
+                          {secondaryUnit && (
+                            <View style={{ marginTop: 10 }}>
+                              <Text className="text-xs text-muted uppercase mb-2">Liczone na</Text>
+                              <SegmentedControl
+                                options={[
+                                  { key: "primary", label: TECHNOLOGY_UNIT_LABEL[unit] },
+                                  { key: "secondary", label: `${secondaryLabel.trim() || "druga miara"} (${TECHNOLOGY_UNIT_LABEL[secondaryUnit]})` },
+                                ] as const}
+                                value={mat.basis}
+                                onChange={(b) => updateMaterial(stage.key, mat.key, { basis: b })}
+                              />
+                            </View>
+                          )}
                           <View
                             style={{
                               flexDirection: "row",
@@ -758,7 +825,7 @@ export function TechnologiesScreen() {
                             }}
                           >
                             <View>
-                              <Text className="text-xs text-muted uppercase mb-2">Zużycie / {TECHNOLOGY_UNIT_LABEL[unit]}</Text>
+                              <Text className="text-xs text-muted uppercase mb-2">Zużycie / {TECHNOLOGY_UNIT_LABEL[mat.basis === "secondary" && secondaryUnit ? secondaryUnit : unit]}</Text>
                               <QuantityStepper
                                 value={mat.consumptionPerM2}
                                 onChangeText={(v: string) =>
@@ -1163,7 +1230,7 @@ export function TechnologiesScreen() {
                               textAlign: "right",
                             }}
                           >
-                            {m.consumptionPerM2} {m.unit}/{TECHNOLOGY_UNIT_LABEL[active.unit ?? "m2"]}
+                            {m.consumptionPerM2} {m.unit}/{TECHNOLOGY_UNIT_LABEL[(m.basis === "secondary" ? active.secondaryUnit : active.unit) ?? "m2"]}
                           </Text>
                         </View>
                       )),

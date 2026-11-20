@@ -38,6 +38,8 @@ export type TechnologyMaterialRow = {
   // Materiał główny: sama technologia (cokół, kanał, wpust, profil) jest też
   // materiałem — 1 jednostka technologii = 1 jednostka materiału.
   isPrimary: boolean;
+  // Na co liczone jest zużycie: jednostka podstawowa technologii albo jej druga miara.
+  basis: "primary" | "secondary";
 };
 
 export type TechnologyStageRow = {
@@ -64,6 +66,9 @@ export type TechnologyRow = {
   // Jednostka rozliczenia: m2 (powierzchnia), mb (długość), szt. Zużycie
   // materiałów w recepturze (consumptionPerM2) jest "na jednostkę technologii".
   unit: TechnologyUnit;
+  // Druga miara (np. renowacja: m² posadzki + mb dylatacji); null = jedna miara.
+  secondaryUnit: TechnologyUnit | null;
+  secondaryLabel: string | null;
   technology_stages: TechnologyStageRow[];
 };
 
@@ -72,9 +77,9 @@ export type TechnologyRow = {
 // tłumaczą jedno na drugie, żeby reszta kodu nie musiała znać realnych nazw kolumn.
 const TECHNOLOGY_SELECT =
   "id, code, name, version, isActive:is_active, createdAt, company, " +
-  "thicknessMinMm:thickness_min_mm, thicknessMaxMm:thickness_max_mm, unit, " +
+  "thicknessMinMm:thickness_min_mm, thicknessMaxMm:thickness_max_mm, unit, secondaryUnit:secondary_unit, secondaryLabel:secondary_label, " +
   "technology_stages(id, name, orderIndex:order_index, " +
-  "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, linkedMaterialId:linked_material_id, isPrimary:is_primary))";
+  "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, linkedMaterialId:linked_material_id, isPrimary:is_primary, basis))";
 
 /** Tylko aktywne (najnowsza wersja każdej rodziny) — to, co widać przy zakładaniu budowy. */
 export async function listActiveTechnologies(): Promise<TechnologyRow[]> {
@@ -104,6 +109,7 @@ export type SaveTechnologyMaterialInput = {
   consumptionPerM2: number;
   linkedMaterialId?: number | null;
   isPrimary?: boolean;
+  basis?: "primary" | "secondary";
 };
 
 export type SaveTechnologyStageInput = {
@@ -127,6 +133,20 @@ export async function saveTechnology(
   });
   if (error) throw new Error(error.message);
   return data as number;
+}
+
+/** Druga miara technologii (jednostka + nazwa); unit=null usuwa drugą miarę. */
+export async function updateTechnologySecondary(
+  technologyId: number,
+  unit: TechnologyUnit | null,
+  label: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_technology_secondary", {
+    p_technology_id: technologyId,
+    p_unit: unit,
+    p_label: label,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /** Jednostka rozliczenia technologii (m2/mb/szt) — jak metadane, bez nowej wersji. */

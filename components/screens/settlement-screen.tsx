@@ -273,8 +273,10 @@ export function SettlementScreen() {
 
   // Ilość w jednostce technologii (m2/mb/szt) — builds.areaM2 to ilość, nie zawsze m².
   const quantity = Number(build?.areaM2) || 0;
-  const unit: TechnologyUnit =
-    buildTechnologySnapshots.find((snap) => snap.buildId === Number(build?.id))?.unit ?? "m2";
+  const techSnapshot = buildTechnologySnapshots.find((snap) => snap.buildId === Number(build?.id));
+  const unit: TechnologyUnit = techSnapshot?.unit ?? "m2";
+  // Druga miara technologii (np. mb dylatacji przy renowacji).
+  const quantity2 = Number(build?.quantity2) || 0;
   const unitLabel = TECHNOLOGY_UNIT_LABEL[unit];
   const costPerUnit = quantity > 0 ? totalCost / quantity : null;
   const durationDays = build?.durationDays ?? 0;
@@ -580,6 +582,12 @@ export function SettlementScreen() {
               />
               <KpiTile label="Czas trwania" value={durationDays > 0 ? `${durationDays} dni` : "—"} />
               <KpiTile label={TECHNOLOGY_QUANTITY_NOUN[unit]} value={quantity > 0 ? `${quantity} ${unitLabel}` : "—"} />
+              {techSnapshot?.unit2 && quantity2 > 0 && (
+                <KpiTile
+                  label={techSnapshot.label2 ?? "Druga miara"}
+                  value={`${quantity2} ${TECHNOLOGY_UNIT_LABEL[techSnapshot.unit2]}`}
+                />
+              )}
             </View>
 
             {costBreakdown.length > 0 && (

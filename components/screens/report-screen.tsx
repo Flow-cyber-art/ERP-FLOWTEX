@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
@@ -21,6 +20,7 @@ import { useAppData } from "@/contexts/app-data";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { materialReportKey } from "@/lib/material-report-key";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 export function ReportScreen() {
   const {
@@ -302,7 +302,7 @@ export function ReportScreen() {
               hitSlop={8}
               style={{ marginLeft: 8 }}
             >
-              <MaterialIcons name="close" size={18} color={COLORS.muted} />
+              <Icon name="x" size={18} color={COLORS.muted} />
             </Pressable>
           )}
         </View>
@@ -312,16 +312,15 @@ export function ReportScreen() {
           // appki oceniającej, czy się w nim zmieścił (dotyczy zarówno
           // materiałów z technologii, jak i pomocniczych — obie sekcje
           // renderują się przez tę samą funkcję).
-          <Text
-            style={{
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
+<Icon name="alert-triangle" size={14} color={COLORS.warning} />
+<Text style={{
               color: COLORS.warning,
               fontSize: 11,
               marginTop: -4,
-              marginBottom: 8,
-            }}
-          >
-            ⚠ Przekracza plan o {(currentValue - planQty).toFixed(2)} {planUnit}
-          </Text>
+              
+            }}>Przekracza plan o {(currentValue - planQty).toFixed(2)} {planUnit}</Text>
+</View>
         )}
         {different && (
           <Field
@@ -379,7 +378,7 @@ export function ReportScreen() {
         {reportStep === 1 && (
           <>
             <View className="p-4 flex-row items-center gap-3">
-              <IconBadge name="business" />
+              <IconBadge name="briefcase" />
               <Pressable
                 disabled={reportApproved}
                 onPress={() => {
@@ -418,8 +417,8 @@ export function ReportScreen() {
                     {activeBuild?.name}
                   </Text>
                 </View>
-                <MaterialIcons
-                  name={picker === "build" ? "expand-less" : "chevron-right"}
+                <Icon
+                  name={picker === "build" ? "chevron-up" : "chevron-right"}
                   size={22}
                   color={COLORS.primary}
                 />
@@ -645,7 +644,7 @@ export function ReportScreen() {
                           }}
                         >
                           {isStageCompleted && (
-                            <MaterialIcons name="check" size={14} color={COLORS.background} />
+                            <Icon name="check" size={14} color={COLORS.background} />
                           )}
                         </Pressable>
                       </Pressable>
@@ -737,8 +736,8 @@ export function ReportScreen() {
                       gap: 6,
                     }}
                   >
-                    <MaterialIcons
-                      name={addMaterialOpen ? "expand-less" : "add-circle-outline"}
+                    <Icon
+                      name={addMaterialOpen ? "chevron-up" : "plus-circle"}
                       size={18}
                       color={COLORS.primary}
                     />
@@ -872,8 +871,8 @@ export function ReportScreen() {
                                   onPress={() => removeFromDraft(draft.batchId)}
                                   hitSlop={8}
                                 >
-                                  <MaterialIcons
-                                    name="close"
+                                  <Icon
+                                    name="x"
                                     size={18}
                                     color={COLORS.muted}
                                   />
@@ -966,7 +965,7 @@ export function ReportScreen() {
                           paddingRight: 8,
                         }}
                       >
-                        <IconBadge name="person" size={18} badgeSize={32} />
+                        <IconBadge name="user" size={18} badgeSize={32} />
                         <Text
                           className="text-sm text-foreground"
                           numberOfLines={1}
@@ -992,7 +991,7 @@ export function ReportScreen() {
                           hitSlop={8}
                           style={{ marginLeft: 8 }}
                         >
-                          <MaterialIcons name="close" size={18} color={COLORS.muted} />
+                          <Icon name="x" size={18} color={COLORS.muted} />
                         </Pressable>
                       )}
                     </View>
@@ -1027,9 +1026,7 @@ export function ReportScreen() {
                     (employee) => employee.id === selectedEmployeeId,
                   )?.name || "Wybierz pracownika"}
                 </Text>
-                <Text style={{ color: COLORS.primary, marginLeft: 8, fontSize: 16, fontWeight: "700" }}>
-                  {employeePickerOpen ? "▲" : "▼"}
-                </Text>
+                <Icon name={employeePickerOpen ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
               </Pressable>
 
               {employeePickerOpen && (
@@ -1112,8 +1109,8 @@ export function ReportScreen() {
                         {personStart || "— : —"}
                       </Text>
                     </View>
-                    <MaterialIcons
-                      name="schedule"
+                    <Icon
+                      name="clock"
                       size={18}
                       color={COLORS.primary}
                     />
@@ -1171,8 +1168,8 @@ export function ReportScreen() {
                         {personEnd || "— : —"}
                       </Text>
                     </View>
-                    <MaterialIcons
-                      name="schedule"
+                    <Icon
+                      name="clock"
                       size={18}
                       color={COLORS.primary}
                     />
@@ -1214,8 +1211,8 @@ export function ReportScreen() {
                       opacity: pressed ? 0.7 : 1,
                     })}
                   >
-                    <MaterialIcons
-                      name="add-circle-outline"
+                    <Icon
+                      name="plus-circle"
                       size={20}
                       color={COLORS.primary}
                     />
@@ -1237,7 +1234,7 @@ export function ReportScreen() {
                       opacity: pressed ? 0.7 : 1,
                     })}
                   >
-                    <MaterialIcons name="groups" size={20} color={COLORS.background} />
+                    <Icon name="users" size={20} color={COLORS.background} />
                     <Text style={{ color: COLORS.background, fontWeight: "700" }}>
                       Dodaj wszystkich
                     </Text>
@@ -1251,7 +1248,7 @@ export function ReportScreen() {
         {reportStep === 3 && (
           <View className="p-4">
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <IconBadge name="business" size={18} badgeSize={32} />
+              <IconBadge name="briefcase" size={18} badgeSize={32} />
               <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
                 <Text style={{ color: COLORS.muted, fontSize: 11 }}>
                   Budowa
@@ -1366,7 +1363,7 @@ export function ReportScreen() {
                         hitSlop={8}
                         style={{ marginLeft: 8 }}
                       >
-                        <MaterialIcons name="close" size={18} color={COLORS.muted} />
+                        <Icon name="x" size={18} color={COLORS.muted} />
                       </Pressable>
                     )}
                   </View>
@@ -1425,7 +1422,7 @@ export function ReportScreen() {
             marginTop: 16,
           }}
         >
-          <MaterialIcons
+          <Icon
             name="check-circle"
             size={18}
             color={COLORS.success}

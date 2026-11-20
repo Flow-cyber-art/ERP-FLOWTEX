@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dimensions, Platform, Pressable, ScrollView, Text, View } from "react-native";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { DateField } from "@/components/date-field";
 import {
   COLORS,
@@ -17,6 +16,7 @@ import {
   ReportCard,
   ScreenHeader,
   SearchablePicker,
+  SearchField,
   StatusBadge,
   WizardStepper,
 } from "@/components/report-ui";
@@ -27,6 +27,7 @@ import { BuildPortalSection } from "@/components/build-portal-section";
 import { TechnologyPicker } from "@/components/technology-picker";
 import { todayISO } from "@/components/report-ui";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 // Wartość kontraktu bywa 6-7 cyfrowa (setki tysięcy) — bez separatora
 // tysięcznego zera się zlewają w jeden ciąg trudny do odczytania na
@@ -397,29 +398,12 @@ export function BuildsScreen() {
       }
     />
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
-      <View
-        style={{
-          flex: 1,
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: COLORS.background,
-          borderWidth: 1,
-          borderColor: COLORS.border,
-          borderRadius: RADIUS.control,
-          paddingLeft: 12,
-        }}
-      >
-        <MaterialIcons name="search" size={20} color={COLORS.muted} />
-        <Field
+      <View style={{ flex: 1 }}>
+        <SearchField
           placeholder="Szukaj budowy…"
           value={buildQuery}
           onChangeText={setBuildQuery}
-          style={{
-            flex: 1,
-            marginTop: 0,
-            backgroundColor: "transparent",
-            borderRadius: 0,
-          }}
+          style={{ marginTop: 0 }}
         />
       </View>
       {/* Przełącznik widoku listy (segment) zamiast checkboxa "Archiwum" —
@@ -514,7 +498,7 @@ export function BuildsScreen() {
           onClose={() => setWizardManagerPickerOpen(false)}
           query={wizardManagerQuery}
           onQueryChange={setWizardManagerQuery}
-          placeholder="🔍 Szukaj pracownika…"
+          placeholder="Szukaj pracownika…"
           selectedKey={newBuild.manager}
           onSelect={(key) => {
             setNewBuild({ ...newBuild, manager: key });
@@ -806,9 +790,7 @@ export function BuildsScreen() {
                         </Text>
                       )}
                     </View>
-                    <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                      {picker === "material" ? "▲" : "▼"}
-                    </Text>
+                    <Icon name={picker === "material" ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                   </Pressable>
                   {picker === "material" && (
                     <View
@@ -960,8 +942,8 @@ export function BuildsScreen() {
                   onPress={() => setWizardGenerateOrder(!wizardGenerateOrder)}
                   style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}
                 >
-                  <MaterialIcons
-                    name={wizardGenerateOrder ? "check-box" : "check-box-outline-blank"}
+                  <Icon
+                    name={wizardGenerateOrder ? "check-square" : "square"}
                     size={20}
                     color={wizardGenerateOrder ? COLORS.primary : COLORS.muted}
                   />
@@ -1019,8 +1001,8 @@ export function BuildsScreen() {
               onPress={() => setWizardCreateFolder(!wizardCreateFolder)}
               style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}
             >
-              <MaterialIcons
-                name={wizardCreateFolder ? "check-box" : "check-box-outline-blank"}
+              <Icon
+                name={wizardCreateFolder ? "check-square" : "square"}
                 size={20}
                 color={wizardCreateFolder ? COLORS.primary : COLORS.muted}
               />
@@ -1199,8 +1181,8 @@ export function BuildsScreen() {
                   );
                 })()}
                 <View style={{ width: 36, alignItems: "flex-end" }}>
-                  <MaterialIcons
-                    name={isOpen ? "expand-less" : "expand-more"}
+                  <Icon
+                    name={isOpen ? "chevron-up" : "chevron-down"}
                     size={24}
                     color={COLORS.muted}
                   />
@@ -1228,9 +1210,7 @@ export function BuildsScreen() {
                     więc pokazywanie go na każdym wierszu nic nie mówi i
                     dublował się wizualnie ze strzałką rozwijania. */}
                 {isClosed && <StatusBadge status="ok" label="ZAMKNIĘTA" />}
-                <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                  {isOpen ? "▲" : "▼"}
-                </Text>
+                <Icon name={isOpen ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
               </View>
             </View>
             <Text className="text-lg font-bold text-foreground mt-2">
@@ -1389,7 +1369,7 @@ export function BuildsScreen() {
                       onClose={() => setManagerPickerBuildId(null)}
                       query={managerPickerQuery}
                       onQueryChange={setManagerPickerQuery}
-                      placeholder="🔍 Szukaj pracownika…"
+                      placeholder="Szukaj pracownika…"
                       selectedKey={basicInfoDraft.manager}
                       onSelect={(key) => {
                         setBasicInfoDraft({ ...basicInfoDraft, manager: key });
@@ -1673,9 +1653,7 @@ export function BuildsScreen() {
                       </Text>
                     )}
                   </View>
-                  <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                    {(snapshot ? techMaterialsExpandedBuildId === b.id : pickerOpen) ? "▲" : "▼"}
-                  </Text>
+                  <Icon name={(snapshot ? techMaterialsExpandedBuildId === b.id : pickerOpen) ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                 </Pressable>
 
                 {snapshot && techMaterialsExpandedBuildId === b.id && !pickerOpen && (
@@ -1938,9 +1916,7 @@ export function BuildsScreen() {
                             }
                             label={STATUS_LABEL[order.status]}
                           />
-                          <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                            {isOrderOpen ? "▲" : "▼"}
-                          </Text>
+                          <Icon name={isOrderOpen ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                         </View>
                       </Pressable>
 
@@ -2220,9 +2196,7 @@ export function BuildsScreen() {
               <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "600" }}>
                 Materiały dodatkowe, portal klienta, zdjęcia, raporty
               </Text>
-              <Text style={{ color: COLORS.muted, fontSize: 16, fontWeight: "700" }}>
-                {buildExtrasExpandedId === b.id ? "▲" : "▼"}
-              </Text>
+              <Icon name={buildExtrasExpandedId === b.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
             </Pressable>
             {buildExtrasExpandedId === b.id && (
               <>
@@ -2293,9 +2267,7 @@ export function BuildsScreen() {
                         {extraAssignments.length > 0 ? ` (${extraAssignments.length})` : ""}
                       </Text>
                       {extraAssignments.length > 0 && (
-                        <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                          {expandedExtraMaterialsBuildId === b.id ? "▲" : "▼"}
-                        </Text>
+                        <Icon name={expandedExtraMaterialsBuildId === b.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                       )}
                     </Pressable>
                     <Pressable
@@ -2368,9 +2340,7 @@ export function BuildsScreen() {
                             </Text>
                           )}
                         </View>
-                        <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                          {picker === "material" ? "▲" : "▼"}
-                        </Text>
+                        <Icon name={picker === "material" ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                       </Pressable>
                       {picker === "material" && (
                         <View
@@ -2395,8 +2365,8 @@ export function BuildsScreen() {
                               paddingVertical: 4,
                             }}
                           >
-                            <MaterialIcons
-                              name={onlyUnassignedInPicker ? "check-box" : "check-box-outline-blank"}
+                            <Icon
+                              name={onlyUnassignedInPicker ? "check-square" : "square"}
                               size={18}
                               color={onlyUnassignedInPicker ? COLORS.primary : COLORS.muted}
                             />
@@ -2583,9 +2553,7 @@ export function BuildsScreen() {
                             <Text className="text-xs text-primary font-bold">
                               {a.planned} {material?.unit}
                             </Text>
-                            <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                              {isOpen ? "▲" : "▼"}
-                            </Text>
+                            <Icon name={isOpen ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                           </View>
                         </Pressable>
                         {isOpen && (
@@ -2664,9 +2632,7 @@ export function BuildsScreen() {
               <Text style={{ color: COLORS.muted, fontSize: 11 }}>
                 PORTAL KLIENTA
               </Text>
-              <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                {expandedPortalBuildId === b.id ? "▲" : "▼"}
-              </Text>
+              <Icon name={expandedPortalBuildId === b.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
             </Pressable>
             {expandedPortalBuildId === b.id && (
               <View style={{ marginTop: 10 }}>
@@ -2971,9 +2937,7 @@ export function BuildsScreen() {
               <Text style={{ color: COLORS.muted, fontSize: 11 }}>
                 ZDJĘCIA{photoCounts[b.id] ? ` (${photoCounts[b.id]})` : ""}
               </Text>
-              <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                {expandedPhotosBuildId === b.id ? "▲" : "▼"}
-              </Text>
+              <Icon name={expandedPhotosBuildId === b.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
             </Pressable>
             {expandedPhotosBuildId === b.id && (
               <View style={{ marginTop: 10 }}>
@@ -3098,16 +3062,14 @@ export function BuildsScreen() {
               Raporty ({buildReports.length}
               {pendingCount > 0 ? ` · ${pendingCount} do sprawdzenia` : ""})
             </Text>
-            <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-              {reportsExpanded ? "▲" : "▼"}
-            </Text>
+            <Icon name={reportsExpanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
           </Pressable>
 
           {reportsExpanded && (
             <View style={{ marginTop: 12 }}>
               {buildReports.length === 0 ? (
                 <View className="items-center py-4">
-                  <IconBadge name="description" size={18} badgeSize={36} />
+                  <IconBadge name="file-text" size={18} badgeSize={36} />
                   <Text className="text-xs text-muted mt-2">
                     Brak raportów z tej budowy.
                   </Text>

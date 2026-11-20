@@ -7,6 +7,7 @@ import { useAppData } from "@/contexts/app-data";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import { listMaterialIssuesForBuild, type StockMovementRow } from "@/lib/data/stock-movements";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 /**
  * Faza 8 modułu Technologia — Rozliczenie budowy. Spina Fazy 0–7 w
@@ -329,9 +330,7 @@ export function SettlementScreen() {
             }}
           >
             {showArchivedBuilds && (
-              <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
-                ✓
-              </Text>
+              <Icon name="check" size={14} color={COLORS.background} />
             )}
           </View>
           <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>
@@ -343,7 +342,7 @@ export function SettlementScreen() {
         onClose={() => setPickerOpen(false)}
         query={buildQuery}
         onQueryChange={setBuildQuery}
-        placeholder="🔍 Szukaj budowy…"
+        placeholder="Szukaj budowy…"
         selectedKey={build?.id}
         onSelect={(key) => {
           setSelectedId(key);
@@ -680,9 +679,10 @@ function PriceBreakdown({
   return (
     <View style={{ marginTop: 2, marginBottom: 4 }}>
       <Pressable onPress={onToggle} style={{ alignSelf: "flex-start" }}>
-        <Text style={{ color: COLORS.primary, fontSize: 11, fontWeight: "700" }}>
-          {isOpen ? "▲" : "▼"} {distinctPrices.size} ceny — skąd się wzięła
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+<Icon name={isOpen ? "chevron-up" : "chevron-down"} size={14} color={COLORS.muted} />
+<Text style={{ color: COLORS.primary, fontSize: 11, fontWeight: "700" }}>{distinctPrices.size} ceny — skąd się wzięła</Text>
+</View>
       </Pressable>
       {isOpen && (
         <View style={{ marginTop: 4, paddingLeft: 4 }}>

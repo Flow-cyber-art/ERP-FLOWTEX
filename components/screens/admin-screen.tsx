@@ -32,6 +32,7 @@ import {
   setAdminUserPassword,
 } from "@/lib/data/admin-users";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 // Panel administracyjny — konfiguracja firmy, nie codzienna praca na
 // budowie. Wszystko związane z pracownikiem (Zespół, stawki, konto
@@ -102,7 +103,7 @@ function AdminSettingsSection() {
           }}
           style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
         >
-          <IconBadge name="schedule" size={18} />
+          <IconBadge name="clock" size={18} />
           <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
             <Text style={{ color: COLORS.muted, fontSize: 11 }}>DNIÓWKA</Text>
             <Text
@@ -164,7 +165,7 @@ function AdminSettingsSection() {
             }}
             style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
           >
-            <IconBadge name="directions-car" size={18} />
+            <IconBadge name="truck" size={18} />
             <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
               <Text style={{ color: COLORS.muted, fontSize: 11 }}>STAWKA ZA KM</Text>
               <Text
@@ -310,7 +311,7 @@ function AdminSettingsSection() {
         className="bg-surface border border-border rounded-card mb-5"
         style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 14 }}
       >
-        <IconBadge name="person" size={18} />
+        <IconBadge name="user" size={18} />
         <Text style={{ color: COLORS.foreground, fontWeight: "600", fontSize: 14 }}>
           Zmień na widok Brygadzisty
         </Text>
@@ -440,9 +441,7 @@ export function AdminTeamSection() {
               }}
             >
               {showArchived && (
-                <Text style={{ color: COLORS.background, fontSize: 10, fontWeight: "800" }}>
-                  ✓
-                </Text>
+                <Icon name="check" size={12} color={COLORS.background} />
               )}
             </View>
             <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "600" }}>
@@ -608,7 +607,7 @@ export function AdminTeamSection() {
                         {employee.name}
                       </Text>
                       {missingLastName && (
-                        <Text style={{ color: COLORS.warning, fontSize: 12 }}>⚠</Text>
+                        <Icon name="alert-triangle" size={14} color={COLORS.warning} />
                       )}
                     </View>
                     <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 1 }}>
@@ -625,9 +624,9 @@ export function AdminTeamSection() {
                   <Text style={[TEAM_CELL_STYLE, TEAM_COL_NUMERIC]} numberOfLines={1}>
                     {employee.costRate ? `${formatPLN(employee.costRate)}/h` : "—"}
                   </Text>
-                  <Text style={{ width: 28, textAlign: "right", color: COLORS.muted, fontSize: 16 }}>
-                    ⋯
-                  </Text>
+                  <View style={{ width: 28, alignItems: "flex-end" }}>
+<Icon name="more-horizontal" size={18} color={COLORS.muted} />
+</View>
                 </Pressable>
                 {editing && (
                   <View
@@ -1134,9 +1133,10 @@ export function AdminLeaveSection() {
           className="rounded-card p-4 mb-5"
           style={{ backgroundColor: COLORS.warningBg, borderWidth: 1, borderColor: COLORS.warning }}
         >
-          <Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 13, marginBottom: 4 }}>
-            ⚠ Nakładające się urlopy
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+<Icon name="alert-triangle" size={14} color={COLORS.warning} />
+<Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 13 }}>Nakładające się urlopy</Text>
+</View>
           {collisions.map((c, i) => (
             <Text key={i} style={{ color: COLORS.warning, fontSize: 12, marginTop: i > 0 ? 4 : 0 }}>
               {c.from} – {c.to} · {c.names.join(" i ")} poza pracą jednocześnie
@@ -1338,9 +1338,7 @@ function AdminTeamsSubsection() {
                       {members.length} {pluralPL(members.length, "osoba", "osoby", "osób")}
                     </Text>
                   </View>
-                  <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                    {expanded ? "▲" : "▼"}
-                  </Text>
+                  <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                 </Pressable>
                 {expanded && (
                   <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>

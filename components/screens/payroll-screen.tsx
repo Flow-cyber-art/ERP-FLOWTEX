@@ -3,6 +3,7 @@ import { Platform, ScrollView, Text, View, Pressable } from "react-native";
 import { Button, COLORS, IconBadge, formatPLN, notify } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 /**
  * "Rozliczenie" (HR) — połączenie dawnych osobnych "Rozliczenie godzin"
@@ -466,9 +467,10 @@ export function PayrollSection() {
             borderColor: COLORS.border,
           }}
         >
-          <Text style={{ color: COLORS.muted, fontWeight: "700", fontSize: 13 }}>
-            ⭳ Lista płac
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+<Icon name="download" size={16} color={COLORS.muted} />
+<Text style={{ color: COLORS.muted, fontWeight: "700", fontSize: 13 }}>Lista płac</Text>
+</View>
         </Pressable>
       </View>
 
@@ -478,7 +480,7 @@ export function PayrollSection() {
         )
       ) : rows.length === 0 ? (
         <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
-          <IconBadge name="event-busy" />
+          <IconBadge name="calendar" />
           <Text className="text-sm text-muted mt-3 text-center">Brak pracowników.</Text>
         </View>
       ) : (
@@ -527,17 +529,7 @@ export function PayrollSection() {
                   <Text style={[PAY_CELL, PAY_COL_NUMERIC, { color: COLORS.primary }]}>
                     {row.payout > 0 ? formatPLN(row.payout) : "—"}
                   </Text>
-                  <Text
-                    style={{
-                      width: 20,
-                      textAlign: "right",
-                      color: COLORS.primary,
-                      fontSize: 16,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {expanded ? "▲" : "▼"}
-                  </Text>
+                  <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                 </Pressable>
 
                 {expanded && (
@@ -555,10 +547,10 @@ export function PayrollSection() {
                             paddingVertical: 6,
                           }}
                         >
-                          <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-                            {day.approved ? "🔒 " : ""}
-                            {dateLabelPL(day.date)}
-                          </Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+{day.approved && <Icon name="lock" size={12} color={COLORS.muted} />}
+<Text style={{ color: COLORS.muted, fontSize: 12 }}>{dateLabelPL(day.date)}</Text>
+</View>
                           <Text style={{ color: COLORS.foreground, fontSize: 12 }}>
                             {formatPLN(row.dayRate)}
                           </Text>
@@ -568,7 +560,8 @@ export function PayrollSection() {
                     {row.openReportIds.length > 0 && (
                       <View style={{ marginTop: 10 }}>
                         <Button
-                          label={`✓ Zatwierdź pozostałe ${row.openReportIds.length}`}
+                          icon="check"
+                          label={`Zatwierdź pozostałe ${row.openReportIds.length}`}
                           onPress={() => row.openReportIds.forEach((id) => approveReport(id))}
                         />
                       </View>

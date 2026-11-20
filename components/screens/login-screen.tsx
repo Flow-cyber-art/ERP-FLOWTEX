@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Button, COLORS, Field } from "@/components/report-ui";
 import { LogoMark } from "@/components/logo-mark";
 import { signIn } from "@/lib/data/auth";
+import { Icon } from "@/components/icon";
 
 export function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -104,7 +104,7 @@ export function LoginScreen() {
               }}
             >
               {remember && (
-                <MaterialIcons name="check" size={13} color={COLORS.background} />
+                <Icon name="check" size={13} color={COLORS.background} />
               )}
             </View>
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>

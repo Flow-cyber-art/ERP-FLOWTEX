@@ -15,6 +15,7 @@ import {
   type PublicPortalSettings,
 } from "@/lib/data/public-portal";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 // Domyślnie strona portalu jest serwowana z tego samego originu co apka
 // (patrz vercel.json + app/portal/[token].tsx) — brak osobnej domeny do
@@ -236,7 +237,7 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
                   justifyContent: "center",
                 }}
               >
-                <Text style={{ color: "#fff", fontSize: 20, fontWeight: "700" }}>✕</Text>
+                <Icon name="x" size={22} color="#fff" />
               </Pressable>
               {qrDataUrl && (
                 <Image

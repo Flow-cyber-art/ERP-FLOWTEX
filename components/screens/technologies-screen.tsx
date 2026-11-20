@@ -14,6 +14,7 @@ import {
   COLORS,
   confirmAction,
   Field,
+  SearchField,
   QuantityStepper,
   ScreenHeader,
   UNIT_OPTIONS,
@@ -29,6 +30,7 @@ import {
 import { parseTechnologySql } from "@/lib/data/technology-sql-import";
 import { matchMaterialNames } from "@/lib/material-name-match";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 // Panel Admina — Technologie (receptury posadzek), Faza 1 modułu
 // Technologia. "Edytuj" NIGDY nie nadpisuje istniejącej technologii —
@@ -611,9 +613,7 @@ export function TechnologiesScreen() {
                     <Text style={{ color: COLORS.muted, fontSize: 12, marginRight: 10 }}>
                       {materialCount} {materialCount === 1 ? "materiał" : "materiały"}
                     </Text>
-                    <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-                      {isExpanded ? "▲" : "▼"}
-                    </Text>
+                    <Icon name={isExpanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
                   </Pressable>
 
                   {isExpanded && (
@@ -762,7 +762,10 @@ export function TechnologiesScreen() {
                                       "Materiał usunięty"
                                     : "Nie przypisano"}
                                 </Text>
-                                <Text style={{ color: COLORS.muted, fontSize: 12 }}>Zmień ⌄</Text>
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+<Text style={{ color: COLORS.muted, fontSize: 12 }}>Zmień</Text>
+<Icon name="chevron-down" size={14} color={COLORS.muted} />
+</View>
                               </Pressable>
                             </View>
                           )}
@@ -987,9 +990,7 @@ export function TechnologiesScreen() {
                     Edytuj
                   </Text>
                 </Pressable>
-                <Text style={{ color: COLORS.muted, fontSize: 16, fontWeight: "700" }}>
-                  {expandedId === active.id ? "▲" : "▼"}
-                </Text>
+                <Icon name={expandedId === active.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
               </Pressable>
               {expandedId === active.id && (
                 <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
@@ -1068,8 +1069,8 @@ export function TechnologiesScreen() {
             <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 15, marginBottom: 12 }}>
               Wybierz materiał magazynowy
             </Text>
-            <Field
-              placeholder="🔍 Szukaj materiału…"
+            <SearchField
+              placeholder="Szukaj materiału…"
               value={materialPickerQuery}
               onChangeText={setMaterialPickerQuery}
               autoCapitalize="none"

@@ -13,6 +13,7 @@ import { DateField } from "@/components/date-field";
 import { useAppData } from "@/contexts/app-data";
 import type { LeaveType } from "@/lib/data/leave";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   wypoczynkowy: "Urlop wypoczynkowy",
@@ -104,7 +105,7 @@ export function LeaveScreen() {
       <>
         <ScreenHeader title="Urlopy" />
         <View className="bg-surface border border-border rounded-card p-5 items-center">
-          <IconBadge name="event-busy" />
+          <IconBadge name="calendar" />
           <Text className="text-sm text-muted mt-3 text-center">
             Twoje konto nie jest powiązane z pracownikiem — skontaktuj się z Adminem.
           </Text>
@@ -162,7 +163,7 @@ export function LeaveScreen() {
 
       {myRequests.length === 0 ? (
         <View className="bg-surface border border-border rounded-card p-5 items-center">
-          <IconBadge name="event-busy" />
+          <IconBadge name="calendar" />
           <Text className="text-sm text-muted mt-3 text-center">
             Brak złożonych wniosków urlopowych.
           </Text>
@@ -340,7 +341,10 @@ function LeaveRequestForm({
   return (
     <>
       <Pressable onPress={onCancel} style={{ marginBottom: 12 }}>
-        <Text style={{ color: COLORS.primary, fontWeight: "700" }}>← Wróć</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+<Icon name="arrow-left" size={18} color={COLORS.primary} />
+<Text style={{ color: COLORS.primary, fontWeight: "700" }}>Wróć</Text>
+</View>
       </Pressable>
       <ScreenHeader title={editing ? "Edytuj wniosek" : "Nowy wniosek"} />
 

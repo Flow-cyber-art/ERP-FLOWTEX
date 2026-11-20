@@ -9,6 +9,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 // Skrzynka robocza managera: WSZYSTKIE raporty ze WSZYSTKICH budów w jednym
 // miejscu (żeby nie trzeba było klikać budowa po budowie żeby znaleźć to,
@@ -125,9 +126,7 @@ export function ManagerScreen() {
             }}
           >
             {showArchivedBuilds && (
-              <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>
-                ✓
-              </Text>
+              <Icon name="check" size={14} color={COLORS.background} />
             )}
           </View>
           <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>
@@ -139,7 +138,7 @@ export function ManagerScreen() {
         onClose={() => setPickerOpen(false)}
         query={buildQuery}
         onQueryChange={setBuildQuery}
-        placeholder="🔍 Szukaj budowy…"
+        placeholder="Szukaj budowy…"
         selectedKey={selectedBuildId}
         onSelect={(key) => {
           setSelectedBuildId(key as string | "all");
@@ -158,7 +157,7 @@ export function ManagerScreen() {
 
       {pendingReports.length === 0 && approvedReports.length === 0 ? (
         <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
-          <IconBadge name="description" />
+          <IconBadge name="file-text" />
           <Text className="text-sm text-muted mt-3 text-center">
             Brak raportów dla tego wyboru.
           </Text>

@@ -15,6 +15,7 @@ import {
 import { useAppData, type OrderCartItem } from "@/contexts/app-data";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 const BUILD_ORDER_STATUS_LABEL: Record<string, string> = {
   robocze: "Robocze",
@@ -1060,9 +1061,10 @@ export function OrdersScreen() {
       {/* LISTA — zagęszczona, jeden wiersz = jeden materiał, jeden status. */}
       {filter !== "aktywne" && (
         <Pressable onPress={() => setFilter("aktywne")} style={{ marginBottom: 10 }}>
-          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-            ← Pokaż wszystkie aktywne
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+<Icon name="arrow-left" size={16} color={COLORS.primary} />
+<Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>Pokaż wszystkie aktywne</Text>
+</View>
         </Pressable>
       )}
 
@@ -1313,7 +1315,7 @@ export function OrdersScreen() {
 
       {visibleRows.length === 0 && batchGroups.length === 0 && (
         <View className="bg-surface border border-border rounded-card p-5 items-center">
-          <IconBadge name="local-shipping" />
+          <IconBadge name="truck" />
           <Text className="text-sm text-muted mt-3 text-center">
             Brak pozycji w tym widoku.
           </Text>
@@ -1397,9 +1399,7 @@ export function OrdersScreen() {
                           opacity: pressed ? 0.7 : 1,
                         })}
                       >
-                        <Text style={{ color: COLORS.muted, fontWeight: "800", fontSize: 12 }}>
-                          ✕
-                        </Text>
+                        <Icon name="x" size={16} color={COLORS.muted} />
                       </Pressable>
                     </>
                   )}

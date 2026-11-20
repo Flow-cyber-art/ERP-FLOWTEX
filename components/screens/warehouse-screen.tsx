@@ -17,6 +17,7 @@ import {
 import { useAppData, type NewMaterialInput } from "@/contexts/app-data";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 const EMPTY_NEW_MATERIAL: NewMaterialInput = {
   name: "",
@@ -298,7 +299,7 @@ export function WarehouseScreen() {
           }}
         >
           {showArchivedMaterials && (
-            <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>✓</Text>
+            <Icon name="check" size={14} color={COLORS.background} />
           )}
         </View>
         <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>

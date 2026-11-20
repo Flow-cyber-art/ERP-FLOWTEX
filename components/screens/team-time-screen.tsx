@@ -10,6 +10,7 @@ import {
 import { useAppData } from "@/contexts/app-data";
 import { LeavePendingApprovals } from "@/components/screens/leave-screen";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 export function TeamTimeScreen() {
   const { builds, employees, timeEntries, myEmployeeId } = useAppData();
@@ -89,7 +90,7 @@ export function TeamTimeScreen() {
             padding: 16,
           }}
         >
-          <IconBadge name="person" />
+          <IconBadge name="user" />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={{ color: COLORS.muted, fontSize: 11 }}>
               PRACOWNIK
@@ -105,9 +106,7 @@ export function TeamTimeScreen() {
               {selectedEmployee?.name || "Wybierz pracownika"}
             </Text>
           </View>
-          <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700" }}>
-            {supervisorPickerOpen ? "▲" : "▼"}
-          </Text>
+          <Icon name={supervisorPickerOpen ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
         </Pressable>
         {supervisorPickerOpen && (
           <View
@@ -142,17 +141,11 @@ export function TeamTimeScreen() {
                   >
                     {employee.name}
                   </Text>
-                  <Text
-                    style={{
-                      color:
-                        supervisedEmployeeIds[0] === employee.id
-                          ? COLORS.primary
-                          : COLORS.muted,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {supervisedEmployeeIds[0] === employee.id ? "✓" : "○"}
-                  </Text>
+                  <Icon
+ name={supervisedEmployeeIds[0] === employee.id ? "check-circle" : "circle"}
+ size={18}
+ color={supervisedEmployeeIds[0] === employee.id ? COLORS.primary : COLORS.muted}
+ />
                 </Pressable>
               ))}
             <View style={{ marginTop: 10 }}>
@@ -314,7 +307,7 @@ export function TeamTimeScreen() {
             className="bg-surface border border-border rounded-card p-4 mb-3"
             style={{ flexDirection: "row", alignItems: "center" }}
           >
-            <IconBadge name="schedule" size={20} />
+            <IconBadge name="clock" size={20} />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <View
                 style={{
@@ -350,7 +343,7 @@ export function TeamTimeScreen() {
         ))
       ) : (
         <View className="bg-surface border border-border rounded-card p-5 items-center">
-          <IconBadge name="event-busy" />
+          <IconBadge name="calendar" />
           <Text className="text-sm text-muted mt-3 text-center">
             Brak zapisanych wpisów dla wybranych osób.
           </Text>

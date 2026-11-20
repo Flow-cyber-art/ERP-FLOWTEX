@@ -36,6 +36,7 @@ import {
 } from "@/lib/data/public-portal";
 import { generateClientSummaryPublic } from "@/lib/data/ai-summary";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 /**
  * Portal Klienta — publiczna, NIEAUTORYZOWANA strona podglądu postępu
@@ -502,7 +503,7 @@ function StagesStepper({ stages }: { stages: PublicBuildView["stages"] }) {
                     fontWeight: "800",
                   }}
                 >
-                  {done ? "✓" : i + 1}
+                  {done ? <Icon name="check" size={12} color="#1A1206" /> : i + 1}
                 </Text>
               </View>
               {!isLast && (
@@ -805,7 +806,7 @@ function PhotoViewerModal({
             backgroundColor: "rgba(255,255,255,0.14)",
           }}
         >
-          <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>✕</Text>
+          <Icon name="x" size={20} color="#fff" />
         </Pressable>
 
         {index > 0 && (
@@ -961,7 +962,7 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
                 borderColor: PC.line,
               }}
             >
-              <Text style={{ color: PC.txt, fontSize: 16, fontWeight: "700" }}>✕</Text>
+              <Icon name="x" size={18} color={PC.txt} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
@@ -1131,7 +1132,7 @@ function TechCard({ view }: { view: PublicBuildView }) {
                 justifyContent: "center",
               }}
             >
-              <Text style={{ color: PC.accent2, fontSize: 18 }}>⬢</Text>
+              <Icon name="hexagon" size={18} color={PC.accent2} />
             </View>
             <Text style={{ color: PC.txt, fontWeight: "600", fontSize: 15, flex: 1 }}>
               {view.technologyName}
@@ -1341,7 +1342,10 @@ export default function PublicBuildPortal() {
           </Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Text style={{ color: PC.txt3, fontSize: 11 }}>🔒 Podgląd dla zleceniodawcy</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+<Icon name="lock" size={12} color={PC.txt3} />
+<Text style={{ color: PC.txt3, fontSize: 11 }}>Podgląd dla zleceniodawcy</Text>
+</View>
           {Platform.OS === "web" && (
             <Pressable
               onPress={() => {
@@ -1362,7 +1366,7 @@ export default function PublicBuildPortal() {
               }}
               accessibilityLabel="Zamknij panel"
             >
-              <Text style={{ color: PC.txt2, fontSize: 13, fontWeight: "700" }}>✕</Text>
+              <Icon name="x" size={16} color={PC.txt2} />
             </Pressable>
           )}
         </View>

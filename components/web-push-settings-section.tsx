@@ -5,6 +5,7 @@ import { Button, COLORS, notify } from "@/components/report-ui";
 import { requestWebPushPermission } from "@/lib/notifications/use-register-web-push";
 import { useInstallPrompt } from "@/lib/pwa/use-install-prompt";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 // Instrukcja "dodaj do ekranu głównego" ma sens WYŁĄCZNIE na iOS Safari —
 // tam PushManager nie istnieje bez trybu standalone (patrz
@@ -111,9 +112,10 @@ export function WebPushSettingsSection() {
       )}
       <View style={{ marginTop: 10 }}>
         {status === "granted" ? (
-          <Text style={{ color: COLORS.success, fontSize: 12, fontWeight: "700" }}>
-            ✓ Powiadomienia włączone na tym urządzeniu
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+<Icon name="check" size={14} color={COLORS.success} />
+<Text style={{ color: COLORS.success, fontSize: 12, fontWeight: "700" }}>Powiadomienia włączone na tym urządzeniu</Text>
+</View>
         ) : status === "denied" ? (
           <View>
             <Text style={{ color: COLORS.danger, fontSize: 12 }}>

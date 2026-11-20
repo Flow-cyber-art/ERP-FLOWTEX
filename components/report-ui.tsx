@@ -1,5 +1,4 @@
 import { useRef, useState, type ReactNode } from "react";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { parseMaterialReportKey } from "@/lib/material-report-key";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import type { BuildMaterialPlanRow } from "@/lib/data/build-technology";
@@ -15,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { RADIUS } from "@/constants/radius";
+import { Icon, type IconName } from "@/components/icon";
 
 // react-native-web's Alert.alert (0.21.x) is a complete no-op — no
 // window.alert/confirm fallback, nothing — so on web every Alert.alert
@@ -384,7 +384,7 @@ const Button = ({
   secondary?: boolean;
   fullWidth?: boolean;
   disabled?: boolean;
-  icon?: keyof typeof MaterialIcons.glyphMap;
+  icon?: IconName;
 }) => (
   <Pressable
     onPress={onPress}
@@ -407,7 +407,7 @@ const Button = ({
     })}
   >
     {icon && (
-      <MaterialIcons
+      <Icon
         name={icon}
         size={18}
         color={secondary ? COLORS.foreground : COLORS.background}
@@ -486,6 +486,32 @@ const Field = ({
   />
 );
 
+// Pole wyszukiwania: obrys + ikona lupy (liniowa) + Field. Jedna wersja
+// zamiast ręcznych "🔍 Szukaj…" w placeholderach.
+const SearchField = ({ style, ...props }: any) => (
+  <View
+    style={{
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: COLORS.background,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      borderRadius: RADIUS.control,
+      paddingLeft: 12,
+      marginTop: 8,
+    }}
+  >
+    <Icon name="search" size={18} color={COLORS.muted} />
+    <Field
+      {...props}
+      style={[
+        { flex: 1, marginTop: 0, backgroundColor: "transparent", borderRadius: 0 },
+        style,
+      ]}
+    />
+  </View>
+);
+
 // Kompaktowy stepper ilości (− / wpisz / +), ten sam wzorzec co w kroku
 // "Zużycie dzienne" brygadzisty — używamy go teraz wszędzie tam, gdzie
 // wpisuje się jakąś ilość (magazyn, budowy, zamówienia), zamiast samego
@@ -556,8 +582,8 @@ const QuantityStepper = ({
           justifyContent: "center",
         }}
       >
-        <MaterialIcons
-          name="remove"
+        <Icon
+          name="minus"
           size={16}
           color={disabled ? COLORS.muted : COLORS.primary}
         />
@@ -597,8 +623,8 @@ const QuantityStepper = ({
           justifyContent: "center",
         }}
       >
-        <MaterialIcons
-          name="add"
+        <Icon
+          name="plus"
           size={16}
           color={disabled ? COLORS.muted : COLORS.primary}
         />
@@ -711,7 +737,7 @@ const ExtraCostsSection = ({
               hitSlop={8}
               style={{ marginLeft: 10, padding: 4, flexShrink: 0 }}
             >
-              <MaterialIcons name="close" size={16} color={COLORS.muted} />
+              <Icon name="x" size={16} color={COLORS.muted} />
             </Pressable>
           )}
         </View>
@@ -918,7 +944,7 @@ const IconBadge = ({
   size = 22,
   badgeSize = 44,
 }: {
-  name: keyof typeof MaterialIcons.glyphMap;
+  name: IconName;
   size?: number;
   badgeSize?: number;
 }) => (
@@ -935,7 +961,7 @@ const IconBadge = ({
       flexShrink: 0,
     }}
   >
-    <MaterialIcons name={name} size={size} color={COLORS.primary} />
+    <Icon name={name} size={size} color={COLORS.primary} />
   </View>
 );
 
@@ -1004,7 +1030,7 @@ const ReportStepper = ({ step }: { step: 1 | 2 | 3 }) => (
             }}
           >
             {step > s.n ? (
-              <MaterialIcons name="check" size={16} color={COLORS.primary} />
+              <Icon name="check" size={16} color={COLORS.primary} />
             ) : (
               <Text
                 style={{
@@ -1075,7 +1101,7 @@ const WizardStepper = ({
             }}
           >
             {current > s.n ? (
-              <MaterialIcons name="check" size={16} color={COLORS.primary} />
+              <Icon name="check" size={16} color={COLORS.primary} />
             ) : (
               <Text
                 style={{
@@ -1274,7 +1300,7 @@ export function SearchablePicker({
               paddingVertical: 4,
             }}
           >
-            <MaterialIcons name="search" size={18} color={COLORS.muted} />
+            <Icon name="search" size={18} color={COLORS.muted} />
             <TextInput
               autoFocus
               value={query}
@@ -1325,7 +1351,7 @@ export function SearchablePicker({
                     )}
                   </View>
                   {selected && (
-                    <MaterialIcons name="check" size={18} color={COLORS.primary} />
+                    <Icon name="check" size={18} color={COLORS.primary} />
                   )}
                 </Pressable>
               );
@@ -1406,7 +1432,7 @@ const ReportCard = ({
         onPress={onToggle}
         style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
       >
-        <IconBadge name={approved ? "lock" : "description"} />
+        <IconBadge name={approved ? "lock" : "file-text"} />
         <View style={{ flex: 1, marginLeft: 12 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Text className="text-base font-bold text-foreground">
@@ -1444,9 +1470,7 @@ const ReportCard = ({
             />
           </View>
         </View>
-        <Text style={{ color: COLORS.primary, fontSize: 16, fontWeight: "700", marginLeft: 8 }}>
-          {expanded ? "▲" : "▼"}
-        </Text>
+        <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
       </Pressable>
 
       {expanded && (
@@ -1699,7 +1723,7 @@ const ReportCard = ({
                               }}
                             >
                               {isStageCompleted && (
-                                <MaterialIcons name="check" size={14} color={COLORS.background} />
+                                <Icon name="check" size={14} color={COLORS.background} />
                               )}
                             </View>
                           </View>
@@ -1879,16 +1903,10 @@ const ReportCard = ({
 
           <View style={{ marginTop: 24 }}>
             {approved ? (
-              <Text
-                style={{
-                  color: COLORS.success,
-                  fontWeight: "700",
-                  textAlign: "center",
-                  paddingVertical: 6,
-                }}
-              >
-                ✓ Raport zatwierdzony
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 6 }}>
+<Icon name="check" size={16} color={COLORS.success} />
+<Text style={{ color: COLORS.success, fontWeight: "700" }}>Raport zatwierdzony</Text>
+</View>
             ) : (
               <Button label="Zatwierdź raport" onPress={onApprove} />
             )}
@@ -1924,6 +1942,7 @@ export {
   pluralPL,
   Button,
   Field,
+  SearchField,
   QuantityStepper,
   ExtraCostsSection,
   TimeOptionsList,

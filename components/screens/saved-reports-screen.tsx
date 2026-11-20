@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import {
   COLORS,
@@ -12,6 +11,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
+import { Icon } from "@/components/icon";
 
 type StatusFilter = "all" | "pending" | "approved";
 
@@ -196,7 +196,7 @@ export function SavedReportsScreen() {
             >
               {selectedBuildLabel}
             </Text>
-            <MaterialIcons name="expand-more" size={20} color={COLORS.muted} />
+            <Icon name="chevron-down" size={20} color={COLORS.muted} />
           </Pressable>
 
           <SearchablePicker
@@ -262,7 +262,7 @@ export function SavedReportsScreen() {
 
       {sorted.length === 0 ? (
         <View className="bg-surface border border-border rounded-card p-5 items-center">
-          <IconBadge name={statusFilter === "pending" ? "check-circle" : "description"} />
+          <IconBadge name={statusFilter === "pending" ? "check-circle" : "file-text"} />
           <Text className="text-base font-bold text-foreground mt-3">
             {statusFilter === "pending" && reportsInScope.length > 0
               ? "Wszystkie raporty są aktualne"

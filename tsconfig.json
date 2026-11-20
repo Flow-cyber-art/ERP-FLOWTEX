@@ -4,8 +4,7 @@
     "strict": true,
     "types": ["node", "nativewind/types"],
     "paths": {
-      "@/*": ["./*"],
-      "@shared/*": ["./shared/*"]
+      "@/*": ["./*"]
     }
   },
   "include": [

@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
  *
  * Odpowiednik `buildsRouter.list` / `buildsRouter.create` z
  * `server/data-routers.ts`. Kolumny w bazie mają te same (camelCase)
- * nazwy co w `drizzle/schema.ts` — Postgres je cytuje, więc `.select()`
+ * nazwy co w `supabase/sql/000_faza0-2_fundament_schematu.sql` — Postgres je cytuje, więc `.select()`
  * może się odwoływać do nich wprost.
  */
 

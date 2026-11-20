@@ -2,6 +2,7 @@ import { Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
 import { COLORS, formatPLN } from "@/components/report-ui";
+import { RADIUS } from "@/constants/radius";
 
 /**
  * Proste wykresy do raportów (m.in. domknięcie budowy w Rozliczeniu),
@@ -51,7 +52,7 @@ export function BarChart({
             <View
               style={{
                 height: 10,
-                borderRadius: 6,
+                borderRadius: RADIUS.chip,
                 backgroundColor: COLORS.background,
                 overflow: "hidden",
               }}
@@ -60,7 +61,7 @@ export function BarChart({
                 style={{
                   width: `${widthPct}%`,
                   height: "100%",
-                  borderRadius: 6,
+                  borderRadius: RADIUS.chip,
                   backgroundColor: d.color,
                 }}
               />
@@ -107,7 +108,7 @@ export function ComparisonBarChart({
                 <View
                   style={{
                     height: 14,
-                    borderRadius: 7,
+                    borderRadius: RADIUS.chip,
                     backgroundColor: COLORS.background,
                     overflow: "hidden",
                   }}
@@ -116,7 +117,7 @@ export function ComparisonBarChart({
                     style={{
                       width: `${widthPct}%`,
                       height: "100%",
-                      borderRadius: 7,
+                      borderRadius: RADIUS.chip,
                       backgroundColor: seg.color,
                     }}
                   />
@@ -257,7 +258,7 @@ export function KpiTile({
         flexGrow: 1,
         flexBasis: 140,
         backgroundColor: COLORS.background,
-        borderRadius: 12,
+        borderRadius: RADIUS.card,
         padding: 12,
       }}
     >

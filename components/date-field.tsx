@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Platform, Pressable, Text } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { COLORS } from "@/components/report-ui";
+import { RADIUS } from "@/constants/radius";
 
 /**
  * Pole daty (format "YYYY-MM-DD") — na webie natywny `<input type="date">`
@@ -35,7 +36,7 @@ export function DateField({
         style={{
           backgroundColor: COLORS.background,
           color: value ? COLORS.foreground : COLORS.muted,
-          borderRadius: 10,
+          borderRadius: RADIUS.control,
           padding: "11px 13px",
           marginTop: 8,
           border: "none",
@@ -58,7 +59,7 @@ export function DateField({
         style={[
           {
             backgroundColor: COLORS.background,
-            borderRadius: 10,
+            borderRadius: RADIUS.control,
             paddingHorizontal: 13,
             paddingVertical: 11,
             marginTop: 8,

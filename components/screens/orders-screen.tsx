@@ -14,6 +14,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData, type OrderCartItem } from "@/contexts/app-data";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
+import { RADIUS } from "@/constants/radius";
 
 const BUILD_ORDER_STATUS_LABEL: Record<string, string> = {
   robocze: "Robocze",
@@ -376,7 +377,7 @@ export function OrdersScreen() {
             onPress={() => setManualFormOpen(!manualFormOpen)}
             style={({ pressed }) => ({
               backgroundColor: COLORS.primary,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               paddingHorizontal: 14,
               paddingVertical: 10,
               opacity: pressed ? 0.75 : 1,
@@ -393,7 +394,7 @@ export function OrdersScreen() {
           otwierane przyciskiem w nagłówku, tuż pod nim (nie na dole
           strony), żeby nie trzeba było szukać, gdzie się otworzyło. */}
       {manualFormOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
+        <View className="bg-surface border border-border rounded-card p-4 mb-5">
           <Text className="text-sm font-bold text-foreground">
             Zamów materiał spoza listy
           </Text>
@@ -416,7 +417,7 @@ export function OrdersScreen() {
             <View
               style={{
                 backgroundColor: COLORS.background,
-                borderRadius: 10,
+                borderRadius: RADIUS.control,
                 marginTop: 6,
                 overflow: "hidden",
               }}
@@ -496,7 +497,7 @@ export function OrdersScreen() {
                     style={{
                       backgroundColor:
                         orderUnit === unit ? COLORS.primary : COLORS.background,
-                      borderRadius: 10,
+                      borderRadius: RADIUS.control,
                       paddingHorizontal: 10,
                       paddingVertical: 8,
                       borderWidth: 1,
@@ -586,7 +587,7 @@ export function OrdersScreen() {
                     alignItems: "center",
                     justifyContent: "space-between",
                     backgroundColor: COLORS.background,
-                    borderRadius: 10,
+                    borderRadius: RADIUS.control,
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                     marginBottom: 6,
@@ -637,7 +638,7 @@ export function OrdersScreen() {
           dostawy obsługujemy tu, w jednym miejscu ze wszystkimi
           zamówieniami, zamiast rozproszone po poszczególnych budowach. */}
       {activeBuildOrders.length > 0 && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
+        <View className="bg-surface border border-border rounded-card p-4 mb-5">
           <DetailSection label="Zamówienia z planu budów" count={activeBuildOrders.length} style={{ marginTop: 0 }}>
           {activeBuildOrders.map((order) => {
             const build = builds.find((b) => b.id === String(order.buildId));
@@ -647,7 +648,7 @@ export function OrdersScreen() {
                 key={order.id}
                 style={{
                   backgroundColor: COLORS.background,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   padding: 10,
                   marginBottom: 10,
                 }}
@@ -707,7 +708,7 @@ export function OrdersScreen() {
                         style={{
                           width: 18,
                           height: 18,
-                          borderRadius: 5,
+                          borderRadius: RADIUS.chip,
                           borderWidth: 1,
                           borderColor: COLORS.border,
                           alignItems: "center",
@@ -832,7 +833,7 @@ export function OrdersScreen() {
                       style={{
                         marginTop: 10,
                         padding: 8,
-                        borderRadius: 8,
+                        borderRadius: RADIUS.control,
                         backgroundColor: COLORS.background,
                         borderWidth: 1,
                         borderColor: COLORS.success,
@@ -1046,7 +1047,7 @@ export function OrdersScreen() {
 
       {/* KPI = jednocześnie filtry. Tap przełącza widok listy poniżej. */}
       <View
-        className="bg-surface border border-border rounded-2xl mb-5"
+        className="bg-surface border border-border rounded-card mb-5"
         style={{ flexDirection: "row", overflow: "hidden" }}
       >
         {kpi("Braki", brakiCount, COLORS.danger, "braki")}
@@ -1074,7 +1075,7 @@ export function OrdersScreen() {
         batchGroups.map((group) => (
           <View
             key={group.batchId}
-            className="bg-surface border border-border rounded-xl px-4 py-3 mb-2"
+            className="bg-surface border border-border rounded-card px-4 py-3 mb-2"
           >
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
@@ -1107,7 +1108,7 @@ export function OrdersScreen() {
                     style={({ pressed }) => ({
                       borderWidth: 1,
                       borderColor: COLORS.primary,
-                      borderRadius: 8,
+                      borderRadius: RADIUS.control,
                       paddingHorizontal: 12,
                       paddingVertical: 8,
                       opacity: pressed ? 0.7 : 1,
@@ -1131,7 +1132,7 @@ export function OrdersScreen() {
                     style={({ pressed }) => ({
                       borderWidth: 1,
                       borderColor: COLORS.danger,
-                      borderRadius: 8,
+                      borderRadius: RADIUS.control,
                       paddingHorizontal: 12,
                       paddingVertical: 8,
                       opacity: pressed ? 0.7 : 1,
@@ -1198,7 +1199,7 @@ export function OrdersScreen() {
                           }}
                           style={({ pressed }) => ({
                             backgroundColor: COLORS.successBg,
-                            borderRadius: 8,
+                            borderRadius: RADIUS.control,
                             paddingHorizontal: 12,
                             paddingVertical: 8,
                             opacity: pressed ? 0.7 : 1,
@@ -1311,7 +1312,7 @@ export function OrdersScreen() {
         ))}
 
       {visibleRows.length === 0 && batchGroups.length === 0 && (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center">
+        <View className="bg-surface border border-border rounded-card p-5 items-center">
           <IconBadge name="local-shipping" />
           <Text className="text-sm text-muted mt-3 text-center">
             Brak pozycji w tym widoku.
@@ -1324,7 +1325,7 @@ export function OrdersScreen() {
         return (
           <View key={row.key}>
             <View
-              className="bg-surface border border-border rounded-xl px-4 py-3 mb-2"
+              className="bg-surface border border-border rounded-card px-4 py-3 mb-2"
               style={{ opacity: row.status === "dostarczone" ? 0.7 : 1 }}
             >
               {/* Status + akcje NAD nazwą materiału — z długimi etykietami
@@ -1362,7 +1363,7 @@ export function OrdersScreen() {
                         }
                         style={({ pressed }) => ({
                           backgroundColor: COLORS.primary,
-                          borderRadius: 8,
+                          borderRadius: RADIUS.control,
                           paddingHorizontal: 12,
                           paddingVertical: 8,
                           opacity: pressed ? 0.75 : 1,
@@ -1390,7 +1391,7 @@ export function OrdersScreen() {
                         style={({ pressed }) => ({
                           borderWidth: 1,
                           borderColor: COLORS.border,
-                          borderRadius: 8,
+                          borderRadius: RADIUS.control,
                           paddingHorizontal: 10,
                           paddingVertical: 8,
                           opacity: pressed ? 0.7 : 1,
@@ -1409,7 +1410,7 @@ export function OrdersScreen() {
                         style={({ pressed }) => ({
                           borderWidth: 1,
                           borderColor: COLORS.primary,
-                          borderRadius: 8,
+                          borderRadius: RADIUS.control,
                           paddingHorizontal: 12,
                           paddingVertical: 8,
                           opacity: pressed ? 0.7 : 1,
@@ -1431,7 +1432,7 @@ export function OrdersScreen() {
                         style={({ pressed }) => ({
                           borderWidth: 1,
                           borderColor: COLORS.danger,
-                          borderRadius: 8,
+                          borderRadius: RADIUS.control,
                           paddingHorizontal: 12,
                           paddingVertical: 8,
                           opacity: pressed ? 0.7 : 1,
@@ -1460,7 +1461,7 @@ export function OrdersScreen() {
                       }}
                       style={({ pressed }) => ({
                         backgroundColor: COLORS.successBg,
-                        borderRadius: 8,
+                        borderRadius: RADIUS.control,
                         paddingHorizontal: 12,
                         paddingVertical: 8,
                         opacity: pressed ? 0.7 : 1,
@@ -1513,7 +1514,7 @@ export function OrdersScreen() {
 
             {isReceiving && row.orderId && (
               <View
-                className="bg-surface border border-border rounded-xl p-4 mb-2"
+                className="bg-surface border border-border rounded-card p-4 mb-2"
                 style={{ marginTop: -6 }}
               >
                 <View style={{ flexDirection: "row", gap: 10 }}>

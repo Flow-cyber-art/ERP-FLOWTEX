@@ -25,7 +25,7 @@ export function SettingsScreen() {
       <ScreenHeader title="Ustawienia" description="Ustawienia aplikacji." />
 
       {canReturnToAdmin && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+        <View className="bg-surface border border-border rounded-card p-4 mb-4">
           <Text className="text-xs text-muted uppercase">Widok</Text>
           <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>
             Oglądasz teraz widok Brygadzisty.
@@ -44,7 +44,7 @@ export function SettingsScreen() {
 
       <AccountSettingsSection />
 
-      <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
+      <View className="bg-surface border border-border rounded-card p-4 mt-4">
         <Button
           label="Wyloguj"
           secondary

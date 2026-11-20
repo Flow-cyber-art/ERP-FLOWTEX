@@ -157,7 +157,7 @@ export function BuildPhotosSection({
         {showFolderLink && (
           <Pressable
             onPress={openFolder}
-            className="bg-background border border-border rounded-2xl items-center"
+            className="bg-background border border-border rounded-card items-center"
             style={{ paddingVertical: 22 }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>

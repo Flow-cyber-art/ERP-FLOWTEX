@@ -27,6 +27,12 @@ module.exports = {
   theme: {
     extend: {
       colors: tailwindColors,
+      // Skala zaokrągleń — te same wartości co constants/radius.ts.
+      borderRadius: {
+        card: "10px",
+        control: "8px",
+        chip: "6px",
+      },
     },
   },
   plugins: [

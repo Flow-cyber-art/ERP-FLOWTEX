@@ -14,6 +14,7 @@ import { LogoMark } from "@/components/logo-mark";
 import { AppDataProvider, useAppData } from "@/contexts/app-data";
 import { AuthGate } from "@/components/auth-gate";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RADIUS } from "@/constants/radius";
 
 const StartScreen = lazy(() =>
   import("@/components/screens/start-screen").then((m) => ({
@@ -183,7 +184,7 @@ function HomeScreenInner() {
         <View
           style={{
             backgroundColor: isActive ? COLORS.background : COLORS.warning,
-            borderRadius: 8,
+            borderRadius: RADIUS.control,
             minWidth: 18,
             height: 18,
             paddingHorizontal: 4,
@@ -212,14 +213,14 @@ function HomeScreenInner() {
               flexDirection: "row",
               alignItems: "center",
               gap: 10,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               paddingVertical: 11,
               paddingHorizontal: 14,
               backgroundColor: isActive ? COLORS.primary : "transparent",
             }
           : {
               flex: 1,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               paddingVertical: 8,
               alignItems: "center",
               backgroundColor: isActive ? COLORS.primary : "transparent",
@@ -267,7 +268,7 @@ function HomeScreenInner() {
                   top: -4,
                   right: -8,
                   backgroundColor: COLORS.warning,
-                  borderRadius: 7,
+                  borderRadius: RADIUS.chip,
                   minWidth: 14,
                   height: 14,
                   paddingHorizontal: 3,

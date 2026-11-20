@@ -8,6 +8,7 @@ import {
   SearchablePicker,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { RADIUS } from "@/constants/radius";
 
 // Skrzynka robocza managera: WSZYSTKIE raporty ze WSZYSTKICH budów w jednym
 // miejscu (żeby nie trzeba było klikać budowa po budowie żeby znaleźć to,
@@ -85,7 +86,7 @@ export function ManagerScreen() {
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <Pressable
           onPress={() => setPickerOpen(true)}
-          className="bg-surface border border-border rounded-2xl p-4"
+          className="bg-surface border border-border rounded-card p-4"
           style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
         >
           <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
@@ -115,7 +116,7 @@ export function ManagerScreen() {
             style={{
               width: 18,
               height: 18,
-              borderRadius: 5,
+              borderRadius: RADIUS.chip,
               borderWidth: 1,
               borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
               backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
@@ -156,7 +157,7 @@ export function ManagerScreen() {
       />
 
       {pendingReports.length === 0 && approvedReports.length === 0 ? (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+        <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <IconBadge name="description" />
           <Text className="text-sm text-muted mt-3 text-center">
             Brak raportów dla tego wyboru.

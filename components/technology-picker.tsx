@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { COLORS, Field } from "@/components/report-ui";
 import type { TechnologyRow } from "@/lib/data/technologies";
+import { RADIUS } from "@/constants/radius";
 
 // Wybór technologii w dwóch krokach (wspólny dla kreatora budowy i zmiany
 // technologii na karcie budowy): najpierw firma (kafelki z liczbą pozycji),
@@ -79,7 +80,7 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
           justifyContent: "space-between",
           gap: 10,
           backgroundColor: COLORS.surface,
-          borderRadius: 10,
+          borderRadius: RADIUS.control,
           borderWidth: 1,
           borderColor: COLORS.primary,
           padding: 12,
@@ -138,7 +139,7 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
                 onPress={() => setCompany(key)}
                 style={{
                   backgroundColor: COLORS.surface,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   borderWidth: 1,
                   borderColor: COLORS.border,
                   paddingHorizontal: 14,
@@ -163,7 +164,7 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
             alignItems: "center",
             justifyContent: "space-between",
             backgroundColor: COLORS.surface,
-            borderRadius: 10,
+            borderRadius: RADIUS.control,
             borderWidth: 1,
             borderColor: COLORS.primary,
             paddingHorizontal: 14,
@@ -209,7 +210,7 @@ export function TechnologyPicker({ technologies, selectedId, onSelect }: Props) 
                 style={{
                   paddingVertical: 11,
                   paddingHorizontal: 12,
-                  borderRadius: 8,
+                  borderRadius: RADIUS.control,
                   borderWidth: 1,
                   borderColor: COLORS.border,
                   backgroundColor: COLORS.background,

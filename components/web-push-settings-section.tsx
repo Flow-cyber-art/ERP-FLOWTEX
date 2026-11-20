@@ -4,6 +4,7 @@ import { Platform, Text, View } from "react-native";
 import { Button, COLORS, notify } from "@/components/report-ui";
 import { requestWebPushPermission } from "@/lib/notifications/use-register-web-push";
 import { useInstallPrompt } from "@/lib/pwa/use-install-prompt";
+import { RADIUS } from "@/constants/radius";
 
 // Instrukcja "dodaj do ekranu głównego" ma sens WYŁĄCZNIE na iOS Safari —
 // tam PushManager nie istnieje bez trybu standalone (patrz
@@ -70,7 +71,7 @@ export function WebPushSettingsSection() {
   };
 
   return (
-    <View className="bg-surface border border-border rounded-2xl p-4 mt-4">
+    <View className="bg-surface border border-border rounded-card p-4 mt-4">
       <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 4 }}>
         Powiadomienia push
       </Text>
@@ -87,7 +88,7 @@ export function WebPushSettingsSection() {
           style={{
             marginTop: 10,
             backgroundColor: COLORS.background,
-            borderRadius: 10,
+            borderRadius: RADIUS.control,
             padding: 12,
           }}
         >

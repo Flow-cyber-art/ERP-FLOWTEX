@@ -31,6 +31,7 @@ import {
   setAdminUserEmail,
   setAdminUserPassword,
 } from "@/lib/data/admin-users";
+import { RADIUS } from "@/constants/radius";
 
 // Panel administracyjny — konfiguracja firmy, nie codzienna praca na
 // budowie. Wszystko związane z pracownikiem (Zespół, stawki, konto
@@ -93,7 +94,7 @@ function AdminSettingsSection() {
       <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8, textTransform: "uppercase" }}>
         Ustawienia pracy
       </Text>
-      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-4">
+      <View className="bg-surface border border-border rounded-card overflow-hidden mb-4">
         <Pressable
           onPress={() => {
             setWorkdayOpen(!workdayOpen);
@@ -306,7 +307,7 @@ function AdminSettingsSection() {
           setDevRole("Brygadzista");
           setTab("savedReports");
         }}
-        className="bg-surface border border-border rounded-2xl mb-5"
+        className="bg-surface border border-border rounded-card mb-5"
         style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 14 }}
       >
         <IconBadge name="person" size={18} />
@@ -457,7 +458,7 @@ export function AdminTeamSection() {
       </View>
 
       {addEmployeeOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+        <View className="bg-surface border border-border rounded-card p-4 mb-3">
           <Field
             placeholder="Imię i nazwisko"
             value={newEmployee.name}
@@ -477,7 +478,7 @@ export function AdminTeamSection() {
                     newEmployee.role === role
                       ? COLORS.primary
                       : COLORS.background,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   paddingHorizontal: 10,
                   paddingVertical: 8,
                   borderWidth: 1,
@@ -534,14 +535,14 @@ export function AdminTeamSection() {
       )}
 
       {visibleEmployees.length === 0 && (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+        <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <Text className="text-sm text-muted">
             {showArchived ? "Brak zarchiwizowanych pracowników." : "Brak dodanych pracowników."}
           </Text>
         </View>
       )}
       {visibleEmployees.length > 0 && (
-        <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+        <View className="bg-surface border border-border rounded-card overflow-hidden mb-5">
           {/* Nagłówek tabeli — jeden użytkownik (właściciel), który zna
               swoich ludzi, korzysta na porównaniu stawek w pionie, czego
               karty nie dają. */}
@@ -665,7 +666,7 @@ export function AdminTeamSection() {
                         onPress={() => setEditingRateId(null)}
                         style={{
                           flex: 1,
-                          borderRadius: 10,
+                          borderRadius: RADIUS.control,
                           paddingHorizontal: 16,
                           paddingVertical: 12,
                           justifyContent: "center",
@@ -699,7 +700,7 @@ export function AdminTeamSection() {
                         style={{
                           flex: 1,
                           backgroundColor: COLORS.primary,
-                          borderRadius: 10,
+                          borderRadius: RADIUS.control,
                           paddingHorizontal: 16,
                           paddingVertical: 12,
                           justifyContent: "center",
@@ -1024,7 +1025,7 @@ export function AdminLeaveSection() {
       <Text className="text-lg font-bold text-foreground mb-3">
         Pula urlopowa — {currentYear}
       </Text>
-      <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+      <View className="bg-surface border border-border rounded-card overflow-hidden mb-5">
         {employees.map((employee, i) => {
           const limit = employee.leaveDaysPerYear ?? 26;
           const used = leaveRequests
@@ -1130,7 +1131,7 @@ export function AdminLeaveSection() {
 
       {collisions.length > 0 && (
         <View
-          className="rounded-2xl p-4 mb-5"
+          className="rounded-card p-4 mb-5"
           style={{ backgroundColor: COLORS.warningBg, borderWidth: 1, borderColor: COLORS.warning }}
         >
           <Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 13, marginBottom: 4 }}>
@@ -1162,7 +1163,7 @@ export function AdminLeaveSection() {
             style={{
               paddingHorizontal: 12,
               paddingVertical: 8,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               borderWidth: 1,
               borderColor: historyFilter === value ? COLORS.primary : COLORS.border,
               backgroundColor: historyFilter === value ? COLORS.primary : "transparent",
@@ -1181,7 +1182,7 @@ export function AdminLeaveSection() {
         ))}
       </View>
       {decidedRequests.length === 0 ? (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+        <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <Text className="text-sm text-muted">Brak wniosków dla wybranego filtra.</Text>
         </View>
       ) : (
@@ -1190,7 +1191,7 @@ export function AdminLeaveSection() {
           return (
             <View
               key={r.id}
-              className="bg-surface border border-border rounded-2xl p-4 mb-3"
+              className="bg-surface border border-border rounded-card p-4 mb-3"
               style={{ flexDirection: "row", alignItems: "flex-start" }}
             >
               <View style={{ flex: 1, marginRight: 8 }}>
@@ -1248,7 +1249,7 @@ function AdminTeamsSubsection() {
       </View>
 
       {addTeamOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+        <View className="bg-surface border border-border rounded-card p-4 mb-3">
           <Field
             placeholder="Nazwa brygady"
             value={newTeam.name}
@@ -1270,7 +1271,7 @@ function AdminTeamsSubsection() {
                 style={{
                   backgroundColor:
                     e.id === newTeam.leadEmployeeId ? COLORS.primary : COLORS.background,
-                  borderRadius: 8,
+                  borderRadius: RADIUS.control,
                   paddingHorizontal: 9,
                   paddingVertical: 7,
                   borderWidth: 1,
@@ -1303,12 +1304,12 @@ function AdminTeamsSubsection() {
       )}
 
       {teams.length === 0 && (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+        <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <Text className="text-sm text-muted">Brak dodanych brygad.</Text>
         </View>
       )}
       {teams.length > 0 && (
-        <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+        <View className="bg-surface border border-border rounded-card overflow-hidden mb-5">
           {teams.map((team, i) => {
             const members = teamMembers.filter((m) => m.teamId === team.id);
             const expanded = expandedTeamId === team.id;
@@ -1399,7 +1400,7 @@ function AdminTeamsSubsection() {
                               }}
                               style={{
                                 backgroundColor: COLORS.background,
-                                borderRadius: 8,
+                                borderRadius: RADIUS.control,
                                 paddingHorizontal: 9,
                                 paddingVertical: 7,
                                 borderWidth: 1,

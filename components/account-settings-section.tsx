@@ -55,7 +55,7 @@ export function AccountSettingsSection() {
   };
 
   return (
-    <View className="bg-surface border border-border rounded-2xl p-4">
+    <View className="bg-surface border border-border rounded-card p-4">
       <Text style={{ color: COLORS.muted, fontSize: 13, marginBottom: 4 }}>
         Moje konto{email ? ` · ${email}` : ""}
       </Text>

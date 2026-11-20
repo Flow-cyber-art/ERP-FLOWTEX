@@ -21,7 +21,7 @@ export function StartScreen() {
     <>
   <>
     <ScreenHeader title="Dzień dobry, brygadzisto." description={todayLabelPL()} />
-    <View className="bg-surface border border-border rounded-3xl p-5 mb-4">
+    <View className="bg-surface border border-border rounded-card p-5 mb-4">
       <Text className="text-xs text-muted">RAPORT DZIENNY</Text>
       <Text className="text-xl font-bold text-foreground mt-2">
         {buildAssignments.length} materiały do rozliczenia
@@ -34,7 +34,7 @@ export function StartScreen() {
       </View>
     </View>
     <View className="flex-row gap-3 mb-5">
-      <View className="flex-1 bg-surface border border-border rounded-2xl p-4">
+      <View className="flex-1 bg-surface border border-border rounded-card p-4">
         <Text className="text-xs text-muted">Materiały</Text>
         <Text className="text-3xl font-bold text-foreground mt-2">
           {materials.length}
@@ -44,7 +44,7 @@ export function StartScreen() {
           stan
         </Text>
       </View>
-      <View className="flex-1 bg-surface border border-border rounded-2xl p-4">
+      <View className="flex-1 bg-surface border border-border rounded-card p-4">
         <Text className="text-xs text-muted">Aktywne budowy</Text>
         <Text className="text-3xl font-bold text-foreground mt-2">
           {builds.length}
@@ -58,7 +58,7 @@ export function StartScreen() {
     {builds.slice(0, 2).map((b) => (
       <View
         key={b.id}
-        className="bg-surface border border-border rounded-2xl p-4 mb-3"
+        className="bg-surface border border-border rounded-card p-4 mb-3"
       >
         <Text className="text-xs text-primary font-bold">
           {b.number}

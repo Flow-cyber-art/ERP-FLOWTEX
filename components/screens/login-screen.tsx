@@ -68,7 +68,7 @@ export function LoginScreen() {
           Zaloguj się, żeby zobaczyć budowy, magazyn i raporty.
         </Text>
 
-        <View className="bg-surface border border-border rounded-2xl p-4">
+        <View className="bg-surface border border-border rounded-card p-4">
           <Text className="text-xs text-muted uppercase">Email</Text>
           <Field
             placeholder="jan.kowalski@flowtex.pl"

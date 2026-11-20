@@ -20,6 +20,7 @@ import {
 import { useAppData } from "@/contexts/app-data";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { materialReportKey } from "@/lib/material-report-key";
+import { RADIUS } from "@/constants/radius";
 
 export function ReportScreen() {
   const {
@@ -358,12 +359,12 @@ export function ReportScreen() {
 
       <ReportStepper step={reportStep} />
 
-      <View className="bg-surface border border-border rounded-2xl overflow-hidden">
+      <View className="bg-surface border border-border rounded-card overflow-hidden">
         {reportApproved && (
           <View
             style={{
               backgroundColor: COLORS.successBg,
-              borderRadius: 12,
+              borderRadius: RADIUS.card,
               padding: 13,
               margin: 16,
               marginBottom: 0,
@@ -429,7 +430,7 @@ export function ReportScreen() {
               <View
                 style={{
                   backgroundColor: COLORS.background,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   padding: 10,
                   marginHorizontal: 16,
                   marginBottom: 16,
@@ -600,7 +601,7 @@ export function ReportScreen() {
                       key={stageName}
                       style={{
                         backgroundColor: COLORS.background,
-                        borderRadius: 12,
+                        borderRadius: RADIUS.card,
                         padding: 12,
                         marginTop: 8,
                       }}
@@ -635,7 +636,7 @@ export function ReportScreen() {
                           style={{
                             width: 21,
                             height: 21,
-                            borderRadius: 5,
+                            borderRadius: RADIUS.chip,
                             borderWidth: 2,
                             borderColor: isStageCompleted ? COLORS.primary : COLORS.border,
                             backgroundColor: isStageCompleted ? COLORS.primary : "transparent",
@@ -728,7 +729,7 @@ export function ReportScreen() {
                     style={{
                       borderWidth: 1,
                       borderColor: COLORS.primary,
-                      borderRadius: 10,
+                      borderRadius: RADIUS.control,
                       paddingVertical: 11,
                       alignItems: "center",
                       flexDirection: "row",
@@ -750,7 +751,7 @@ export function ReportScreen() {
                     <View
                       style={{
                         backgroundColor: COLORS.background,
-                        borderRadius: 10,
+                        borderRadius: RADIUS.control,
                         padding: 10,
                         marginTop: 8,
                       }}
@@ -830,7 +831,7 @@ export function ReportScreen() {
                         <View
                           style={{
                             backgroundColor: COLORS.surface,
-                            borderRadius: 12,
+                            borderRadius: RADIUS.card,
                             padding: 12,
                             marginTop: 12,
                           }}
@@ -1006,7 +1007,7 @@ export function ReportScreen() {
                 onPress={() => setEmployeePickerOpen(!employeePickerOpen)}
                 style={{
                   backgroundColor: COLORS.background,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   padding: 12,
                   flexDirection: "row",
                   justifyContent: "space-between",
@@ -1035,7 +1036,7 @@ export function ReportScreen() {
                 <View
                   style={{
                     backgroundColor: COLORS.background,
-                    borderRadius: 10,
+                    borderRadius: RADIUS.control,
                     padding: 8,
                     marginTop: 6,
                   }}
@@ -1085,7 +1086,7 @@ export function ReportScreen() {
                     }
                     style={{
                       backgroundColor: COLORS.background,
-                      borderRadius: 10,
+                      borderRadius: RADIUS.control,
                       padding: 11,
                       borderWidth: 1,
                       borderColor:
@@ -1144,7 +1145,7 @@ export function ReportScreen() {
                     }
                     style={{
                       backgroundColor: COLORS.background,
-                      borderRadius: 10,
+                      borderRadius: RADIUS.control,
                       padding: 11,
                       borderWidth: 1,
                       borderColor:
@@ -1204,7 +1205,7 @@ export function ReportScreen() {
                       flex: 1,
                       borderWidth: 1,
                       borderColor: COLORS.primary,
-                      borderRadius: 12,
+                      borderRadius: RADIUS.card,
                       paddingVertical: 13,
                       flexDirection: "row",
                       alignItems: "center",
@@ -1227,7 +1228,7 @@ export function ReportScreen() {
                     style={({ pressed }) => ({
                       flex: 1,
                       backgroundColor: COLORS.primary,
-                      borderRadius: 12,
+                      borderRadius: RADIUS.card,
                       paddingVertical: 13,
                       flexDirection: "row",
                       alignItems: "center",
@@ -1398,7 +1399,7 @@ export function ReportScreen() {
         <View
           style={{
             backgroundColor: COLORS.successBg,
-            borderRadius: 12,
+            borderRadius: RADIUS.card,
             padding: 13,
             marginTop: 16,
           }}

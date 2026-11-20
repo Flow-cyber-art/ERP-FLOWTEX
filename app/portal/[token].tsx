@@ -35,6 +35,7 @@ import {
   type PublicBuildView,
 } from "@/lib/data/public-portal";
 import { generateClientSummaryPublic } from "@/lib/data/ai-summary";
+import { RADIUS } from "@/constants/radius";
 
 /**
  * Portal Klienta — publiczna, NIEAUTORYZOWANA strona podglądu postępu
@@ -162,7 +163,7 @@ function Card({
           backgroundColor: PC.surface,
           borderWidth: 1,
           borderColor: PC.line,
-          borderRadius: 20,
+          borderRadius: RADIUS.card,
           marginBottom: 14,
           overflow: "hidden",
         },
@@ -581,7 +582,7 @@ function PhotoTile({
       style={{
         width: `${widthPercent}%`,
         aspectRatio: 4 / 3,
-        borderRadius: 14,
+        borderRadius: RADIUS.card,
         overflow: "hidden",
         borderWidth: 1,
         borderColor: PC.line,
@@ -604,7 +605,7 @@ function PhotoTile({
           backgroundColor: "rgba(0,0,0,0.6)",
           paddingHorizontal: 6,
           paddingVertical: 2,
-          borderRadius: 5,
+          borderRadius: RADIUS.chip,
         }}
       >
         {formatDateShortPL(photo.createdAt)}
@@ -911,7 +912,7 @@ function PhotosCard({ view }: { view: PublicBuildView }) {
               marginTop: 14,
               borderWidth: 1,
               borderColor: PC.line,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               paddingVertical: 11,
               alignItems: "center",
             }}
@@ -1113,7 +1114,7 @@ function TechCard({ view }: { view: PublicBuildView }) {
               alignItems: "center",
               gap: 14,
               padding: 14,
-              borderRadius: 14,
+              borderRadius: RADIUS.card,
               backgroundColor: PC.surface2,
               borderWidth: 1,
               borderColor: PC.line,
@@ -1124,7 +1125,7 @@ function TechCard({ view }: { view: PublicBuildView }) {
               style={{
                 width: 40,
                 height: 40,
-                borderRadius: 11,
+                borderRadius: RADIUS.control,
                 backgroundColor: PC.accentSoft,
                 alignItems: "center",
                 justifyContent: "center",
@@ -1327,7 +1328,7 @@ export default function PublicBuildPortal() {
             style={{
               width: 26,
               height: 26,
-              borderRadius: 8,
+              borderRadius: RADIUS.control,
               backgroundColor: PC.accent2,
               alignItems: "center",
               justifyContent: "center",
@@ -1352,7 +1353,7 @@ export default function PublicBuildPortal() {
               style={{
                 width: 24,
                 height: 24,
-                borderRadius: 8,
+                borderRadius: RADIUS.control,
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: PC.surface2,
@@ -1464,7 +1465,7 @@ export default function PublicBuildPortal() {
           style={{
             marginTop: 4,
             padding: 20,
-            borderRadius: 20,
+            borderRadius: RADIUS.card,
             backgroundColor: PC.accentSoft,
             borderWidth: 1,
             borderColor: "rgba(208,139,65,0.22)",

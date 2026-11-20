@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, ScrollView, Text, View, Pressable } from "react-native";
 import { Button, COLORS, IconBadge, formatPLN, notify } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { RADIUS } from "@/constants/radius";
 
 /**
  * "Rozliczenie" (HR) — połączenie dawnych osobnych "Rozliczenie godzin"
@@ -290,7 +291,7 @@ export function PayrollSection() {
       {/* Jeden pasek zamiast dwóch — strzałka / (zakres dat + przełącznik
           Tydzień-Miesiąc-Rok) / strzałka, zgodnie z makietą. */}
       <View
-        className="bg-surface border border-border rounded-2xl mb-5"
+        className="bg-surface border border-border rounded-card mb-5"
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -312,7 +313,7 @@ export function PayrollSection() {
               flexDirection: "row",
               gap: 2,
               backgroundColor: COLORS.background,
-              borderRadius: 8,
+              borderRadius: RADIUS.control,
               padding: 2,
             }}
           >
@@ -330,7 +331,7 @@ export function PayrollSection() {
                   setOffset(0);
                 }}
                 style={{
-                  borderRadius: 6,
+                  borderRadius: RADIUS.chip,
                   paddingVertical: 5,
                   paddingHorizontal: 10,
                   backgroundColor: mode === value ? COLORS.primary : "transparent",
@@ -357,7 +358,7 @@ export function PayrollSection() {
               style={{
                 paddingHorizontal: 8,
                 paddingVertical: 6,
-                borderRadius: 8,
+                borderRadius: RADIUS.control,
                 borderWidth: 1,
                 borderColor: COLORS.border,
               }}
@@ -400,7 +401,7 @@ export function PayrollSection() {
               flexBasis: "47%",
               flexGrow: 1,
               padding: 12,
-              borderRadius: 14,
+              borderRadius: RADIUS.card,
               borderWidth: 1,
               backgroundColor: alert ? COLORS.dangerBg : COLORS.surface,
               borderColor: alert ? COLORS.danger : COLORS.border,
@@ -437,7 +438,7 @@ export function PayrollSection() {
               style={{
                 paddingHorizontal: 14,
                 paddingVertical: 8,
-                borderRadius: 10,
+                borderRadius: RADIUS.control,
                 borderWidth: 1,
                 borderColor: view === value ? COLORS.primary : COLORS.border,
                 backgroundColor: view === value ? COLORS.primary : "transparent",
@@ -460,7 +461,7 @@ export function PayrollSection() {
           style={{
             paddingHorizontal: 14,
             paddingVertical: 8,
-            borderRadius: 10,
+            borderRadius: RADIUS.control,
             borderWidth: 1,
             borderColor: COLORS.border,
           }}
@@ -476,12 +477,12 @@ export function PayrollSection() {
           <MonthTimeline today={today} rows={rows} timeEntries={timeEntries} leaveRequests={leaveRequests} />
         )
       ) : rows.length === 0 ? (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+        <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <IconBadge name="event-busy" />
           <Text className="text-sm text-muted mt-3 text-center">Brak pracowników.</Text>
         </View>
       ) : (
-        <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+        <View className="bg-surface border border-border rounded-card overflow-hidden mb-5">
           <View
             style={{
               flexDirection: "row",

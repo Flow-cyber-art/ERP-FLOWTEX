@@ -14,6 +14,7 @@ import {
   setShowPhotosToClient,
   type PublicPortalSettings,
 } from "@/lib/data/public-portal";
+import { RADIUS } from "@/constants/radius";
 
 // Domyślnie strona portalu jest serwowana z tego samego originu co apka
 // (patrz vercel.json + app/portal/[token].tsx) — brak osobnej domeny do
@@ -197,7 +198,7 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
               onPress={() => setQrFullscreen(true)}
               style={{ alignItems: "center", marginBottom: 12 }}
             >
-              <Image source={{ uri: qrDataUrl }} style={{ width: 180, height: 180, borderRadius: 8 }} />
+              <Image source={{ uri: qrDataUrl }} style={{ width: 180, height: 180, borderRadius: RADIUS.control }} />
               <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>
                 Dotknij, żeby powiększyć
               </Text>
@@ -240,7 +241,7 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
               {qrDataUrl && (
                 <Image
                   source={{ uri: qrDataUrl }}
-                  style={{ width: 280, height: 280, borderRadius: 12 }}
+                  style={{ width: 280, height: 280, borderRadius: RADIUS.card }}
                 />
               )}
               <Text
@@ -373,7 +374,7 @@ export function BuildPortalSection({ buildId }: { buildId: number }) {
                 style={{
                   marginTop: 10,
                   backgroundColor: COLORS.background,
-                  borderRadius: 12,
+                  borderRadius: RADIUS.card,
                   padding: 12,
                 }}
               >

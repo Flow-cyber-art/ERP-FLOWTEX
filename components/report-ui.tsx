@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { RADIUS } from "@/constants/radius";
 
 // react-native-web's Alert.alert (0.21.x) is a complete no-op — no
 // window.alert/confirm fallback, nothing — so on web every Alert.alert
@@ -393,7 +394,7 @@ const Button = ({
       backgroundColor: secondary ? COLORS.surface : COLORS.primary,
       borderWidth: secondary ? 1 : 0,
       borderColor: COLORS.border,
-      borderRadius: 12,
+      borderRadius: RADIUS.card,
       paddingVertical: 12,
       paddingHorizontal: 20,
       minHeight: 44,
@@ -473,7 +474,7 @@ const Field = ({
       {
         backgroundColor: COLORS.background,
         color: COLORS.foreground,
-        borderRadius: 10,
+        borderRadius: RADIUS.control,
         paddingHorizontal: 13,
         paddingVertical: 11,
         marginTop: 8,
@@ -533,7 +534,7 @@ const QuantityStepper = ({
           flexDirection: "row",
           alignItems: "center",
           backgroundColor: COLORS.background,
-          borderRadius: 10,
+          borderRadius: RADIUS.control,
           alignSelf: "flex-start",
           // sztywny rozmiar — stepper nigdy nie rośnie i nie kurczy się
           flexGrow: 0,
@@ -861,7 +862,7 @@ const TimeOptionsList = ({
     <View
       style={{
         backgroundColor: COLORS.background,
-        borderRadius: 10,
+        borderRadius: RADIUS.control,
         marginTop: 6,
         borderWidth: 1,
         borderColor: COLORS.border,
@@ -1119,7 +1120,7 @@ const StatusBadge = ({
     <View
       style={{
         backgroundColor: s.bg,
-        borderRadius: 8,
+        borderRadius: RADIUS.chip,
         paddingHorizontal: 10,
         paddingVertical: 6,
         alignSelf: "flex-start",
@@ -1260,7 +1261,7 @@ export function SearchablePicker({
       >
         <Pressable
           onPress={(e) => e.stopPropagation()}
-          className="bg-surface border border-border rounded-2xl"
+          className="bg-surface border border-border rounded-card"
           style={{ maxHeight: "70%", overflow: "hidden", width: "100%", maxWidth: 480 }}
         >
           <View
@@ -1398,7 +1399,7 @@ const ReportCard = ({
 
   return (
     <View
-      className="bg-surface border border-border rounded-2xl mb-3 overflow-hidden"
+      className="bg-surface border border-border rounded-card mb-3 overflow-hidden"
       style={{ borderColor: approved ? COLORS.success : COLORS.border }}
     >
       <Pressable
@@ -1667,7 +1668,7 @@ const ReportCard = ({
                           key={stageName}
                           style={{
                             backgroundColor: COLORS.background,
-                            borderRadius: 12,
+                            borderRadius: RADIUS.card,
                             padding: 12,
                             marginTop: 8,
                           }}
@@ -1689,7 +1690,7 @@ const ReportCard = ({
                               style={{
                                 width: 21,
                                 height: 21,
-                                borderRadius: 5,
+                                borderRadius: RADIUS.chip,
                                 borderWidth: 2,
                                 borderColor: isStageCompleted ? COLORS.primary : COLORS.border,
                                 backgroundColor: isStageCompleted ? COLORS.primary : "transparent",
@@ -1824,7 +1825,7 @@ const ReportCard = ({
               style={{
                 marginTop: 24,
                 backgroundColor: COLORS.background,
-                borderRadius: 12,
+                borderRadius: RADIUS.card,
                 padding: 12,
               }}
             >
@@ -1845,7 +1846,7 @@ const ReportCard = ({
               style={{
                 marginTop: 12,
                 backgroundColor: COLORS.background,
-                borderRadius: 12,
+                borderRadius: RADIUS.card,
                 padding: 12,
                 borderWidth: 1,
                 borderColor: COLORS.border,

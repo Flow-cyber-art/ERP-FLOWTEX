@@ -28,6 +28,7 @@ import {
 } from "@/lib/data/technologies";
 import { parseTechnologySql } from "@/lib/data/technology-sql-import";
 import { matchMaterialNames } from "@/lib/material-name-match";
+import { RADIUS } from "@/constants/radius";
 
 // Panel Admina — Technologie (receptury posadzek), Faza 1 modułu
 // Technologia. "Edytuj" NIGDY nie nadpisuje istniejącej technologii —
@@ -385,7 +386,7 @@ export function TechnologiesScreen() {
       />
 
       {editorOpen && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+        <View className="bg-surface border border-border rounded-card p-4 mb-4">
           {/* Zapisz też na górze — przy 5-8 etapach formularz jest długi,
               bez tego trzeba by scrollować do samego dołu za każdym razem,
               żeby zapisać. */}
@@ -436,7 +437,7 @@ export function TechnologiesScreen() {
                   style={{
                     flex: 1,
                     paddingVertical: 9,
-                    borderRadius: 10,
+                    borderRadius: RADIUS.control,
                     alignItems: "center",
                     borderWidth: 1,
                     borderColor: formMode === opt.key ? COLORS.primary : COLORS.border,
@@ -476,7 +477,7 @@ export function TechnologiesScreen() {
                 style={{
                   backgroundColor: COLORS.background,
                   color: COLORS.foreground,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   borderWidth: 1,
                   borderColor: COLORS.border,
                   padding: 12,
@@ -559,7 +560,7 @@ export function TechnologiesScreen() {
           <Text className="text-xs text-muted uppercase mb-2 mt-4">Etapy technologii</Text>
           <View
             style={{
-              borderRadius: 12,
+              borderRadius: RADIUS.card,
               borderWidth: 1,
               borderColor: COLORS.border,
               overflow: "hidden",
@@ -703,7 +704,7 @@ export function TechnologiesScreen() {
                                     onPress={() => updateMaterial(stage.key, mat.key, { unit: u })}
                                     style={{
                                       backgroundColor: mat.unit === u ? COLORS.primary : COLORS.background,
-                                      borderRadius: 8,
+                                      borderRadius: RADIUS.control,
                                       paddingHorizontal: 8,
                                       paddingVertical: 6,
                                       borderWidth: 1,
@@ -739,7 +740,7 @@ export function TechnologiesScreen() {
                                   alignItems: "center",
                                   justifyContent: "space-between",
                                   backgroundColor: COLORS.background,
-                                  borderRadius: 10,
+                                  borderRadius: RADIUS.control,
                                   borderWidth: 1,
                                   borderColor: COLORS.border,
                                   paddingHorizontal: 13,
@@ -817,7 +818,7 @@ export function TechnologiesScreen() {
       )}
 
       {!editorOpen && loadError && (
-        <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+        <View className="bg-surface border border-border rounded-card p-4 mb-3">
           <Text style={{ color: COLORS.danger, fontSize: 12 }}>{loadError}</Text>
         </View>
       )}
@@ -829,7 +830,7 @@ export function TechnologiesScreen() {
       )}
 
       {technologies?.length === 0 && (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+        <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <Text className="text-sm text-muted">Brak technologii — dodaj pierwszą.</Text>
         </View>
       )}
@@ -847,7 +848,7 @@ export function TechnologiesScreen() {
                 style={{
                   paddingHorizontal: 14,
                   paddingVertical: 8,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   borderWidth: 1,
                   borderColor: filterCompany === "all" ? COLORS.primary : COLORS.border,
                   backgroundColor: filterCompany === "all" ? COLORS.primary : COLORS.surface,
@@ -872,7 +873,7 @@ export function TechnologiesScreen() {
                     style={{
                       paddingHorizontal: 14,
                       paddingVertical: 8,
-                      borderRadius: 10,
+                      borderRadius: RADIUS.control,
                       borderWidth: 1,
                       borderColor: active ? COLORS.primary : COLORS.border,
                       backgroundColor: active ? COLORS.primary : COLORS.surface,
@@ -894,7 +895,7 @@ export function TechnologiesScreen() {
           </ScrollView>
 
           <View
-            className="bg-surface border border-border rounded-2xl p-3 mb-5"
+            className="bg-surface border border-border rounded-card p-3 mb-5"
             style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
           >
             <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
@@ -934,7 +935,7 @@ export function TechnologiesScreen() {
       )}
 
       {filteredFamilies.length === 0 && families.length > 0 && (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-5">
+        <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <Text className="text-sm text-muted">
             Żadna technologia nie pasuje do wybranych filtrów.
           </Text>
@@ -942,7 +943,7 @@ export function TechnologiesScreen() {
       )}
 
       {filteredFamilies.length > 0 && (
-        <View className="bg-surface border border-border rounded-2xl overflow-hidden mb-5">
+        <View className="bg-surface border border-border rounded-card overflow-hidden mb-5">
           {filteredFamilies.map(([active, ...history], i) => (
             <View
               key={active.code}
@@ -976,7 +977,7 @@ export function TechnologiesScreen() {
                   onPress={() => startEdit(active)}
                   style={{
                     backgroundColor: COLORS.primary,
-                    borderRadius: 8,
+                    borderRadius: RADIUS.control,
                     paddingHorizontal: 12,
                     paddingVertical: 6,
                     marginRight: 10,

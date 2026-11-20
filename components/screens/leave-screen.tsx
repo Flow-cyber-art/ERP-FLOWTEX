@@ -12,6 +12,7 @@ import {
 import { DateField } from "@/components/date-field";
 import { useAppData } from "@/contexts/app-data";
 import type { LeaveType } from "@/lib/data/leave";
+import { RADIUS } from "@/constants/radius";
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   wypoczynkowy: "Urlop wypoczynkowy",
@@ -102,7 +103,7 @@ export function LeaveScreen() {
     return (
       <>
         <ScreenHeader title="Urlopy" />
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center">
+        <View className="bg-surface border border-border rounded-card p-5 items-center">
           <IconBadge name="event-busy" />
           <Text className="text-sm text-muted mt-3 text-center">
             Twoje konto nie jest powiązane z pracownikiem — skontaktuj się z Adminem.
@@ -136,7 +137,7 @@ export function LeaveScreen() {
             }}
             style={({ pressed }) => ({
               backgroundColor: COLORS.primary,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               paddingHorizontal: 14,
               paddingVertical: 10,
               opacity: pressed ? 0.75 : 1,
@@ -149,7 +150,7 @@ export function LeaveScreen() {
         }
       />
 
-      <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
+      <View className="bg-surface border border-border rounded-card p-4 mb-5">
         <Text className="text-xs text-muted uppercase">Urlop wypoczynkowy</Text>
         <Text className="text-3xl font-bold text-foreground mt-1">
           {remainingDays} {remainingDays === 1 ? "dzień" : "dni"} pozostało
@@ -160,7 +161,7 @@ export function LeaveScreen() {
       </View>
 
       {myRequests.length === 0 ? (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center">
+        <View className="bg-surface border border-border rounded-card p-5 items-center">
           <IconBadge name="event-busy" />
           <Text className="text-sm text-muted mt-3 text-center">
             Brak złożonych wniosków urlopowych.
@@ -170,7 +171,7 @@ export function LeaveScreen() {
         myRequests.map((r) => (
           <View
             key={r.id}
-            className="bg-surface border border-border rounded-2xl p-4 mb-3"
+            className="bg-surface border border-border rounded-card p-4 mb-3"
           >
             <View
               style={{
@@ -255,7 +256,7 @@ export function LeavePendingApprovals() {
       {pending.map((r) => (
         <View
           key={r.id}
-          className="bg-surface border border-border rounded-2xl p-4 mb-3"
+          className="bg-surface border border-border rounded-card p-4 mb-3"
         >
           <Text className="text-base font-bold text-foreground">
             {employees.find((e) => e.id === r.employeeId)?.name || "Pracownik"}
@@ -343,7 +344,7 @@ function LeaveRequestForm({
       </Pressable>
       <ScreenHeader title={editing ? "Edytuj wniosek" : "Nowy wniosek"} />
 
-      <View className="bg-surface border border-border rounded-2xl p-4">
+      <View className="bg-surface border border-border rounded-card p-4">
         <Text className="text-xs text-muted uppercase mb-2">Rodzaj urlopu</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
           {LEAVE_TYPES.map((t) => (
@@ -352,7 +353,7 @@ function LeaveRequestForm({
               onPress={() => setType(t)}
               style={{
                 backgroundColor: type === t ? COLORS.primary : COLORS.background,
-                borderRadius: 10,
+                borderRadius: RADIUS.control,
                 paddingHorizontal: 12,
                 paddingVertical: 9,
                 borderWidth: 1,

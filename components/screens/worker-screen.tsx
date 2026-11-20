@@ -10,6 +10,7 @@ import {
   todayISO,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { RADIUS } from "@/constants/radius";
 
 export function WorkerScreen() {
   const { builds, employees, timeEntries } = useAppData();
@@ -59,7 +60,7 @@ export function WorkerScreen() {
       title="Mój czas pracy"
       description="Podgląd własnych godzin. Ten widok nie pozwala edytować wpisów."
     />
-    <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+    <View className="bg-surface border border-border rounded-card p-4 mb-4">
       <Text className="text-xs text-muted uppercase">Okres</Text>
       <View
         style={{
@@ -79,7 +80,7 @@ export function WorkerScreen() {
                   workerPeriod === period
                     ? COLORS.primary
                     : COLORS.background,
-                borderRadius: 10,
+                borderRadius: RADIUS.control,
                 paddingHorizontal: 12,
                 paddingVertical: 10,
                 borderWidth: 1,
@@ -105,7 +106,7 @@ export function WorkerScreen() {
         )}
       </View>
     </View>
-    <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+    <View className="bg-surface border border-border rounded-card p-4 mb-4">
       <Text className="text-xs text-muted uppercase">
         Podsumowanie
       </Text>
@@ -126,7 +127,7 @@ export function WorkerScreen() {
         pracy
       </Text>
     </View>
-    <View className="bg-surface border border-border rounded-2xl p-4 mb-5">
+    <View className="bg-surface border border-border rounded-card p-4 mb-5">
       <View className="flex-row justify-between items-center">
         <Text className="text-xs text-muted uppercase">
           Godziny w okresie
@@ -183,7 +184,7 @@ export function WorkerScreen() {
                     maxWidth: 34,
                     height: barHeight,
                     backgroundColor: COLORS.primary,
-                    borderRadius: 6,
+                    borderRadius: RADIUS.chip,
                   }}
                 />
                 <Text
@@ -212,7 +213,7 @@ export function WorkerScreen() {
       workerEntries.map((entry) => (
         <View
           key={entry.id}
-          className="bg-surface border border-border rounded-2xl p-4 mb-3"
+          className="bg-surface border border-border rounded-card p-4 mb-3"
         >
           <View
             style={{
@@ -245,7 +246,7 @@ export function WorkerScreen() {
         </View>
       ))
     ) : (
-      <View className="bg-surface border border-border rounded-2xl p-4">
+      <View className="bg-surface border border-border rounded-card p-4">
         <Text className="text-sm text-muted">
           Brak zapisanych wpisów w wybranym okresie.
         </Text>

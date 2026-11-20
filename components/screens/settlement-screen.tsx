@@ -6,6 +6,7 @@ import { ComparisonBarChart, DonutChart, KpiTile } from "@/components/charts";
 import { useAppData } from "@/contexts/app-data";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import { listMaterialIssuesForBuild, type StockMovementRow } from "@/lib/data/stock-movements";
+import { RADIUS } from "@/constants/radius";
 
 /**
  * Faza 8 modułu Technologia — Rozliczenie budowy. Spina Fazy 0–7 w
@@ -292,7 +293,7 @@ export function SettlementScreen() {
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <Pressable
           onPress={() => setPickerOpen(true)}
-          className="bg-surface border border-border rounded-2xl p-4"
+          className="bg-surface border border-border rounded-card p-4"
           style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
         >
           <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
@@ -319,7 +320,7 @@ export function SettlementScreen() {
             style={{
               width: 18,
               height: 18,
-              borderRadius: 5,
+              borderRadius: RADIUS.chip,
               borderWidth: 1,
               borderColor: showArchivedBuilds ? COLORS.primary : COLORS.border,
               backgroundColor: showArchivedBuilds ? COLORS.primary : "transparent",
@@ -356,7 +357,7 @@ export function SettlementScreen() {
       />
 
       {!build ? (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center">
+        <View className="bg-surface border border-border rounded-card p-5 items-center">
           <Text className="text-sm text-muted">Brak budów do rozliczenia.</Text>
         </View>
       ) : (
@@ -365,7 +366,7 @@ export function SettlementScreen() {
             <View
               style={{
                 backgroundColor: COLORS.warningBg,
-                borderRadius: 10,
+                borderRadius: RADIUS.control,
                 paddingVertical: 8,
                 paddingHorizontal: 12,
                 marginBottom: 14,
@@ -379,7 +380,7 @@ export function SettlementScreen() {
           )}
 
           {stages.length === 0 ? (
-            <View className="bg-surface border border-border rounded-2xl p-5 items-center mb-4">
+            <View className="bg-surface border border-border rounded-card p-5 items-center mb-4">
               <Text className="text-sm text-muted">
                 Brak przypisanej technologii — plan materiałowy per etap pojawi się po
                 przypisaniu technologii do budowy (Faza 2).
@@ -389,7 +390,7 @@ export function SettlementScreen() {
             stages.map((stage) => (
               <View
                 key={stage.stageName}
-                className="bg-surface border border-border rounded-2xl p-4 mb-3"
+                className="bg-surface border border-border rounded-card p-4 mb-3"
               >
                 <View
                   style={{
@@ -466,7 +467,7 @@ export function SettlementScreen() {
           )}
 
           {auxAssignments.length > 0 && (
-            <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+            <View className="bg-surface border border-border rounded-card p-4 mb-3">
               <Text style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 14, marginBottom: 8 }}>
                 Materiały pomocnicze (spoza planu technologii)
               </Text>
@@ -498,7 +499,7 @@ export function SettlementScreen() {
             </View>
           )}
 
-          <View className="bg-surface border border-border rounded-2xl p-4">
+          <View className="bg-surface border border-border rounded-card p-4">
             <Text
               style={{
                 color: COLORS.muted,
@@ -571,7 +572,7 @@ export function SettlementScreen() {
             </View>
           </View>
 
-          <View className="bg-surface border border-border rounded-2xl p-4 mt-3">
+          <View className="bg-surface border border-border rounded-card p-4 mt-3">
             <Text style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 16, marginBottom: 2 }}>
               Raport domknięcia budowy
             </Text>

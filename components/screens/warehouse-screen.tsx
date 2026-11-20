@@ -16,6 +16,7 @@ import {
 } from "@/components/report-ui";
 import { useAppData, type NewMaterialInput } from "@/contexts/app-data";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
+import { RADIUS } from "@/constants/radius";
 
 const EMPTY_NEW_MATERIAL: NewMaterialInput = {
   name: "",
@@ -117,7 +118,7 @@ export function WarehouseScreen() {
       action={<Button label="+ Dodaj" onPress={() => setShowMaterial(!showMaterial)} />}
     />
     {showMaterial && (
-      <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+      <View className="bg-surface border border-border rounded-card p-4 mb-4">
         <Field
           placeholder="Nazwa materiału"
           value={newMaterial.name}
@@ -136,7 +137,7 @@ export function WarehouseScreen() {
           <View
             style={{
               backgroundColor: COLORS.background,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               marginTop: 6,
               overflow: "hidden",
             }}
@@ -188,7 +189,7 @@ export function WarehouseScreen() {
                 style={{
                   backgroundColor:
                     newMaterial.unit === unit ? COLORS.primary : COLORS.background,
-                  borderRadius: 10,
+                  borderRadius: RADIUS.control,
                   paddingHorizontal: 10,
                   paddingVertical: 8,
                   borderWidth: 1,
@@ -288,7 +289,7 @@ export function WarehouseScreen() {
           style={{
             width: 18,
             height: 18,
-            borderRadius: 5,
+            borderRadius: RADIUS.chip,
             borderWidth: 1,
             borderColor: showArchivedMaterials ? COLORS.primary : COLORS.border,
             backgroundColor: showArchivedMaterials ? COLORS.primary : "transparent",
@@ -319,7 +320,7 @@ export function WarehouseScreen() {
             style={{
               flex: 1,
               paddingVertical: 8,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               alignItems: "center",
               borderWidth: 1,
               borderColor: active ? COLORS.primary : COLORS.border,
@@ -339,7 +340,7 @@ export function WarehouseScreen() {
         );
       })}
     </View>
-    <View className="mt-4 rounded-2xl border border-border overflow-hidden">
+    <View className="mt-4 rounded-card border border-border overflow-hidden">
       {filtered.map((m, i) => {
         const batchCount = warehouseBatches.filter(
           (b) => String(b.materialId) === m.id,

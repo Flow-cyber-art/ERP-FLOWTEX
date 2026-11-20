@@ -2,6 +2,7 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/components/report-ui";
 import { useVersionCheck } from "@/lib/pwa/useVersionCheck";
+import { RADIUS } from "@/constants/radius";
 
 // Pasek na górze ekranu, gdy /version.json pokaże nowszy build niż ten
 // załadowany w przeglądarce (patrz lib/pwa/useVersionCheck.ts). Celowo
@@ -42,7 +43,7 @@ export function UpdateAvailableBanner() {
           onPress={applyUpdate}
           style={{
             backgroundColor: COLORS.background,
-            borderRadius: 8,
+            borderRadius: RADIUS.control,
             paddingHorizontal: 12,
             paddingVertical: 6,
             marginLeft: 10,

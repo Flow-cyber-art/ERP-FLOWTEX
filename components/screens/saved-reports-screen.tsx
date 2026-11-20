@@ -11,6 +11,7 @@ import {
   pluralPL,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
+import { RADIUS } from "@/constants/radius";
 
 type StatusFilter = "all" | "pending" | "approved";
 
@@ -113,7 +114,7 @@ export function SavedReportsScreen() {
             onPress={() => startNewReport()}
             style={({ pressed }) => ({
               backgroundColor: COLORS.primary,
-              borderRadius: 10,
+              borderRadius: RADIUS.control,
               paddingHorizontal: 14,
               paddingVertical: 10,
               opacity: pressed ? 0.75 : 1,
@@ -131,7 +132,7 @@ export function SavedReportsScreen() {
       {builds.length > 0 && (
         <>
           <View
-            className="bg-surface border border-border rounded-2xl overflow-hidden mb-3"
+            className="bg-surface border border-border rounded-card overflow-hidden mb-3"
             style={{ flexDirection: "row" }}
           >
             <Pressable
@@ -179,7 +180,7 @@ export function SavedReportsScreen() {
           <Text className="text-xs text-muted uppercase mb-1.5">Budowa</Text>
           <Pressable
             onPress={openPicker}
-            className="bg-surface border border-border rounded-2xl mb-4"
+            className="bg-surface border border-border rounded-card mb-4"
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -220,7 +221,7 @@ export function SavedReportsScreen() {
 
       {reportsInScope.length > 0 && (
         <View
-          className="bg-surface border border-border rounded-2xl overflow-hidden mb-5"
+          className="bg-surface border border-border rounded-card overflow-hidden mb-5"
           style={{ flexDirection: "row" }}
         >
           {(
@@ -260,7 +261,7 @@ export function SavedReportsScreen() {
       )}
 
       {sorted.length === 0 ? (
-        <View className="bg-surface border border-border rounded-2xl p-5 items-center">
+        <View className="bg-surface border border-border rounded-card p-5 items-center">
           <IconBadge name={statusFilter === "pending" ? "check-circle" : "description"} />
           <Text className="text-base font-bold text-foreground mt-3">
             {statusFilter === "pending" && reportsInScope.length > 0
@@ -288,7 +289,7 @@ export function SavedReportsScreen() {
                 backgroundColor: COLORS.surface,
                 borderWidth: 1,
                 borderColor: approved ? COLORS.success : COLORS.border,
-                borderRadius: 16,
+                borderRadius: RADIUS.card,
                 padding: 14,
                 marginBottom: 12,
                 opacity: pressed ? 0.75 : 1,

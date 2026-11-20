@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { COLORS } from "@/components/report-ui";
 import { PayrollSection } from "@/components/screens/payroll-screen";
 import { AdminLeaveSection, AdminTeamSection } from "@/components/screens/admin-screen";
+import { RADIUS } from "@/constants/radius";
 
 /**
  * "HR" — osobna zakładka nawigacji, wydzielona z panelu Admina: wszystko
@@ -23,7 +24,7 @@ export function HrPanelScreen() {
 
   return (
     <>
-      <View className="bg-surface border border-border rounded-2xl p-2 mb-5">
+      <View className="bg-surface border border-border rounded-card p-2 mb-5">
         <View style={{ flexDirection: "row", gap: 6 }}>
           {(
             [
@@ -37,7 +38,7 @@ export function HrPanelScreen() {
               onPress={() => setSection(value)}
               style={{
                 flex: 1,
-                borderRadius: 10,
+                borderRadius: RADIUS.control,
                 paddingVertical: 10,
                 alignItems: "center",
                 backgroundColor:

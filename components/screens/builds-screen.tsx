@@ -26,6 +26,7 @@ import { BuildPhotosSection } from "@/components/build-photos-section";
 import { BuildPortalSection } from "@/components/build-portal-section";
 import { TechnologyPicker } from "@/components/technology-picker";
 import { todayISO } from "@/components/report-ui";
+import { RADIUS } from "@/constants/radius";
 
 // Wartość kontraktu bywa 6-7 cyfrowa (setki tysięcy) — bez separatora
 // tysięcznego zera się zlewają w jeden ciąg trudny do odczytania na
@@ -404,7 +405,7 @@ export function BuildsScreen() {
           backgroundColor: COLORS.background,
           borderWidth: 1,
           borderColor: COLORS.border,
-          borderRadius: 10,
+          borderRadius: RADIUS.control,
           paddingLeft: 12,
         }}
       >
@@ -429,7 +430,7 @@ export function BuildsScreen() {
           backgroundColor: COLORS.background,
           borderWidth: 1,
           borderColor: COLORS.border,
-          borderRadius: 10,
+          borderRadius: RADIUS.control,
           padding: 3,
         }}
       >
@@ -448,7 +449,7 @@ export function BuildsScreen() {
               style={{
                 paddingHorizontal: 12,
                 paddingVertical: 8,
-                borderRadius: 8,
+                borderRadius: RADIUS.control,
                 backgroundColor: selected ? COLORS.border : "transparent",
               }}
             >
@@ -467,7 +468,7 @@ export function BuildsScreen() {
       </View>
     </View>
     {!isArchiveView && showBuild && (
-      <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
+      <View className="bg-surface border border-border rounded-card p-4 mb-4">
         <WizardStepper steps={WIZARD_STEPS} current={wizardStep} />
         {wizardStep === 1 && (
         <>
@@ -488,7 +489,7 @@ export function BuildsScreen() {
         />
         <Pressable
           onPress={() => setWizardManagerPickerOpen(true)}
-          className="bg-surface border border-border rounded-2xl"
+          className="bg-surface border border-border rounded-card"
           style={{
             marginTop: 10,
             paddingHorizontal: 14,
@@ -611,7 +612,7 @@ export function BuildsScreen() {
               style={{
                 backgroundColor:
                   String(t.id) === newBuild.teamId ? COLORS.primary : COLORS.background,
-                borderRadius: 8,
+                borderRadius: RADIUS.control,
                 paddingHorizontal: 9,
                 paddingVertical: 7,
                 borderWidth: 1,
@@ -774,7 +775,7 @@ export function BuildsScreen() {
                 <View
                   style={{
                     backgroundColor: COLORS.background,
-                    borderRadius: 12,
+                    borderRadius: RADIUS.card,
                     padding: 12,
                   }}
                 >
@@ -786,7 +787,7 @@ export function BuildsScreen() {
                     }}
                     style={{
                       backgroundColor: COLORS.surface,
-                      borderRadius: 10,
+                      borderRadius: RADIUS.control,
                       padding: 13,
                       marginTop: 8,
                       flexDirection: "row",
@@ -813,7 +814,7 @@ export function BuildsScreen() {
                     <View
                       style={{
                         backgroundColor: COLORS.surface,
-                        borderRadius: 10,
+                        borderRadius: RADIUS.control,
                         padding: 10,
                         marginTop: 6,
                       }}
@@ -880,7 +881,7 @@ export function BuildsScreen() {
                     <View
                       style={{
                         backgroundColor: COLORS.surface,
-                        borderRadius: 12,
+                        borderRadius: RADIUS.card,
                         padding: 12,
                         marginTop: 12,
                       }}
@@ -1089,7 +1090,7 @@ export function BuildsScreen() {
       </Text>
     )}
     {visibleBuilds.length === 0 && (
-      <View className="bg-surface border border-border rounded-2xl p-5 items-center">
+      <View className="bg-surface border border-border rounded-card p-5 items-center">
         <Text className="text-sm text-muted">
           {buildQueryNormalized
             ? "Brak budów pasujących do wyszukiwania."
@@ -1144,8 +1145,8 @@ export function BuildsScreen() {
           key={b.id}
           className={
             isWide
-              ? "bg-surface border border-border rounded-xl mb-2 overflow-hidden"
-              : "bg-surface border border-border rounded-2xl mb-3 overflow-hidden"
+              ? "bg-surface border border-border rounded-card mb-2 overflow-hidden"
+              : "bg-surface border border-border rounded-card mb-3 overflow-hidden"
           }
           style={isClosed ? { opacity: 0.85 } : undefined}
         >
@@ -1274,7 +1275,7 @@ export function BuildsScreen() {
           <View
             style={{
               backgroundColor: COLORS.background,
-              borderRadius: 14,
+              borderRadius: RADIUS.card,
               borderWidth: 1,
               borderColor: COLORS.border,
               padding: 14,
@@ -1335,7 +1336,7 @@ export function BuildsScreen() {
                   <View
                     style={{
                       backgroundColor: COLORS.background,
-                      borderRadius: 12,
+                      borderRadius: RADIUS.card,
                       padding: 12,
                       marginTop: 10,
                     }}
@@ -1362,7 +1363,7 @@ export function BuildsScreen() {
                         setManagerPickerQuery("");
                         setManagerPickerBuildId(b.id);
                       }}
-                      className="bg-surface border border-border rounded-2xl"
+                      className="bg-surface border border-border rounded-card"
                       style={{
                         paddingHorizontal: 14,
                         paddingVertical: 12,
@@ -1501,7 +1502,7 @@ export function BuildsScreen() {
                     <View
                       style={{
                         backgroundColor: COLORS.background,
-                        borderRadius: 12,
+                        borderRadius: RADIUS.card,
                         padding: 12,
                         marginTop: 8,
                       }}
@@ -1523,7 +1524,7 @@ export function BuildsScreen() {
                                 String(t.id) === laborPlanDraft.teamId
                                   ? COLORS.primary
                                   : COLORS.surface,
-                              borderRadius: 8,
+                              borderRadius: RADIUS.control,
                               paddingHorizontal: 9,
                               paddingVertical: 7,
                               borderWidth: 1,
@@ -1611,7 +1612,7 @@ export function BuildsScreen() {
                 style={{
                   marginTop: 14,
                   backgroundColor: COLORS.background,
-                  borderRadius: 14,
+                  borderRadius: RADIUS.card,
                   borderWidth: 1,
                   borderColor: COLORS.border,
                   padding: 14,
@@ -1847,7 +1848,7 @@ export function BuildsScreen() {
                 style={{
                   marginTop: 14,
                   backgroundColor: COLORS.background,
-                  borderRadius: 14,
+                  borderRadius: RADIUS.card,
                   borderWidth: 1,
                   borderColor: COLORS.border,
                   padding: 14,
@@ -1906,7 +1907,7 @@ export function BuildsScreen() {
                       style={{
                         marginTop: 10,
                         backgroundColor: COLORS.surface,
-                        borderRadius: 10,
+                        borderRadius: RADIUS.control,
                         padding: 10,
                       }}
                     >
@@ -2200,7 +2201,7 @@ export function BuildsScreen() {
             style={{
               marginTop: 14,
               backgroundColor: COLORS.background,
-              borderRadius: 14,
+              borderRadius: RADIUS.card,
               borderWidth: 1,
               borderColor: COLORS.border,
               padding: 14,
@@ -2323,7 +2324,7 @@ export function BuildsScreen() {
                     <View
                       style={{
                         backgroundColor: COLORS.background,
-                        borderRadius: 12,
+                        borderRadius: RADIUS.card,
                         padding: 12,
                         marginTop: 10,
                       }}
@@ -2348,7 +2349,7 @@ export function BuildsScreen() {
                         }}
                         style={{
                           backgroundColor: COLORS.surface,
-                          borderRadius: 10,
+                          borderRadius: RADIUS.control,
                           padding: 13,
                           marginTop: 8,
                           flexDirection: "row",
@@ -2375,7 +2376,7 @@ export function BuildsScreen() {
                         <View
                           style={{
                             backgroundColor: COLORS.surface,
-                            borderRadius: 10,
+                            borderRadius: RADIUS.control,
                             padding: 10,
                             marginTop: 6,
                           }}
@@ -2480,7 +2481,7 @@ export function BuildsScreen() {
                         <View
                           style={{
                             backgroundColor: COLORS.surface,
-                            borderRadius: 12,
+                            borderRadius: RADIUS.card,
                             padding: 12,
                             marginTop: 12,
                           }}
@@ -3251,7 +3252,7 @@ export function BuildsScreen() {
                                 style={{
                                   flex: 1,
                                   paddingVertical: 8,
-                                  borderRadius: 8,
+                                  borderRadius: RADIUS.control,
                                   borderWidth: 1,
                                   borderColor:
                                     d.decision === "zwrot" ? COLORS.success : COLORS.border,
@@ -3283,7 +3284,7 @@ export function BuildsScreen() {
                                 style={{
                                   flex: 1,
                                   paddingVertical: 8,
-                                  borderRadius: 8,
+                                  borderRadius: RADIUS.control,
                                   borderWidth: 1,
                                   borderColor:
                                     d.decision === "wyrzucenie" ? COLORS.danger : COLORS.border,
@@ -3342,7 +3343,7 @@ export function BuildsScreen() {
                       </View>
                     </View>
                   ) : pinGate?.buildId === b.id ? (
-                    <View className="bg-surface border border-border rounded-2xl p-4">
+                    <View className="bg-surface border border-border rounded-card p-4">
                       <Text style={{ color: COLORS.foreground, fontWeight: "700", marginBottom: 8 }}>
                         Podaj PIN, żeby zamknąć budowę
                       </Text>

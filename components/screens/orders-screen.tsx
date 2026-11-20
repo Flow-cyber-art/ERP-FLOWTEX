@@ -13,6 +13,7 @@ import {
   UNIT_OPTIONS,
 } from "@/components/report-ui";
 import { useAppData, type OrderCartItem } from "@/contexts/app-data";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
@@ -51,6 +52,7 @@ const STATUS_LABEL: Record<Row["status"], string> = {
 };
 
 export function OrdersScreen() {
+  const isWide = useWideLayout();
   const {
     orders,
     shortages,
@@ -1322,8 +1324,150 @@ export function OrdersScreen() {
         </View>
       )}
 
+      {isWide && visibleRows.length > 0 && (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={{ flex: 3, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Materiał</Text>
+          <Text style={{ flex: 2, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Ilość i szczegóły</Text>
+          <Text style={{ width: 130, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Status</Text>
+          <Text style={{ flex: 2, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Akcje</Text>
+        </View>
+      )}
+
       {visibleRows.map((row, i) => {
         const isReceiving = row.orderId && receivingId === row.orderId;
+        const rowStatusBadge = (
+        <StatusBadge
+          status={
+            row.status === "brak"
+              ? "danger"
+              : row.status === "dostarczone"
+                ? "ok"
+                : "warning"
+          }
+          label={STATUS_LABEL[row.status]}
+        />
+        );
+        const rowActions = (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {row.status === "brak" && (
+            <>
+              <Pressable
+                onPress={() =>
+                  row.materialId &&
+                  row.missing &&
+                  createOrderFromShortage(row.materialId, row.missing)
+                }
+                style={({ pressed }) => ({
+                  backgroundColor: COLORS.primary,
+                  borderRadius: RADIUS.control,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  opacity: pressed ? 0.75 : 1,
+                })}
+              >
+                <Text style={{ color: COLORS.background, fontWeight: "800", fontSize: 12 }}>
+                  Zamów
+                </Text>
+              </Pressable>
+              {/* Materiał ma już 0 na magazynie, ale Admin wie, że go
+                  NIE zamawia teraz (ma go gdzie indziej / po innej
+                  cenie) — krzyżyk chowa alert, dopóki niedobór nie
+                  urośnie. Patrz dismissShortage w contexts/app-data.tsx. */}
+              <Pressable
+                onPress={() =>
+                  row.materialId != null &&
+                  row.missing != null &&
+                  confirmAction(
+                    "Nie zamawiać teraz?",
+                    `${row.name} — alert o braku zniknie z Zamówień, dopóki niedobór nie wzrośnie ponad ${row.missing} ${row.unit}.`,
+                    "Nie zamawiaj",
+                    () => dismissShortage(row.materialId!, row.missing!),
+                  )
+                }
+                style={({ pressed }) => ({
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  borderRadius: RADIUS.control,
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Icon name="x" size={16} color={COLORS.muted} />
+              </Pressable>
+            </>
+          )}
+          {row.status === "do realizacji" && row.orderId && (
+            <>
+              <Pressable
+                onPress={() => markOrderOrdered(row.orderId!)}
+                style={({ pressed }) => ({
+                  borderWidth: 1,
+                  borderColor: COLORS.primary,
+                  borderRadius: RADIUS.control,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
+                  Złożono u dostawcy
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  confirmAction(
+                    "Usunąć zamówienie?",
+                    `${row.name} · ${row.qtyLabel}. Tej operacji nie da się cofnąć.`,
+                    "Usuń",
+                    () => deleteOrder(row.orderId!),
+                  )
+                }
+                style={({ pressed }) => ({
+                  borderWidth: 1,
+                  borderColor: COLORS.danger,
+                  borderRadius: RADIUS.control,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
+                  Usuń
+                </Text>
+              </Pressable>
+            </>
+          )}
+          {row.status === "zamówione" && row.orderId && !isReceiving && (
+            <Pressable
+              onPress={() => {
+                const currentPrice =
+                  materials.find((m) => m.id === row.materialId)?.unitPrice ?? 0;
+                setReceiveDrafts({
+                  ...receiveDrafts,
+                  [row.orderId!]: String(row.orderQuantity ?? 0),
+                });
+                setReceivePriceDrafts({
+                  ...receivePriceDrafts,
+                  [row.orderId!]: String(currentPrice || ""),
+                });
+                setReceivingId(row.orderId!);
+              }}
+              style={({ pressed }) => ({
+                backgroundColor: COLORS.successBg,
+                borderRadius: RADIUS.control,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text style={{ color: COLORS.success, fontWeight: "700", fontSize: 12 }}>
+                Dostawa dotarła
+              </Text>
+            </Pressable>
+          )}
+        </View>
+        );
         return (
           <View key={row.key}>
             <View
@@ -1335,145 +1479,55 @@ export function OrdersScreen() {
                   nazwy, na wąskim mobile obu brakowało miejsca i nazwa
                   łamała się pojedynczymi literami. Osobny wiersz niżej ma
                   zawsze pełną szerokość karty dla samej nazwy. */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: 8,
-                  justifyContent: "space-between",
-                }}
-              >
-                <StatusBadge
-                  status={
-                    row.status === "brak"
-                      ? "danger"
-                      : row.status === "dostarczone"
-                        ? "ok"
-                        : "warning"
-                  }
-                  label={STATUS_LABEL[row.status]}
-                />
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {row.status === "brak" && (
-                    <>
-                      <Pressable
-                        onPress={() =>
-                          row.materialId &&
-                          row.missing &&
-                          createOrderFromShortage(row.materialId, row.missing)
-                        }
-                        style={({ pressed }) => ({
-                          backgroundColor: COLORS.primary,
-                          borderRadius: RADIUS.control,
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          opacity: pressed ? 0.75 : 1,
-                        })}
-                      >
-                        <Text style={{ color: COLORS.background, fontWeight: "800", fontSize: 12 }}>
-                          Zamów
-                        </Text>
-                      </Pressable>
-                      {/* Materiał ma już 0 na magazynie, ale Admin wie, że go
-                          NIE zamawia teraz (ma go gdzie indziej / po innej
-                          cenie) — krzyżyk chowa alert, dopóki niedobór nie
-                          urośnie. Patrz dismissShortage w contexts/app-data.tsx. */}
-                      <Pressable
-                        onPress={() =>
-                          row.materialId != null &&
-                          row.missing != null &&
-                          confirmAction(
-                            "Nie zamawiać teraz?",
-                            `${row.name} — alert o braku zniknie z Zamówień, dopóki niedobór nie wzrośnie ponad ${row.missing} ${row.unit}.`,
-                            "Nie zamawiaj",
-                            () => dismissShortage(row.materialId!, row.missing!),
-                          )
-                        }
-                        style={({ pressed }) => ({
-                          borderWidth: 1,
-                          borderColor: COLORS.border,
-                          borderRadius: RADIUS.control,
-                          paddingHorizontal: 10,
-                          paddingVertical: 8,
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        <Icon name="x" size={16} color={COLORS.muted} />
-                      </Pressable>
-                    </>
-                  )}
-                  {row.status === "do realizacji" && row.orderId && (
-                    <>
-                      <Pressable
-                        onPress={() => markOrderOrdered(row.orderId!)}
-                        style={({ pressed }) => ({
-                          borderWidth: 1,
-                          borderColor: COLORS.primary,
-                          borderRadius: RADIUS.control,
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>
-                          Złożono u dostawcy
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() =>
-                          confirmAction(
-                            "Usunąć zamówienie?",
-                            `${row.name} · ${row.qtyLabel}. Tej operacji nie da się cofnąć.`,
-                            "Usuń",
-                            () => deleteOrder(row.orderId!),
-                          )
-                        }
-                        style={({ pressed }) => ({
-                          borderWidth: 1,
-                          borderColor: COLORS.danger,
-                          borderRadius: RADIUS.control,
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
-                          Usuń
-                        </Text>
-                      </Pressable>
-                    </>
-                  )}
-                  {row.status === "zamówione" && row.orderId && !isReceiving && (
-                    <Pressable
-                      onPress={() => {
-                        const currentPrice =
-                          materials.find((m) => m.id === row.materialId)?.unitPrice ?? 0;
-                        setReceiveDrafts({
-                          ...receiveDrafts,
-                          [row.orderId!]: String(row.orderQuantity ?? 0),
-                        });
-                        setReceivePriceDrafts({
-                          ...receivePriceDrafts,
-                          [row.orderId!]: String(currentPrice || ""),
-                        });
-                        setReceivingId(row.orderId!);
-                      }}
-                      style={({ pressed }) => ({
-                        backgroundColor: COLORS.successBg,
-                        borderRadius: RADIUS.control,
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        opacity: pressed ? 0.7 : 1,
-                      })}
-                    >
-                      <Text style={{ color: COLORS.success, fontWeight: "700", fontSize: 12 }}>
-                        Dostawa dotarła
+              {isWide ? (
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      marginRight: 12,
+                      flexShrink: 0,
+                      backgroundColor:
+                        row.status === "brak"
+                          ? COLORS.danger
+                          : row.status === "dostarczone"
+                            ? COLORS.success
+                            : COLORS.warning,
+                    }}
+                  />
+                  <View style={{ flex: 3, minWidth: 0, paddingRight: 12 }}>
+                    <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+                      {row.name}
+                    </Text>
+                    {row.status === "dostarczone" && row.receivedUnitPrice != null && (
+                      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                        cena zakupu: {row.receivedUnitPrice.toFixed(2)} zł/{row.unit}
                       </Text>
-                    </Pressable>
-                  )}
+                    )}
+                  </View>
+                  <Text style={{ flex: 2, color: COLORS.muted, fontSize: 12, paddingRight: 12 }} numberOfLines={2}>
+                    <Text style={{ color: COLORS.foreground }}>{row.qtyLabel}</Text>
+                    {" · "}
+                    {row.metaLabel}
+                  </Text>
+                  <View style={{ width: 130, alignItems: "flex-start" }}>{rowStatusBadge}</View>
+                  <View style={{ flex: 2, alignItems: "flex-end" }}>{rowActions}</View>
                 </View>
-              </View>
+              ) : (
+                <>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    {rowStatusBadge}
+                    {rowActions}
+                  </View>
 
               <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
                 <View
@@ -1510,6 +1564,8 @@ export function OrdersScreen() {
                   </Text>
                 </View>
               </View>
+                </>
+              )}
             </View>
 
             {isReceiving && row.orderId && (

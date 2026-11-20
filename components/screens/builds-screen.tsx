@@ -17,6 +17,7 @@ import {
   ScreenHeader,
   SearchablePicker,
   SearchField,
+  SegmentedControl,
   StatusBadge,
   WizardStepper,
 } from "@/components/report-ui";
@@ -391,48 +392,14 @@ export function BuildsScreen() {
       </View>
       {/* Przełącznik widoku listy (segment) zamiast checkboxa "Archiwum" —
           czytelnie jako filtr listy; ten sam stan buildsView co wcześniej. */}
-      <View
-        style={{
-          flexDirection: "row",
-          backgroundColor: COLORS.background,
-          borderWidth: 1,
-          borderColor: COLORS.border,
-          borderRadius: RADIUS.control,
-          padding: 3,
-        }}
-      >
-        {(
-          [
-            ["active", "Bieżące"],
-            ["archive", "Archiwum"],
-          ] as const
-        ).map(([view, label]) => {
-          const selected = buildsView === view;
-          return (
-            <Pressable
-              key={view}
-              onPress={() => setBuildsView(view)}
-              hitSlop={4}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: RADIUS.control,
-                backgroundColor: selected ? COLORS.border : "transparent",
-              }}
-            >
-              <Text
-                style={{
-                  color: selected ? COLORS.foreground : COLORS.muted,
-                  fontSize: 13,
-                  fontWeight: "600",
-                }}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <SegmentedControl
+        options={[
+          { key: "active", label: "Bieżące" },
+          { key: "archive", label: "Archiwum" },
+        ] as const}
+        value={buildsView}
+        onChange={setBuildsView}
+      />
     </View>
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-card p-4 mb-4">

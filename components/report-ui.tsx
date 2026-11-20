@@ -512,6 +512,61 @@ const SearchField = ({ style, ...props }: any) => (
   </View>
 );
 
+// Przełącznik widoku listy (segmenty) — jeden wybrany; neutralny wygląd,
+// bez złota (złoto zostaje dla głównych akcji i aktywnego menu).
+function SegmentedControl<K extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { key: K; label: string }[];
+  value: K;
+  onChange: (key: K) => void;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignSelf: "flex-start",
+        backgroundColor: COLORS.background,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: RADIUS.control,
+        padding: 3,
+      }}
+    >
+      {options.map((o) => {
+        const selected = o.key === value;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => onChange(o.key)}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: RADIUS.chip,
+              backgroundColor: selected ? COLORS.border : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                color: selected ? COLORS.foreground : COLORS.muted,
+                fontSize: 13,
+                fontWeight: "600",
+              }}
+            >
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 // Przełącznik "pokaż także…" (np. archiwalne): obrys, ikona i etykieta;
 // włączony ma jaśniejsze tło i tekst. Zastępuje checkbox z podpisem pod
 // spodem, który wyglądał jak osobne ustawienie, a nie filtr listy.
@@ -1988,6 +2043,7 @@ export {
   Button,
   Field,
   SearchField,
+  SegmentedControl,
   ToggleChip,
   QuantityStepper,
   ExtraCostsSection,

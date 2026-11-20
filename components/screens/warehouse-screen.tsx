@@ -12,10 +12,13 @@ import {
   formatPLN,
   QuantityStepper,
   ScreenHeader,
+  SearchField,
+  SegmentedControl,
   ToggleChip,
   UNIT_OPTIONS,
 } from "@/components/report-ui";
 import { useAppData, type NewMaterialInput } from "@/contexts/app-data";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
@@ -42,6 +45,7 @@ export function WarehouseScreen() {
   } = useAppData();
 
   const [query, setQuery] = useState("");
+  const isWide = useWideLayout();
   // Domyślnie ukrywa zarchiwizowane materiały na liście Magazynu (ten sam
   // wzorzec co showArchivedBuilds w settlement-screen.tsx) — wciąż
   // podpowiadane przy dopasowaniu nazwy (materials pozostaje pełną listą),
@@ -272,10 +276,11 @@ export function WarehouseScreen() {
     )}
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
       <View style={{ flex: 1 }}>
-        <Field
+        <SearchField
           placeholder="Szukaj po nazwie lub indeksie"
           value={query}
           onChangeText={setQuery}
+          style={{ marginTop: 0 }}
         />
       </View>
       {/* Mały przełącznik obok wyszukiwarki, nie osobny wiersz na pełną
@@ -284,43 +289,34 @@ export function WarehouseScreen() {
           przypisania niżej), więc nie zasługuje na tyle samo miejsca. */}
       <ToggleChip label="Archiwum" value={showArchivedMaterials} onChange={setShowArchivedMaterials} />
     </View>
-    <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-      {(
-        [
+    <View style={{ marginTop: 10 }}>
+      <SegmentedControl
+        options={[
           { key: "all", label: "Wszystkie" },
           { key: "assigned", label: "Przypisane" },
           { key: "unassigned", label: "Nieprzypisane" },
-        ] as const
-      ).map((opt) => {
-        const active = assignmentFilter === opt.key;
-        return (
-          <Pressable
-            key={opt.key}
-            onPress={() => setAssignmentFilter(opt.key)}
-            style={{
-              flex: 1,
-              paddingVertical: 8,
-              borderRadius: RADIUS.control,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: active ? COLORS.primary : COLORS.border,
-              backgroundColor: active ? COLORS.primary : "transparent",
-            }}
-          >
-            <Text
-              style={{
-                color: active ? COLORS.background : COLORS.muted,
-                fontSize: 12,
-                fontWeight: "700",
-              }}
-            >
-              {opt.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+        ] as const}
+        value={assignmentFilter}
+        onChange={setAssignmentFilter}
+      />
     </View>
-    <View className="mt-4 rounded-card border border-border overflow-hidden">
+    {isWide && filtered.length > 0 && (
+      <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
+        <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>
+          Materiał
+        </Text>
+        {["Minimum", "Cena", "Stan"].map((h) => (
+          <Text
+            key={h}
+            style={{ width: 110, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}
+          >
+            {h}
+          </Text>
+        ))}
+        <View style={{ width: 36 }} />
+      </View>
+    )}
+    <View className={isWide ? "rounded-card border border-border overflow-hidden" : "mt-4 rounded-card border border-border overflow-hidden"}>
       {filtered.map((m, i) => {
         const batchCount = warehouseBatches.filter(
           (b) => String(b.materialId) === m.id,
@@ -344,6 +340,47 @@ export function WarehouseScreen() {
             className="flex-row items-center justify-between px-4 py-3"
             style={{ opacity: m.active ? 1 : 0.55 }}
           >
+            {isWide ? (
+              <>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
+                    {m.name}
+                    {!m.active ? " · zarchiwizowany" : ""}
+                  </Text>
+                  <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                    {m.index}
+                    {batchCount > 1 ? ` · ${batchCount} partie` : ""}
+                  </Text>
+                </View>
+                <Text style={{ width: 110, textAlign: "right", color: COLORS.muted, fontSize: 13 }}>
+                  {m.min} {m.unit}
+                </Text>
+                <Text style={{ width: 110, textAlign: "right", color: COLORS.foreground, fontSize: 13 }}>
+                  {formatPLN(m.unitPrice || 0)}/{m.unit}
+                </Text>
+                {/* Kolor ostrzeżenia = konkretny sygnał "stan na/poniżej
+                    minimum", nie dekoracja; złoto zostaje dla akcji. */}
+                <Text
+                  style={{
+                    width: 110,
+                    textAlign: "right",
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: m.stock <= m.min ? COLORS.warning : COLORS.foreground,
+                  }}
+                >
+                  {m.stock} {m.unit}
+                </Text>
+                <View style={{ width: 36, alignItems: "flex-end" }}>
+                  <Icon
+                    name={editingId === m.id ? "chevron-up" : "chevron-down"}
+                    size={18}
+                    color={COLORS.muted}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
             <View className="flex-1 pr-3">
               <Text className="text-sm font-semibold text-foreground">
                 {m.name}
@@ -370,12 +407,14 @@ export function WarehouseScreen() {
                   nie dekoracja — standardowy kolor, gdy stan jest OK. */}
               <Text
                 className="text-lg font-bold"
-                style={{ color: m.stock <= m.min ? COLORS.primary : COLORS.foreground }}
+                style={{ color: m.stock <= m.min ? COLORS.warning : COLORS.foreground }}
               >
                 {m.stock}
               </Text>
               <Text className="text-xs text-muted">{m.unit}</Text>
             </View>
+              </>
+            )}
           </Pressable>
           {editingId === m.id && (
             <View className="px-4 pb-4">

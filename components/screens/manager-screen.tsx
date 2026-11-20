@@ -7,6 +7,7 @@ import {
   ScreenHeader,
   SearchablePicker,
   ToggleChip,
+  ReportListHeader,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
@@ -148,6 +149,7 @@ export function ManagerScreen() {
               <Text className="text-xs text-muted uppercase mb-2">
                 Do zatwierdzenia ({pendingReports.length})
               </Text>
+              <ReportListHeader showBuildInfo={selectedBuildId === "all"} />
               {pendingReports.map((report) => (
                 <ReportCard
                   key={report.id}
@@ -179,6 +181,7 @@ export function ManagerScreen() {
               >
                 Zatwierdzone ({approvedReports.length})
               </Text>
+              <ReportListHeader showBuildInfo={selectedBuildId === "all"} />
               {approvedReports.map((report) => (
                 <ReportCard
                   key={report.id}

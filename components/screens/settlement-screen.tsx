@@ -379,7 +379,7 @@ export function SettlementScreen() {
                   <Text style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 14 }}>
                     {stage.stageName}
                   </Text>
-                  <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 14 }}>
+                  <Text style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 14 }}>
                     {formatPLN(stage.koszt)}
                   </Text>
                 </View>
@@ -391,19 +391,11 @@ export function SettlementScreen() {
                     borderBottomColor: COLORS.border,
                   }}
                 >
-                  <Text style={{ flex: 2, color: COLORS.muted, fontSize: 11 }}>Materiał</Text>
-                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
-                    Plan
-                  </Text>
-                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
-                    Przypisano
-                  </Text>
-                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
-                    Zużyto
-                  </Text>
-                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, textAlign: "right" }}>
-                    Koszt
-                  </Text>
+                  <Text style={{ flex: 2, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Materiał</Text>
+                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", textAlign: "right" }}>Plan</Text>
+                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", textAlign: "right" }}>Przypisano</Text>
+                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", textAlign: "right" }}>Zużyto</Text>
+                  <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", textAlign: "right" }}>Koszt</Text>
                 </View>
                 {stage.items.map((item) => (
                   <View key={item.key} style={{ paddingVertical: 6 }}>
@@ -515,7 +507,7 @@ export function SettlementScreen() {
               <Text style={{ color: COLORS.foreground, fontSize: 13, fontWeight: "800" }}>
                 Koszt budowy
               </Text>
-              <Text style={{ color: COLORS.primary, fontSize: 15, fontWeight: "800" }}>
+              <Text style={{ color: COLORS.foreground, fontSize: 15, fontWeight: "800" }}>
                 {formatPLN(totalCost)}
               </Text>
             </View>

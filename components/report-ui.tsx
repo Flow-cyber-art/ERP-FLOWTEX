@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { RADIUS } from "@/constants/radius";
 import { Icon, type IconName } from "@/components/icon";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 
 // react-native-web's Alert.alert (0.21.x) is a complete no-op — no
 // window.alert/confirm fallback, nothing — so on web every Alert.alert
@@ -518,16 +519,18 @@ function SegmentedControl<K extends string>({
   options,
   value,
   onChange,
+  fullWidth = false,
 }: {
   options: readonly { key: K; label: string }[];
   value: K;
   onChange: (key: K) => void;
+  fullWidth?: boolean;
 }) {
   return (
     <View
       style={{
         flexDirection: "row",
-        alignSelf: "flex-start",
+        alignSelf: fullWidth ? "stretch" : "flex-start",
         backgroundColor: COLORS.background,
         borderWidth: 1,
         borderColor: COLORS.border,
@@ -549,6 +552,7 @@ function SegmentedControl<K extends string>({
               paddingVertical: 8,
               borderRadius: RADIUS.chip,
               backgroundColor: selected ? COLORS.border : "transparent",
+              ...(fullWidth ? { flex: 1, alignItems: "center" as const } : null),
             }}
           >
             <Text
@@ -1468,6 +1472,28 @@ export function SearchablePicker({
   );
 }
 
+// Nagłówek kolumn nad listą raportów — tylko w szerokim układzie (desktop).
+const ReportListHeader = ({ showBuildInfo = true }: { showBuildInfo?: boolean }) => {
+  const isWide = useWideLayout();
+  if (!isWide) return null;
+  const h = {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: "700" as const,
+    letterSpacing: 0.6,
+    textTransform: "uppercase" as const,
+  };
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 }}>
+      <Text style={[h, { flex: 3 }]}>{showBuildInfo ? "Budowa" : "Raport"}</Text>
+      <Text style={[h, { width: 110 }]}>Data</Text>
+      <Text style={[h, { flex: 2 }]}>Zespół i materiały</Text>
+      <Text style={[h, { width: 150 }]}>Status</Text>
+      <View style={{ width: 36 }} />
+    </View>
+  );
+};
+
 const ReportCard = ({
   report,
   build,
@@ -1509,6 +1535,7 @@ const ReportCard = ({
   // brygadzisty, gdzie ta informacja nie ma znaczenia.
   showClientNoteStatus?: boolean;
 }) => {
+  const isWide = useWideLayout();
   const approved = report.status === "approved";
   const planned = assignments.filter((a) => a.buildId === build?.id);
   const plansForBuild = buildMaterialPlans.filter((p) => p.buildId === Number(build?.id));
@@ -1525,9 +1552,45 @@ const ReportCard = ({
 
   return (
     <View
-      className="bg-surface border border-border rounded-card mb-3 overflow-hidden"
+      className={
+        isWide
+          ? "bg-surface border border-border rounded-card mb-2 overflow-hidden"
+          : "bg-surface border border-border rounded-card mb-3 overflow-hidden"
+      }
       style={{ borderColor: approved ? COLORS.success : COLORS.border }}
     >
+      {isWide ? (
+        <Pressable
+          onPress={onToggle}
+          style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}
+        >
+          <View style={{ flex: 3, paddingRight: 12 }}>
+            <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+              {showBuildInfo ? report.buildName : "Raport dzienny"}
+            </Text>
+            {showBuildInfo && (
+              <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                {report.buildNumber}
+              </Text>
+            )}
+          </View>
+          <Text style={{ width: 110, color: COLORS.foreground, fontSize: 13 }}>{report.date}</Text>
+          <Text style={{ flex: 2, color: COLORS.muted, fontSize: 13 }}>
+            {report.people.length} {pluralPL(report.people.length, "osoba", "osoby", "osób")} ·{" "}
+            {Object.keys(report.materialValues).length}{" "}
+            {pluralPL(Object.keys(report.materialValues).length, "materiał", "materiały", "materiałów")}
+          </Text>
+          <View style={{ width: 150, alignItems: "flex-start" }}>
+            <StatusBadge
+              status={approved ? "ok" : "warning"}
+              label={approved ? "Zatwierdzony" : "Do sprawdzenia"}
+            />
+          </View>
+          <View style={{ width: 36, alignItems: "flex-end" }}>
+            <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
+          </View>
+        </Pressable>
+      ) : (
       <Pressable
         onPress={onToggle}
         style={{ flexDirection: "row", alignItems: "center", padding: 14 }}
@@ -1572,6 +1635,7 @@ const ReportCard = ({
         </View>
         <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
       </Pressable>
+      )}
 
       {expanded && (
         <View
@@ -2052,6 +2116,7 @@ export {
   ReportStepper,
   WizardStepper,
   ReportCard,
+  ReportListHeader,
   StatusBadge,
   initialMaterials,
   initialBuilds,

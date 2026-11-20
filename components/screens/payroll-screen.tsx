@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, ScrollView, Text, View, Pressable } from "react-native";
-import { Button, COLORS, IconBadge, formatPLN, notify } from "@/components/report-ui";
+import { Button, COLORS, IconBadge, formatPLN, notify, SegmentedControl } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
@@ -309,47 +309,18 @@ export function PayrollSection() {
           <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
             {rangeLabel}
           </Text>
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 2,
-              backgroundColor: COLORS.background,
-              borderRadius: RADIUS.control,
-              padding: 2,
+          <SegmentedControl
+            options={[
+              { key: "week", label: "Tydzień" },
+              { key: "month", label: "Miesiąc" },
+              { key: "year", label: "Rok" },
+            ] as const}
+            value={mode}
+            onChange={(value) => {
+              setMode(value);
+              setOffset(0);
             }}
-          >
-            {(
-              [
-                ["week", "Tydzień"],
-                ["month", "Miesiąc"],
-                ["year", "Rok"],
-              ] as const
-            ).map(([value, label]) => (
-              <Pressable
-                key={value}
-                onPress={() => {
-                  setMode(value);
-                  setOffset(0);
-                }}
-                style={{
-                  borderRadius: RADIUS.chip,
-                  paddingVertical: 5,
-                  paddingHorizontal: 10,
-                  backgroundColor: mode === value ? COLORS.primary : "transparent",
-                }}
-              >
-                <Text
-                  style={{
-                    color: mode === value ? COLORS.background : COLORS.muted,
-                    fontWeight: "700",
-                    fontSize: 12,
-                  }}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          />
         </View>
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -426,37 +397,14 @@ export function PayrollSection() {
           marginBottom: 12,
         }}
       >
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          {(
-            [
-              ["list", "Lista"],
-              ["calendar", "Kalendarz"],
-            ] as const
-          ).map(([value, label]) => (
-            <Pressable
-              key={value}
-              onPress={() => setView(value)}
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                borderRadius: RADIUS.control,
-                borderWidth: 1,
-                borderColor: view === value ? COLORS.primary : COLORS.border,
-                backgroundColor: view === value ? COLORS.primary : "transparent",
-              }}
-            >
-              <Text
-                style={{
-                  color: view === value ? COLORS.background : COLORS.muted,
-                  fontWeight: "700",
-                  fontSize: 13,
-                }}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <SegmentedControl
+          options={[
+            { key: "list", label: "Lista" },
+            { key: "calendar", label: "Kalendarz" },
+          ] as const}
+          value={view}
+          onChange={setView}
+        />
         <Pressable
           onPress={exportPayrollPdf}
           style={{
@@ -526,7 +474,7 @@ export function PayrollSection() {
                   </Text>
                   <Text style={[PAY_CELL, PAY_COL_NUMERIC]}>{row.workedDays}</Text>
                   <Text style={[PAY_CELL, PAY_COL_NUMERIC]}>{row.leaveDays}</Text>
-                  <Text style={[PAY_CELL, PAY_COL_NUMERIC, { color: COLORS.primary }]}>
+                  <Text style={[PAY_CELL, PAY_COL_NUMERIC, { color: COLORS.foreground, fontWeight: "700" }]}>
                     {row.payout > 0 ? formatPLN(row.payout) : "—"}
                   </Text>
                   <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />

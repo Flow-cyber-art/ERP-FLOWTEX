@@ -8,11 +8,14 @@ import {
   COLORS,
   ScreenHeader,
   todayISO,
+  SegmentedControl,
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 
 export function WorkerScreen() {
+  const isWide = useWideLayout();
   const { builds, employees, timeEntries } = useAppData();
 
   const [workerPeriod, setWorkerPeriod] = useState<
@@ -70,40 +73,11 @@ export function WorkerScreen() {
           marginTop: 10,
         }}
       >
-        {(["Dzień", "Tydzień", "Miesiąc", "Rok"] as const).map(
-          (period) => (
-            <Pressable
-              key={period}
-              onPress={() => setWorkerPeriod(period)}
-              style={{
-                backgroundColor:
-                  workerPeriod === period
-                    ? COLORS.primary
-                    : COLORS.background,
-                borderRadius: RADIUS.control,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                borderWidth: 1,
-                borderColor:
-                  workerPeriod === period
-                    ? COLORS.primary
-                    : COLORS.border,
-              }}
-            >
-              <Text
-                style={{
-                  color:
-                    workerPeriod === period
-                      ? COLORS.background
-                      : COLORS.foreground,
-                  fontWeight: "700",
-                }}
-              >
-                {period}
-              </Text>
-            </Pressable>
-          ),
-        )}
+        <SegmentedControl
+            options={(["Dzień", "Tydzień", "Miesiąc", "Rok"] as const).map((period) => ({ key: period, label: period }))}
+            value={workerPeriod}
+            onChange={setWorkerPeriod}
+          />
       </View>
     </View>
     <View className="bg-surface border border-border rounded-card p-4 mb-4">
@@ -210,11 +184,32 @@ export function WorkerScreen() {
       Wpisy czasu
     </Text>
     {workerEntries.length ? (
-      workerEntries.map((entry) => (
+      <>
+        {isWide && (
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 }}>
+            <Text style={{ width: 110, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Data</Text><Text style={{ width: 150, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Godziny</Text><Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Budowa</Text><Text style={{ width: 90, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Czas</Text>
+          </View>
+        )}
+        {workerEntries.map((entry) => (
         <View
           key={entry.id}
-          className="bg-surface border border-border rounded-card p-4 mb-3"
+          className={isWide ? "bg-surface border border-border rounded-card px-4 py-3 mb-2" : "bg-surface border border-border rounded-card p-4 mb-3"}
         >
+          {isWide ? (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text style={{ width: 110, color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>{entry.date}</Text>
+              <Text style={{ width: 150, color: COLORS.muted, fontSize: 13 }}>
+                {entry.start || "—"} – {entry.end || "—"}
+              </Text>
+              <Text style={{ flex: 1, color: COLORS.muted, fontSize: 13 }} numberOfLines={1}>
+                {builds.find((build) => build.id === entry.buildId)?.name || "Budowa"}
+              </Text>
+              <Text style={{ width: 90, textAlign: "right", color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
+                {entry.hours.toFixed(2)} godz.
+              </Text>
+            </View>
+          ) : (
+            <>
           <View
             style={{
               flexDirection: "row",
@@ -243,8 +238,11 @@ export function WorkerScreen() {
             {builds.find((build) => build.id === entry.buildId)
               ?.name || "Budowa"}
           </Text>
+            </>
+          )}
         </View>
-      ))
+      ))}
+      </>
     ) : (
       <View className="bg-surface border border-border rounded-card p-4">
         <Text className="text-sm text-muted">

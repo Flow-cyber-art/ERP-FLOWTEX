@@ -8,14 +8,16 @@ import {
   ScreenHeader,
   SearchablePicker,
   pluralPL,
-} from "@/components/report-ui";
+  SegmentedControl, ReportListHeader } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 
 type StatusFilter = "all" | "pending" | "approved";
 
 export function SavedReportsScreen() {
+  const isWide = useWideLayout();
   const { builds, savedReports, openSavedReport, startNewReport, devRole, myProfileId } =
     useAppData();
 
@@ -220,43 +222,17 @@ export function SavedReportsScreen() {
       )}
 
       {reportsInScope.length > 0 && (
-        <View
-          className="bg-surface border border-border rounded-card overflow-hidden mb-5"
-          style={{ flexDirection: "row" }}
-        >
-          {(
-            [
-              { key: "all", label: "Wszystkie", count: reportsInScope.length },
-              { key: "pending", label: "Do edycji", count: pendingCount },
-              { key: "approved", label: "Zatwierdzone", count: approvedCount },
-            ] as { key: StatusFilter; label: string; count: number }[]
-          ).map((tab, i) => {
-            const active = statusFilter === tab.key;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => setStatusFilter(tab.key)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  alignItems: "center",
-                  borderLeftWidth: i === 0 ? 0 : 1,
-                  borderLeftColor: COLORS.border,
-                  backgroundColor: active ? COLORS.primary : "transparent",
-                }}
-              >
-                <Text
-                  style={{
-                    color: active ? COLORS.background : COLORS.foreground,
-                    fontWeight: "700",
-                    fontSize: 12,
-                  }}
-                >
-                  {tab.label} ({tab.count})
-                </Text>
-              </Pressable>
-            );
-          })}
+        <View style={{ marginBottom: 20 }}>
+          <SegmentedControl
+            options={[
+              { key: "all", label: `Wszystkie (${reportsInScope.length})` },
+              { key: "pending", label: `Do edycji (${pendingCount})` },
+              { key: "approved", label: `Zatwierdzone (${approvedCount})` },
+            ] as { key: StatusFilter; label: string }[]}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            fullWidth
+          />
         </View>
       )}
 
@@ -277,7 +253,9 @@ export function SavedReportsScreen() {
           )}
         </View>
       ) : (
-        sorted.map((report) => {
+        <>
+        {isWide && <ReportListHeader showBuildInfo />}
+        {sorted.map((report) => {
           const approved = report.status === "approved";
           const materialsCount = Object.keys(report.materialValues).length;
           const peopleCount = report.people.length;
@@ -290,11 +268,39 @@ export function SavedReportsScreen() {
                 borderWidth: 1,
                 borderColor: approved ? COLORS.success : COLORS.border,
                 borderRadius: RADIUS.card,
-                padding: 14,
-                marginBottom: 12,
+                padding: isWide ? 12 : 14,
+                paddingHorizontal: isWide ? 16 : 14,
+                marginBottom: isWide ? 8 : 12,
                 opacity: pressed ? 0.75 : 1,
               })}
             >
+              {isWide ? (
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ flex: 3, paddingRight: 12 }}>
+                    <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+                      {report.buildName}
+                    </Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                      {report.buildNumber}
+                    </Text>
+                  </View>
+                  <Text style={{ width: 110, color: COLORS.foreground, fontSize: 13 }}>{report.date}</Text>
+                  <Text style={{ flex: 2, color: COLORS.muted, fontSize: 13 }}>
+                    {peopleCount} {pluralPL(peopleCount, "osoba", "osoby", "osób")} · {materialsCount}{" "}
+                    {pluralPL(materialsCount, "materiał", "materiały", "materiałów")}
+                  </Text>
+                  <View style={{ width: 150, alignItems: "flex-start" }}>
+                    <StatusBadge
+                      status={approved ? "ok" : "warning"}
+                      label={approved ? "Zatwierdzony" : "Do edycji"}
+                    />
+                  </View>
+                  <View style={{ width: 36, alignItems: "flex-end" }}>
+                    <Icon name="chevron-right" size={18} color={COLORS.muted} />
+                  </View>
+                </View>
+              ) : (
+                <>
               <View
                 style={{
                   flexDirection: "row",
@@ -327,9 +333,12 @@ export function SavedReportsScreen() {
                   label={approved ? "Zatwierdzony" : "Do edycji"}
                 />
               </View>
+                </>
+              )}
             </Pressable>
           );
-        })
+        })}
+        </>
       )}
     </>
   );

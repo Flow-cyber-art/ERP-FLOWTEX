@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { COLORS } from "@/components/report-ui";
+import { COLORS, SegmentedControl } from "@/components/report-ui";
 import { PayrollSection } from "@/components/screens/payroll-screen";
 import { AdminLeaveSection, AdminTeamSection } from "@/components/screens/admin-screen";
 import { RADIUS } from "@/constants/radius";
@@ -24,39 +24,17 @@ export function HrPanelScreen() {
 
   return (
     <>
-      <View className="bg-surface border border-border rounded-card p-2 mb-5">
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          {(
-            [
-              ["payroll", "Rozliczenie"],
-              ["leaves", "Urlopy"],
-              ["team", "Zespół"],
-            ] as const
-          ).map(([value, label]) => (
-            <Pressable
-              key={value}
-              onPress={() => setSection(value)}
-              style={{
-                flex: 1,
-                borderRadius: RADIUS.control,
-                paddingVertical: 10,
-                alignItems: "center",
-                backgroundColor:
-                  section === value ? COLORS.primary : "transparent",
-              }}
-            >
-              <Text
-                style={{
-                  color: section === value ? COLORS.background : COLORS.muted,
-                  fontWeight: "700",
-                  fontSize: 13,
-                }}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+      <View style={{ marginBottom: 20 }}>
+        <SegmentedControl
+          options={[
+            { key: "payroll", label: "Rozliczenie" },
+            { key: "leaves", label: "Urlopy" },
+            { key: "team", label: "Zespół" },
+          ] as const}
+          value={section}
+          onChange={setSection}
+          fullWidth
+        />
       </View>
 
       {section === "team" ? (

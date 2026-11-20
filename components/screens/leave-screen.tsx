@@ -14,6 +14,7 @@ import { useAppData } from "@/contexts/app-data";
 import type { LeaveType } from "@/lib/data/leave";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
+import { useWideLayout } from "@/hooks/use-wide-layout";
 
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   wypoczynkowy: "Urlop wypoczynkowy",
@@ -66,6 +67,7 @@ function countBusinessDays(dateFrom: string, dateTo: string): number {
 }
 
 export function LeaveScreen() {
+  const isWide = useWideLayout();
   const {
     myEmployeeId,
     employees,
@@ -169,11 +171,65 @@ export function LeaveScreen() {
           </Text>
         </View>
       ) : (
-        myRequests.map((r) => (
+        <>
+          {isWide && (
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 }}>
+              <Text style={{ flex: 3, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Termin</Text><Text style={{ flex: 2, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Rodzaj</Text><Text style={{ width: 70, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Dni</Text><Text style={{ width: 130, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Status</Text><Text style={{ flex: 2, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Akcje</Text>
+            </View>
+          )}
+          {myRequests.map((r) => (
           <View
             key={r.id}
-            className="bg-surface border border-border rounded-card p-4 mb-3"
+            className={isWide ? "bg-surface border border-border rounded-card px-4 py-3 mb-2" : "bg-surface border border-border rounded-card p-4 mb-3"}
           >
+            {isWide ? (
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text style={{ flex: 3, color: COLORS.foreground, fontSize: 14, fontWeight: "700" }}>
+                  {dateLabelPL(r.dateFrom)}
+                  {r.dateFrom !== r.dateTo ? ` – ${dateLabelPL(r.dateTo)}` : ""}
+                </Text>
+                <Text style={{ flex: 2, color: COLORS.muted, fontSize: 13 }}>{LEAVE_TYPE_LABELS[r.type]}</Text>
+                <Text style={{ width: 70, color: COLORS.foreground, fontSize: 13 }}>{r.businessDays}</Text>
+                <View style={{ width: 130, alignItems: "flex-start" }}>
+                  <StatusBadge
+                    status={(LEAVE_STATUS_BADGE[r.status] ?? LEAVE_STATUS_BADGE.oczekujący).status}
+                    label={(LEAVE_STATUS_BADGE[r.status] ?? LEAVE_STATUS_BADGE.oczekujący).label}
+                  />
+                </View>
+                <View style={{ flex: 2, alignItems: "flex-end" }}>
+            {r.status === "oczekujący" && (
+              <View style={{ flexDirection: "row", gap: 16 }}>
+                <Pressable
+                  onPress={() => {
+                    setEditingRequest(r);
+                    setView("form");
+                  }}
+                >
+                  <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                    Edytuj
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    confirmAction(
+                      "Anulować wniosek?",
+                      "Wniosek zostanie anulowany. Będziesz mógł złożyć nowy na ten sam termin.",
+                      "Anuluj wniosek",
+                      () => cancelLeaveRequest(String(r.id)),
+                    )
+                  }
+                >
+                  <Text style={{ color: COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                    Anuluj wniosek
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+                </View>
+              </View>
+            ) : (
+              <>
             <View
               style={{
                 flexDirection: "row",
@@ -226,8 +282,11 @@ export function LeaveScreen() {
                 </Pressable>
               </View>
             )}
+              </>
+            )}
           </View>
-        ))
+        ))}
+        </>
       )}
     </>
   );
@@ -238,6 +297,7 @@ export function LeaveScreen() {
 // brygada, więc każdy Brygadzista/Admin widzi i zatwierdza wszystkie
 // wnioski, nie tylko "swojego" zespołu (patrz 049_urlopy.sql).
 export function LeavePendingApprovals() {
+  const isWide = useWideLayout();
   const { employees, leaveRequests, decideLeaveRequest } = useAppData();
   const pending = useMemo(
     () =>
@@ -254,11 +314,36 @@ export function LeavePendingApprovals() {
       <Text className="text-lg font-bold text-foreground mb-3">
         Wnioski urlopowe do zatwierdzenia ({pending.length})
       </Text>
+      {isWide && (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={{ flex: 2, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Pracownik</Text><Text style={{ flex: 3, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Rodzaj i termin</Text><Text style={{ width: 60, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Dni</Text><Text style={{ flex: 2, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Notatka</Text><Text style={{ width: 220, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>Decyzja</Text>
+        </View>
+      )}
       {pending.map((r) => (
         <View
           key={r.id}
-          className="bg-surface border border-border rounded-card p-4 mb-3"
+          className={isWide ? "bg-surface border border-border rounded-card px-4 py-3 mb-2" : "bg-surface border border-border rounded-card p-4 mb-3"}
         >
+          {isWide ? (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text style={{ flex: 2, color: COLORS.foreground, fontSize: 14, fontWeight: "700" }} numberOfLines={1}>
+                {employees.find((e) => e.id === r.employeeId)?.name || "Pracownik"}
+              </Text>
+              <Text style={{ flex: 3, color: COLORS.muted, fontSize: 13 }}>
+                {LEAVE_TYPE_LABELS[r.type]} · {dateLabelPL(r.dateFrom)}
+                {r.dateFrom !== r.dateTo ? ` – ${dateLabelPL(r.dateTo)}` : ""}
+              </Text>
+              <Text style={{ width: 60, color: COLORS.foreground, fontSize: 13 }}>{r.businessDays}</Text>
+              <Text style={{ flex: 2, color: COLORS.muted, fontSize: 12 }} numberOfLines={2}>
+                {r.note ? `„${r.note}”` : "—"}
+              </Text>
+              <View style={{ width: 220, flexDirection: "row", gap: 8, justifyContent: "flex-end" }}>
+                <Button label="Odrzuć" secondary onPress={() => decideLeaveRequest(String(r.id), false)} />
+                <Button label="Zatwierdź" onPress={() => decideLeaveRequest(String(r.id), true)} />
+              </View>
+            </View>
+          ) : (
+            <>
           <Text className="text-base font-bold text-foreground">
             {employees.find((e) => e.id === r.employeeId)?.name || "Pracownik"}
           </Text>
@@ -285,6 +370,8 @@ export function LeavePendingApprovals() {
               />
             </View>
           </View>
+            </>
+          )}
         </View>
       ))}
     </View>

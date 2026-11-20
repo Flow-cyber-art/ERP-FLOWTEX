@@ -10,6 +10,7 @@ import {
   QuantityStepper,
   StatusBadge,
   pluralPL,
+  SearchField,
   ToggleChip,
 } from "@/components/report-ui";
 import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
@@ -387,7 +388,15 @@ export function AdminTeamSection() {
   // warehouse-screen.tsx: pracownik nie jest usuwany (ma historię
   // raportów/urlopów/wpisów czasu), tylko chowany z domyślnej listy.
   const [showArchived, setShowArchived] = useState(false);
-  const visibleEmployees = employees.filter((e) => showArchived || e.active);
+  const [teamQuery, setTeamQuery] = useState("");
+  const teamQueryNormalized = teamQuery.trim().toLowerCase();
+  const visibleEmployees = employees.filter(
+    (e) =>
+      (showArchived || e.active) &&
+      (!teamQueryNormalized ||
+        e.name.toLowerCase().includes(teamQueryNormalized) ||
+        (e.role ?? "").toLowerCase().includes(teamQueryNormalized)),
+  );
 
   // Konto logowania — dawniej osobna zakładka "Konta logowania"
   // (AdminAccountsSection, usunięta), teraz część karty pracownika: jeden
@@ -510,10 +519,23 @@ export function AdminTeamSection() {
         </View>
       )}
 
+      <View style={{ marginBottom: 12 }}>
+        <SearchField
+          placeholder="Szukaj pracownika (imię, rola)…"
+          value={teamQuery}
+          onChangeText={setTeamQuery}
+          autoCapitalize="none"
+          style={{ marginTop: 0 }}
+        />
+      </View>
       {visibleEmployees.length === 0 && (
         <View className="bg-surface border border-border rounded-card p-5 items-center mb-5">
           <Text className="text-sm text-muted">
-            {showArchived ? "Brak zarchiwizowanych pracowników." : "Brak dodanych pracowników."}
+            {teamQueryNormalized
+              ? "Brak pracowników pasujących do wyszukiwania."
+              : showArchived
+                ? "Brak zarchiwizowanych pracowników."
+                : "Brak dodanych pracowników."}
           </Text>
         </View>
       )}

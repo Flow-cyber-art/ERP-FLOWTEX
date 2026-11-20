@@ -1398,7 +1398,10 @@ export default function PublicBuildPortal() {
           <View style={styles.pill}>
             <FactIcon kind="area" />
             <Text style={styles.pillText}>
-              Powierzchnia <Text style={styles.pillStrong}>{view.areaM2} m²</Text>
+              {view.quantityUnit === "mb" ? "Długość" : view.quantityUnit === "szt" ? "Ilość" : "Powierzchnia"}{" "}
+              <Text style={styles.pillStrong}>
+                {view.areaM2} {view.quantityUnit === "mb" ? "mb" : view.quantityUnit === "szt" ? "szt" : "m²"}
+              </Text>
             </Text>
           </View>
         )}

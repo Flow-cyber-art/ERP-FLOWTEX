@@ -70,7 +70,7 @@ export type OfferPilotTechnologyRow = {
 
 const PILOT_TECH_SELECT =
   "technology_id, categoryName:category_name, unit, defaultUnitPrice:default_unit_price, " +
-  "technologies(id, code, name, company, " +
+  "technologies(id, code, name, company, unit, " +
   "description, workPhases:work_phases, investorBenefits:investor_benefits, " +
   "thicknessMinMm:thickness_min_mm, thicknessMaxMm:thickness_max_mm, " +
   "technology_stages(id, name, orderIndex:order_index, " +
@@ -93,7 +93,7 @@ export async function listPilotTechnologies(): Promise<OfferPilotTechnologyRow[]
         name: t.name,
         company: t.company,
         categoryName: row.categoryName ?? null,
-        unit: row.unit ?? "m2",
+        unit: t.unit ?? row.unit ?? "m2",
         description: t.description ?? null,
         workPhases: t.workPhases ?? null,
         investorBenefits: t.investorBenefits ?? null,

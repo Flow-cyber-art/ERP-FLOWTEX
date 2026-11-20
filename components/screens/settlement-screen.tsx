@@ -8,6 +8,7 @@ import { normalizeMaterialName } from "@/lib/material-name-match";
 import { listMaterialIssuesForBuild, type StockMovementRow } from "@/lib/data/stock-movements";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
+import { TECHNOLOGY_QUANTITY_NOUN, TECHNOLOGY_UNIT_LABEL, type TechnologyUnit } from "@/lib/data/technologies";
 
 /**
  * Faza 8 modułu Technologia — Rozliczenie budowy. Spina Fazy 0–7 w
@@ -32,6 +33,7 @@ export function SettlementScreen() {
     teamMembers,
     timeEntries,
     buildMaterialReturns,
+    buildTechnologySnapshots,
   } = useAppData();
 
   const sortedBuilds = useMemo(
@@ -269,8 +271,12 @@ export function SettlementScreen() {
   const profit = contractValue - totalCost;
   const margin = contractValue > 0 ? (profit / contractValue) * 100 : null;
 
-  const areaM2 = Number(build?.areaM2) || 0;
-  const costPerM2 = areaM2 > 0 ? totalCost / areaM2 : null;
+  // Ilość w jednostce technologii (m2/mb/szt) — builds.areaM2 to ilość, nie zawsze m².
+  const quantity = Number(build?.areaM2) || 0;
+  const unit: TechnologyUnit =
+    buildTechnologySnapshots.find((snap) => snap.buildId === Number(build?.id))?.unit ?? "m2";
+  const unitLabel = TECHNOLOGY_UNIT_LABEL[unit];
+  const costPerUnit = quantity > 0 ? totalCost / quantity : null;
   const durationDays = build?.durationDays ?? 0;
   const costPerDay = durationDays > 0 ? totalCost / durationDays : null;
 
@@ -565,15 +571,15 @@ export function SettlementScreen() {
                 color={margin != null && margin < 0 ? COLORS.danger : COLORS.success}
               />
               <KpiTile
-                label="Koszt / m²"
-                value={costPerM2 != null ? formatPLN(costPerM2) : "—"}
+                label={`Koszt / ${unitLabel}`}
+                value={costPerUnit != null ? formatPLN(costPerUnit) : "—"}
               />
               <KpiTile
                 label="Koszt / dzień"
                 value={costPerDay != null ? formatPLN(costPerDay) : "—"}
               />
               <KpiTile label="Czas trwania" value={durationDays > 0 ? `${durationDays} dni` : "—"} />
-              <KpiTile label="Powierzchnia" value={areaM2 > 0 ? `${areaM2} m²` : "—"} />
+              <KpiTile label={TECHNOLOGY_QUANTITY_NOUN[unit]} value={quantity > 0 ? `${quantity} ${unitLabel}` : "—"} />
             </View>
 
             {costBreakdown.length > 0 && (

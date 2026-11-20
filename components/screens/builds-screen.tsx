@@ -30,6 +30,7 @@ import { todayISO } from "@/components/report-ui";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
 import { useWideLayout } from "@/hooks/use-wide-layout";
+import { TECHNOLOGY_QUANTITY_NOUN, TECHNOLOGY_UNIT_LABEL, type TechnologyUnit } from "@/lib/data/technologies";
 
 // Wartość kontraktu bywa 6-7 cyfrowa (setki tysięcy) — bez separatora
 // tysięcznego zera się zlewają w jeden ciąg trudny do odczytania na
@@ -257,6 +258,9 @@ export function BuildsScreen() {
   const [techMaterialsExpandedBuildId, setTechMaterialsExpandedBuildId] =
     useState<string | null>(null);
   const [techPickerId, setTechPickerId] = useState<number | null>(null);
+  // Jednostka wybranej technologii (m2/mb/szt) — etykieta i walidacja pola ilości.
+  const techPickerUnit: TechnologyUnit = technologies.find((t) => t.id === techPickerId)?.unit ?? "m2";
+  const wizardUnit: TechnologyUnit = technologies.find((t) => t.id === wizardTechId)?.unit ?? "m2";
   const [techAreaInput, setTechAreaInput] = useState("");
   const [techBusy, setTechBusy] = useState(false);
   // Zamówienia z planu materiałowego (Faza 3) — jeden formularz przyjęcia
@@ -635,10 +639,10 @@ export function BuildsScreen() {
                   onSelect={setWizardTechId}
                 />
                 <Text className="text-xs text-muted uppercase mb-2 mt-3">
-                  Powierzchnia (m²)
+                  {TECHNOLOGY_QUANTITY_NOUN[wizardUnit]} ({TECHNOLOGY_UNIT_LABEL[wizardUnit]})
                 </Text>
                 <Field
-                  placeholder="np. 300"
+                  placeholder={wizardUnit === "m2" ? "np. 300" : wizardUnit === "mb" ? "np. 120" : "np. 10"}
                   value={wizardAreaInput}
                   onChangeText={setWizardAreaInput}
                   keyboardType="decimal-pad"
@@ -656,15 +660,15 @@ export function BuildsScreen() {
                   onPress={async () => {
                     // Technologia opcjonalna: bez wyboru "Dalej" po prostu
                     // przechodzi do kolejnego kroku — dopiero wybór
-                    // konkretnej pozycji + m² uruchamia realne przypisanie.
+                    // konkretnej pozycji + ilość uruchamia realne przypisanie.
                     if (!wizardTechId) {
                       setWizardStep(3);
                       return;
                     }
                     if (!Number(wizardAreaInput)) {
                       notify(
-                        "Brak powierzchni",
-                        "Wpisz powierzchnię (m²), żeby przypisać wybraną technologię.",
+                        `Brak ilości`,
+                        `Wpisz ${TECHNOLOGY_QUANTITY_NOUN[wizardUnit].toLowerCase()} (${TECHNOLOGY_UNIT_LABEL[wizardUnit]}), żeby przypisać wybraną technologię.`,
                       );
                       return;
                     }
@@ -1594,7 +1598,7 @@ export function BuildsScreen() {
                           {snapshot.technologyName}
                         </Text>
                         <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
-                          v{snapshot.technologyVersion} · {b.areaM2 ?? "—"} m²
+                          v{snapshot.technologyVersion} · {b.areaM2 ?? "—"} {TECHNOLOGY_UNIT_LABEL[snapshot.unit ?? "m2"]}
                         </Text>
                       </>
                     ) : (
@@ -1635,7 +1639,7 @@ export function BuildsScreen() {
                           onSelect={setTechPickerId}
                         />
                         <Text className="text-xs text-muted uppercase mb-2 mt-3">
-                          Powierzchnia (m²)
+                          {TECHNOLOGY_QUANTITY_NOUN[techPickerUnit]} ({TECHNOLOGY_UNIT_LABEL[techPickerUnit]})
                         </Text>
                         <QuantityStepper value={techAreaInput} onChangeText={setTechAreaInput} />
                         <View style={{ marginTop: 10 }}>
@@ -1651,8 +1655,8 @@ export function BuildsScreen() {
                                 }
                                 if (!Number(techAreaInput)) {
                                   notify(
-                                    "Brak powierzchni",
-                                    "Wpisz powierzchnię (m²), żeby wyliczyć plan materiałowy.",
+                                    "Brak ilości",
+                                    `Wpisz ${TECHNOLOGY_QUANTITY_NOUN[techPickerUnit].toLowerCase()} (${TECHNOLOGY_UNIT_LABEL[techPickerUnit]}), żeby wyliczyć plan materiałowy.`,
                                   );
                                   return;
                                 }
@@ -1737,7 +1741,7 @@ export function BuildsScreen() {
                               {row.materialName}
                             </Text>
                             <Text style={{ flex: 0.9, color: COLORS.muted, fontSize: 12, textAlign: "right" }}>
-                              {row.consumptionPerM2} {row.unit}/m²
+                              {row.consumptionPerM2} {row.unit}/{TECHNOLOGY_UNIT_LABEL[snapshot?.unit ?? "m2"]}
                             </Text>
                             <Text
                               style={{ flex: 0.8, color: COLORS.foreground, fontWeight: "700", fontSize: 13, textAlign: "right" }}

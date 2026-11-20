@@ -139,6 +139,8 @@ export type PublicBuildView = {
   number: string;
   address: string | null;
   areaM2: string | null;
+  // Jednostka ilości (m2/mb/szt) — areaM2 to ilość w tej jednostce.
+  quantityUnit?: "m2" | "mb" | "szt";
   startDate: string;
   plannedEndDate: string;
   status: "aktywna" | "zamknięta";

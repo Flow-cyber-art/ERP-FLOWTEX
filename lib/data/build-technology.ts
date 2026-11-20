@@ -12,6 +12,8 @@ export type BuildTechnologySnapshotRow = {
   technologyCode: string;
   technologyName: string;
   technologyVersion: number;
+  // Jednostka ilości budowy (m2/mb/szt) zamrożona w chwili przypisania.
+  unit: "m2" | "mb" | "szt";
 };
 
 export type BuildMaterialPlanRow = {
@@ -34,7 +36,7 @@ export async function listBuildTechnologySnapshots(): Promise<BuildTechnologySna
   const { data, error } = await supabase
     .from("build_technology_snapshot")
     .select(
-      "buildId:build_id, technologyCode:technology_code, technologyName:technology_name, technologyVersion:technology_version",
+      "buildId:build_id, technologyCode:technology_code, technologyName:technology_name, technologyVersion:technology_version, unit",
     );
   if (error) throw new Error(error.message);
   return (data ?? []) as BuildTechnologySnapshotRow[];

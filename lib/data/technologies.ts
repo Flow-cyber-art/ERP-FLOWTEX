@@ -14,12 +14,30 @@ import { supabase } from "@/lib/supabase";
  * zmiany.
  */
 
+export type TechnologyUnit = "m2" | "mb" | "szt";
+
+export const TECHNOLOGY_UNIT_LABEL: Record<TechnologyUnit, string> = {
+  m2: "m²",
+  mb: "mb",
+  szt: "szt",
+};
+
+/** "Powierzchnia" / "Długość" / "Ilość" — etykieta pola ilości budowy. */
+export const TECHNOLOGY_QUANTITY_NOUN: Record<TechnologyUnit, string> = {
+  m2: "Powierzchnia",
+  mb: "Długość",
+  szt: "Ilość",
+};
+
 export type TechnologyMaterialRow = {
   id: number;
   materialName: string;
   unit: string;
   consumptionPerM2: string;
   linkedMaterialId: number | null;
+  // Materiał główny: sama technologia (cokół, kanał, wpust, profil) jest też
+  // materiałem — 1 jednostka technologii = 1 jednostka materiału.
+  isPrimary: boolean;
 };
 
 export type TechnologyStageRow = {
@@ -43,6 +61,9 @@ export type TechnologyRow = {
   company: string | null;
   thicknessMinMm: string | null;
   thicknessMaxMm: string | null;
+  // Jednostka rozliczenia: m2 (powierzchnia), mb (długość), szt. Zużycie
+  // materiałów w recepturze (consumptionPerM2) jest "na jednostkę technologii".
+  unit: TechnologyUnit;
   technology_stages: TechnologyStageRow[];
 };
 
@@ -51,9 +72,9 @@ export type TechnologyRow = {
 // tłumaczą jedno na drugie, żeby reszta kodu nie musiała znać realnych nazw kolumn.
 const TECHNOLOGY_SELECT =
   "id, code, name, version, isActive:is_active, createdAt, company, " +
-  "thicknessMinMm:thickness_min_mm, thicknessMaxMm:thickness_max_mm, " +
+  "thicknessMinMm:thickness_min_mm, thicknessMaxMm:thickness_max_mm, unit, " +
   "technology_stages(id, name, orderIndex:order_index, " +
-  "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, linkedMaterialId:linked_material_id))";
+  "technology_materials(id, materialName:material_name, unit, consumptionPerM2:consumption_per_m2, linkedMaterialId:linked_material_id, isPrimary:is_primary))";
 
 /** Tylko aktywne (najnowsza wersja każdej rodziny) — to, co widać przy zakładaniu budowy. */
 export async function listActiveTechnologies(): Promise<TechnologyRow[]> {
@@ -82,6 +103,7 @@ export type SaveTechnologyMaterialInput = {
   unit: string;
   consumptionPerM2: number;
   linkedMaterialId?: number | null;
+  isPrimary?: boolean;
 };
 
 export type SaveTechnologyStageInput = {
@@ -105,6 +127,15 @@ export async function saveTechnology(
   });
   if (error) throw new Error(error.message);
   return data as number;
+}
+
+/** Jednostka rozliczenia technologii (m2/mb/szt) — jak metadane, bez nowej wersji. */
+export async function updateTechnologyUnit(technologyId: number, unit: TechnologyUnit): Promise<void> {
+  const { error } = await supabase.rpc("update_technology_unit", {
+    p_technology_id: technologyId,
+    p_unit: unit,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /**

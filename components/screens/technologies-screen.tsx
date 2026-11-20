@@ -15,6 +15,7 @@ import {
   confirmAction,
   Field,
   SearchField,
+  SegmentedControl,
   QuantityStepper,
   ScreenHeader,
   UNIT_OPTIONS,
@@ -27,6 +28,9 @@ import {
   listAllTechnologies,
   saveTechnology,
   updateTechnologyMeta,
+  updateTechnologyUnit,
+  TECHNOLOGY_UNIT_LABEL,
+  type TechnologyUnit,
 } from "@/lib/data/technologies";
 import { parseTechnologySql } from "@/lib/data/technology-sql-import";
 import { matchMaterialNames } from "@/lib/material-name-match";
@@ -46,6 +50,8 @@ type DraftMaterial = {
   unit: string;
   consumptionPerM2: string;
   linkedMaterialId: string;
+  // Materiał główny: technologia jest też tym materiałem (1 jedn. = 1 jedn.).
+  isPrimary: boolean;
 };
 
 type DraftStage = {
@@ -63,6 +69,7 @@ const emptyMaterial = (): DraftMaterial => ({
   unit: "kg",
   consumptionPerM2: "",
   linkedMaterialId: "",
+  isPrimary: false,
 });
 
 const emptyStage = (): DraftStage => ({
@@ -86,6 +93,9 @@ export function TechnologiesScreen() {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
+  // Jednostka rozliczenia technologii (m2/mb/szt): ilość na budowie i zużycie
+  // materiałów w recepturze liczone są na tę jednostkę.
+  const [unit, setUnit] = useState<TechnologyUnit>("m2");
   const [thicknessMinMm, setThicknessMinMm] = useState("");
   const [thicknessMaxMm, setThicknessMaxMm] = useState("");
   // Zdecydowana większość technologii ma JEDNĄ grubość, nie zakres —
@@ -191,6 +201,7 @@ export function TechnologiesScreen() {
     setCode("");
     setName("");
     setCompany("");
+    setUnit("m2");
     setThicknessMinMm("");
     setThicknessMaxMm("");
     setThicknessRangeMode(false);
@@ -226,6 +237,7 @@ export function TechnologiesScreen() {
               unit: m.unit,
               consumptionPerM2: String(m.consumptionPerM2),
               linkedMaterialId: "",
+              isPrimary: false,
             }))
           : [emptyMaterial()],
       }));
@@ -245,6 +257,7 @@ export function TechnologiesScreen() {
     setCode(t.code);
     setName(t.name);
     setCompany(t.company ?? "");
+    setUnit(t.unit ?? "m2");
     setThicknessMinMm(t.thicknessMinMm ?? "");
     setThicknessMaxMm(t.thicknessMaxMm ?? "");
     // Autodetekcja: jeśli min i max już się różnią, otwórz od razu w
@@ -268,6 +281,7 @@ export function TechnologiesScreen() {
                   unit: m.unit,
                   consumptionPerM2: m.consumptionPerM2,
                   linkedMaterialId: m.linkedMaterialId != null ? String(m.linkedMaterialId) : "",
+                  isPrimary: m.isPrimary,
                 }))
               : [emptyMaterial()],
           }))
@@ -299,6 +313,7 @@ export function TechnologiesScreen() {
             unit: m.unit || "kg",
             consumptionPerM2: Number(m.consumptionPerM2) || 0,
             linkedMaterialId: m.linkedMaterialId ? Number(m.linkedMaterialId) : null,
+            isPrimary: m.isPrimary,
           })),
       }));
     if (payload.length === 0) {
@@ -327,6 +342,7 @@ export function TechnologiesScreen() {
         // przy company/thicknessMinMm/thicknessMaxMm w lib/data/technologies.ts)
         // — zapisywane osobnym wywołaniem na ŚWIEŻO utworzonej wersji
         // (newId), nie na editingSourceId (ten zaraz zostanie zdezaktywowany).
+        await updateTechnologyUnit(newId, unit);
         await updateTechnologyMeta(
           newId,
           company.trim() || null,
@@ -392,7 +408,7 @@ export function TechnologiesScreen() {
     <>
       <ScreenHeader
         title="Technologie"
-        description="Receptury posadzek — etapy, materiały, zużycie na m²."
+        description="Receptury posadzek, cokołów, napraw i innych systemów — etapy, materiały, zużycie na jednostkę."
         action={
           <Button
             label={editorOpen ? "Anuluj" : "+ Nowa"}
@@ -527,6 +543,21 @@ export function TechnologiesScreen() {
             value={company}
             onChangeText={setCompany}
           />
+          <Text className="text-xs text-muted uppercase mb-2 mt-3">
+            Jednostka rozliczenia
+          </Text>
+          <SegmentedControl
+            options={[
+              { key: "m2", label: "m² (powierzchnia)" },
+              { key: "mb", label: "mb (długość)" },
+              { key: "szt", label: "szt" },
+            ] as const}
+            value={unit}
+            onChange={setUnit}
+          />
+          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>
+            Ilość na budowie i zużycie materiałów liczone są na {TECHNOLOGY_UNIT_LABEL[unit]}.
+          </Text>
           <Text className="text-xs text-muted uppercase mb-2 mt-3">
             Grubość posadzki (mm)
           </Text>
@@ -691,6 +722,32 @@ export function TechnologiesScreen() {
                               </Pressable>
                             )}
                           </View>
+                          <Pressable
+                            onPress={() =>
+                              updateMaterial(
+                                stage.key,
+                                mat.key,
+                                mat.isPrimary
+                                  ? { isPrimary: false }
+                                  : {
+                                      isPrimary: true,
+                                      name: mat.name.trim() || name.trim(),
+                                      unit: unit === "m2" ? "m²" : unit === "szt" ? "szt." : "mb",
+                                      consumptionPerM2: mat.consumptionPerM2 || "1",
+                                    },
+                              )
+                            }
+                            style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}
+                          >
+                            <Icon
+                              name={mat.isPrimary ? "check-square" : "square"}
+                              size={18}
+                              color={mat.isPrimary ? COLORS.foreground : COLORS.muted}
+                            />
+                            <Text style={{ color: mat.isPrimary ? COLORS.foreground : COLORS.muted, fontSize: 12, flex: 1 }}>
+                              Materiał główny — sama technologia jest też tym materiałem (1 {TECHNOLOGY_UNIT_LABEL[unit]} = 1 {TECHNOLOGY_UNIT_LABEL[unit]} materiału)
+                            </Text>
+                          </Pressable>
                           <View
                             style={{
                               flexDirection: "row",
@@ -701,7 +758,7 @@ export function TechnologiesScreen() {
                             }}
                           >
                             <View>
-                              <Text className="text-xs text-muted uppercase mb-2">Zużycie / m²</Text>
+                              <Text className="text-xs text-muted uppercase mb-2">Zużycie / {TECHNOLOGY_UNIT_LABEL[unit]}</Text>
                               <QuantityStepper
                                 value={mat.consumptionPerM2}
                                 onChangeText={(v: string) =>
@@ -1106,7 +1163,7 @@ export function TechnologiesScreen() {
                               textAlign: "right",
                             }}
                           >
-                            {m.consumptionPerM2} {m.unit}/m²
+                            {m.consumptionPerM2} {m.unit}/{TECHNOLOGY_UNIT_LABEL[active.unit ?? "m2"]}
                           </Text>
                         </View>
                       )),

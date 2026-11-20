@@ -36,30 +36,29 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Konto "głównego" Admina — chronione przed usunięciem i odebraniem roli
-// Admin przez TEN endpoint, nawet przez innego Admina. Bez tego zabezpieczenia
-// jeden nieostrożny klik w panelu "Konta logowania" (albo czyszczenie bazy
-// testowej, patrz scripts/reset-test-data.sql) może zablokować dostęp do
-// funkcji administracyjnych na dobre — a jedyną drogą powrotną jest ręczny
-// SQL w Supabase Dashboardzie (patrz SUPABASE_SETUP.md, krok 5.2-5.3).
-//
-// Nadpisywalne zmienną środowiskową Edge Function (Supabase Dashboard ->
-// Edge Functions -> admin-users -> Settings -> dodaj sekret
-// PROTECTED_ADMIN_EMAIL), żeby nie trzeba było zmieniać kodu przy zmianie
-// docelowego adresu głównego admina.
 const MIN_PASSWORD_LENGTH = 10;
 
-const PROTECTED_ADMIN_EMAIL = (
-  Deno.env.get("PROTECTED_ADMIN_EMAIL") ?? "admin@flowtex.pl"
-).trim().toLowerCase();
-
-async function isProtectedAdmin(
+// Super administrator — konto z tabeli `superadmins` (patrz
+// supabase/sql/105_superadmin.sql), rozpoznawane po id konta, NIE po adresie
+// e-mail (zmiana adresu nie gubi uprawnień ani ochrony).
+//   - Super admin widzi i zarządza WSZYSTKIMI kontami logowania: także
+//     kontami bez profilu / bez powiązania z pracownikiem, innymi Adminami,
+//     może dodawać, usuwać, zmieniać hasła, e-maile, role i powiązania.
+//   - Zwykły Admin nie widzi kont super adminów i nie może ich w żaden sposób
+//     zmienić (hasło, e-mail, rola, usunięcie).
+//   - Konta super admina nie da się usunąć ani pozbawić roli Admin przez tę
+//     funkcję (żeby nikt nie odciął sobie dostępu); odebranie roli tylko ręcznie
+//     w SQL Editorze (delete from superadmins ...).
+async function isSuperAdminId(
   admin: ReturnType<typeof createClient>,
   userId: string,
 ): Promise<boolean> {
-  const { data, error } = await admin.auth.admin.getUserById(userId);
-  if (error || !data.user?.email) return false;
-  return data.user.email.trim().toLowerCase() === PROTECTED_ADMIN_EMAIL;
+  const { data } = await admin
+    .from("superadmins")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return !!data;
 }
 
 Deno.serve(async (req) => {
@@ -92,9 +91,15 @@ Deno.serve(async (req) => {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  if (callerProfile?.role !== "Admin") {
+  const callerIsSuper = await isSuperAdminId(admin, user.id);
+  if (callerProfile?.role !== "Admin" && !callerIsSuper) {
     return json({ error: "Wymagana rola Admin." }, 403);
   }
+
+  // Zwykły Admin nie może ruszać kont super adminów (hasło, e-mail, rola,
+  // nazwa, usunięcie) — super admin tak, z wyjątkami opisanymi wyżej.
+  const forbidSuperTarget = async (targetId: string) =>
+    !callerIsSuper && (await isSuperAdminId(admin, targetId));
 
   let body: Record<string, unknown>;
   try {
@@ -113,21 +118,40 @@ Deno.serve(async (req) => {
       perPage: 1000,
     });
     if (listError) return json({ error: listError.message }, 400);
+    const { data: supers } = await admin.from("superadmins").select("user_id");
+    const superIds = new Set((supers ?? []).map((r) => r.user_id as string));
+    const profileById = new Map((profiles ?? []).map((p) => [p.id as string, p]));
+
+    if (callerIsSuper) {
+      // Wszystkie konta z auth.users — także bez profilu ("sieroty") i bez
+      // powiązania z pracownikiem, oraz sam super admin.
+      const users = page.users.map((u) => {
+        const p = profileById.get(u.id);
+        return {
+          id: u.id,
+          role: p?.role ?? null,
+          employeeId: p?.employeeId ?? null,
+          email: u.email ?? null,
+          hasProfile: !!p,
+          isSuperAdmin: superIds.has(u.id),
+        };
+      });
+      return json({ users, callerIsSuperAdmin: true });
+    }
+
     const emailById = new Map(page.users.map((u) => [u.id, u.email ?? null]));
     const users = (profiles ?? [])
-      // Konto głównego Admina jest "super administratorem" — celowo
-      // niewidoczne w tej liście, nawet dla innych Adminów (i dla samego
-      // siebie, gdy zalogowany jako inne konto). Nie da się go stąd ani
-      // zarządzać (patrz ochrony przy setRole/delete/setPassword wyżej),
-      // ani nawet zobaczyć, że istnieje.
-      .filter((p) => emailById.get(p.id)?.trim().toLowerCase() !== PROTECTED_ADMIN_EMAIL)
+      // Konta super adminów są niewidoczne dla zwykłych Adminów.
+      .filter((p) => !superIds.has(p.id as string))
       .map((p) => ({
         id: p.id,
         role: p.role,
         employeeId: p.employeeId,
         email: emailById.get(p.id) ?? null,
+        hasProfile: true,
+        isSuperAdmin: false,
       }));
-    return json({ users });
+    return json({ users, callerIsSuperAdmin: false });
   }
 
   if (action === "create") {
@@ -166,21 +190,10 @@ Deno.serve(async (req) => {
         400,
       );
     }
-    // Hasła głównego konta administratora NIE da się ustawić stąd — nawet
-    // sobie samemu. To celowe: panel "Konta logowania" pokazuje listę
-    // WSZYSTKICH kont innym Adminom, więc jakiekolwiek pole do zmiany
-    // hasła tego konta w tym miejscu to punkt, przez który dowolny inny
-    // Admin mógłby je przejąć. Właściciel zmienia własne hasło przez
-    // samoobsługę w Ustawieniach (updateMyPassword w lib/data/auth.ts),
-    // która działa tylko na koncie, na którym jest aktualnie zalogowany.
-    if (await isProtectedAdmin(admin, userId)) {
-      return json(
-        {
-          error:
-            "Hasła głównego konta administratora nie można zmienić stąd — użyj samoobsługi w Ustawieniach, zalogowany na tym koncie.",
-        },
-        400,
-      );
+    // Hasła konta super administratora nie zmienia zwykły Admin. Super admin
+    // może ustawić hasło każdemu (także sobie).
+    if (await forbidSuperTarget(userId)) {
+      return json({ error: "Brak uprawnień do zmiany hasła tego konta." }, 403);
     }
     const { error } = await admin.auth.admin.updateUserById(userId, { password });
     if (error) return json({ error: error.message }, 400);
@@ -191,15 +204,8 @@ Deno.serve(async (req) => {
     const userId = String(body.userId ?? "");
     const email = String(body.email ?? "").trim();
     if (!userId || !email) return json({ error: "Wymagany userId i email." }, 400);
-    // Ta sama ochrona co setPassword wyżej — email głównego konta
-    // administratora nie da się zmienić stąd, tylko przez samoobsługę
-    // (Supabase nie udostępnia zmiany własnego emaila przez tę funkcję,
-    // ale ochrona zostaje symetryczna z resztą wrażliwych operacji).
-    if (await isProtectedAdmin(admin, userId)) {
-      return json(
-        { error: "Email głównego konta administratora nie można zmienić stąd." },
-        400,
-      );
+    if (await forbidSuperTarget(userId)) {
+      return json({ error: "Brak uprawnień do zmiany e-maila tego konta." }, 403);
     }
     const { error } = await admin.auth.admin.updateUserById(userId, {
       email,
@@ -221,6 +227,9 @@ Deno.serve(async (req) => {
     if (!userId || !displayName) {
       return json({ error: "Wymagany userId i nazwa." }, 400);
     }
+    if (await forbidSuperTarget(userId)) {
+      return json({ error: "Brak uprawnień do zmiany tego konta." }, 403);
+    }
     const { error } = await admin.auth.admin.updateUserById(userId, {
       user_metadata: { full_name: displayName },
     });
@@ -233,16 +242,20 @@ Deno.serve(async (req) => {
     const role = body.role;
     const employeeId = body.employeeId ? Number(body.employeeId) : null;
     if (!userId || !role) return json({ error: "Wymagany userId i rola." }, 400);
-    if (role !== "Admin" && (await isProtectedAdmin(admin, userId))) {
+    if (await forbidSuperTarget(userId)) {
+      return json({ error: "Brak uprawnień do zmiany tego konta." }, 403);
+    }
+    if (role !== "Admin" && (await isSuperAdminId(admin, userId))) {
       return json(
-        { error: "Nie można odebrać roli Admin głównemu kontu administratora." },
+        { error: "Nie można odebrać roli Admin kontu super administratora." },
         400,
       );
     }
-    const { error } = await admin
-      .from("profiles")
-      .update({ role, employeeId })
-      .eq("id", userId);
+    // Super admin może też nadać profil kontu, które go nie ma (konto
+    // "sierota" w auth.users) — zwykły Admin tylko aktualizuje istniejący.
+    const { error } = callerIsSuper
+      ? await admin.from("profiles").upsert({ id: userId, role, employeeId })
+      : await admin.from("profiles").update({ role, employeeId }).eq("id", userId);
     if (error) return json({ error: error.message }, 400);
     return json({ ok: true });
   }
@@ -253,8 +266,8 @@ Deno.serve(async (req) => {
     if (userId === user.id) {
       return json({ error: "Nie można usunąć własnego konta." }, 400);
     }
-    if (await isProtectedAdmin(admin, userId)) {
-      return json({ error: "Nie można usunąć głównego konta administratora." }, 400);
+    if (await isSuperAdminId(admin, userId)) {
+      return json({ error: "Nie można usunąć konta super administratora." }, 400);
     }
     await admin.from("profiles").delete().eq("id", userId);
     const { error } = await admin.auth.admin.deleteUser(userId);

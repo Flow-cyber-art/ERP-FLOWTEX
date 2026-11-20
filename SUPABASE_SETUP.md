@@ -107,17 +107,21 @@ do testowania widoczności paneli przed podłączeniem Supabase Auth").
    dodania/usunięcia/zresetowania konta — bootstrap z kroków 2–3 działa
    niezależnie od tego (to czysty Dashboard, bez Edge Function).
 
-   **Ochrona konta głównego admina**: funkcja `admin-users` na stałe
-   blokuje usunięcie i odebranie roli Admin kontu `admin@flowtex.pl`
-   (patrz stała `PROTECTED_ADMIN_EMAIL` w
-   [`supabase/functions/admin-users/index.ts`](./supabase/functions/admin-users/index.ts))
-   — nawet innemu Adminowi. Dzięki temu panel "Konta logowania" nie
-   może nigdy zablokować dostępu do funkcji administracyjnych. Jeśli
-   docelowy email głównego admina jest inny niż `admin@flowtex.pl`,
-   ustaw sekret **Edge Functions → admin-users → Settings → Secrets →
-   `PROTECTED_ADMIN_EMAIL`** na właściwy adres (bez tego ochrona nadal
-   będzie pilnować `admin@flowtex.pl`, a nowe konto będzie można
-   usunąć/zdegradować jak każde inne).
+   **Super administrator**: konto z tabeli `superadmins`
+   ([`supabase/sql/105_superadmin.sql`](./supabase/sql/105_superadmin.sql)),
+   rozpoznawane po id konta, a nie po adresie e-mail — zmiana adresu nie
+   gubi uprawnień ani ochrony. Super admin ma w **Admin → Konta logowania**
+   widok wszystkich kont (także bez profilu i bez powiązania z pracownikiem)
+   i może dodawać, usuwać, zmieniać hasła, e-maile, role i powiązania z
+   pracownikami. Zwykły Admin nie widzi kont super adminów i nie może ich
+   zmienić; konta super admina nie da się usunąć ani pozbawić roli Admin
+   (przez funkcję `admin-users` ani wprost przez `profiles` — chroni to
+   trigger w bazie). Nadanie roli (SQL Editor):
+   ```sql
+   insert into superadmins (user_id)
+   select id from auth.users where email = 'ds@flowtex.pl';
+   ```
+   Odebranie: `delete from superadmins where user_id = (select id from auth.users where email = '...');`
 
 **Model ról** (mała firma, jedna brygada na jedną budowę na raz — bez
 granulacji "który brygadzista widzi którą budowę"):

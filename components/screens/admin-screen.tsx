@@ -14,6 +14,7 @@ import {
   ToggleChip,
 } from "@/components/report-ui";
 import { useAppData, type NewEmployeeInput, type NewTeamInput } from "@/contexts/app-data";
+import { SuperAdminAccountsSection } from "@/components/super-admin-accounts-section";
 import {
   LEAVE_STATUS_BADGE,
   LEAVE_TYPE_LABELS,
@@ -27,7 +28,6 @@ import {
   type AdminUser,
   createAdminUser,
   deleteAdminUser,
-  isProtectedAdminEmail,
   listAdminUsers,
   setAdminUserDisplayName,
   setAdminUserEmail,
@@ -51,7 +51,12 @@ import { Icon } from "@/components/icon";
 // jeden pracownik, jedno miejsce edycji. Ta zakładka Admina ma już tylko
 // Ustawienia firmy, więc pasek zakładek też znika.
 export function AdminScreen() {
-  return <AdminSettingsSection />;
+  return (
+    <>
+      <AdminSettingsSection />
+      <SuperAdminAccountsSection />
+    </>
+  );
 }
 
 // Sekcja na przyszłe ustawienia aplikacji. Stawka za km (Faza 7)
@@ -720,7 +725,7 @@ export function AdminTeamSection() {
                         pracownika, więc zostaje poza tym widokiem. */}
                     {(() => {
                       const account = accountFor(employee.id);
-                      const protectedAccount = isProtectedAdminEmail(account?.email);
+                      const protectedAccount = !!account?.isSuperAdmin;
                       return (
                         <View
                           style={{

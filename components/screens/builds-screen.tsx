@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Dimensions, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { DateField } from "@/components/date-field";
 import {
@@ -52,6 +52,30 @@ const createEmptyNewBuild = (): NewBuildInput => ({
   address: "",
   contractValue: "",
 });
+
+// dd.mm.rrrr z ISO (RRRR-MM-DD); pusty string, gdy brak/niepoprawna data.
+const formatDatePL = (iso: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+};
+
+// Szeroki układ (zwarta lista) tylko na webie od 900px — ta sama zasada co
+// isDesktop w app/(tabs)/index.tsx. `mounted` jest false w pierwszym
+// renderze (eksport statyczny i hydratacja), żeby drzewo JSX było
+// identyczne po stronie serwera i klienta (błąd hydratacji React #418).
+function useWideLayout() {
+  const [mounted, setMounted] = useState(false);
+  const [width, setWidth] = useState(() => Dimensions.get("window").width);
+  useEffect(() => {
+    setWidth(Dimensions.get("window").width);
+    setMounted(true);
+    const sub = Dimensions.addEventListener("change", ({ window }) =>
+      setWidth(window.width),
+    );
+    return () => sub.remove();
+  }, []);
+  return mounted && Platform.OS === "web" && width >= 900;
+}
 
 export function BuildsScreen() {
   const {
@@ -145,6 +169,7 @@ export function BuildsScreen() {
   };
 
   const isArchiveView = buildsView === "archive";
+  const isWide = useWideLayout();
 
   // Które budowy mają rozwiniętą sekcję raportów, i który konkretny raport
   // (w obrębie dowolnej budowy) jest rozwinięty — jeden na raz wystarcza.
@@ -371,36 +396,75 @@ export function BuildsScreen() {
       }
     />
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
-      <View style={{ flex: 1 }}>
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: COLORS.background,
+          borderWidth: 1,
+          borderColor: COLORS.border,
+          borderRadius: 10,
+          paddingLeft: 12,
+        }}
+      >
+        <MaterialIcons name="search" size={20} color={COLORS.muted} />
         <Field
-          placeholder="🔍 Szukaj budowy…"
+          placeholder="Szukaj budowy…"
           value={buildQuery}
           onChangeText={setBuildQuery}
+          style={{
+            flex: 1,
+            marginTop: 0,
+            backgroundColor: "transparent",
+            borderRadius: 0,
+          }}
         />
       </View>
-      <Pressable
-        onPress={() => setBuildsView(isArchiveView ? "active" : "archive")}
-        hitSlop={8}
-        style={{ alignItems: "center", gap: 4 }}
+      {/* Przełącznik widoku listy (segment) zamiast checkboxa "Archiwum" —
+          czytelnie jako filtr listy; ten sam stan buildsView co wcześniej. */}
+      <View
+        style={{
+          flexDirection: "row",
+          backgroundColor: COLORS.background,
+          borderWidth: 1,
+          borderColor: COLORS.border,
+          borderRadius: 10,
+          padding: 3,
+        }}
       >
-        <View
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 5,
-            borderWidth: 1,
-            borderColor: isArchiveView ? COLORS.primary : COLORS.border,
-            backgroundColor: isArchiveView ? COLORS.primary : "transparent",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {isArchiveView && (
-            <Text style={{ color: COLORS.background, fontSize: 12, fontWeight: "800" }}>✓</Text>
-          )}
-        </View>
-        <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "600" }}>Archiwum</Text>
-      </Pressable>
+        {(
+          [
+            ["active", "Bieżące"],
+            ["archive", "Archiwum"],
+          ] as const
+        ).map(([view, label]) => {
+          const selected = buildsView === view;
+          return (
+            <Pressable
+              key={view}
+              onPress={() => setBuildsView(view)}
+              hitSlop={4}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 8,
+                backgroundColor: selected ? COLORS.border : "transparent",
+              }}
+            >
+              <Text
+                style={{
+                  color: selected ? COLORS.foreground : COLORS.muted,
+                  fontSize: 13,
+                  fontWeight: "600",
+                }}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
     {!isArchiveView && showBuild && (
       <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
@@ -1035,6 +1099,35 @@ export function BuildsScreen() {
         </Text>
       </View>
     )}
+    {isWide && visibleBuilds.length > 0 && (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingBottom: 8,
+        }}
+      >
+        {[
+          { label: "Budowa", flex: 3 },
+          { label: "Odpowiedzialny", flex: 2 },
+          { label: "Termin", flex: 2 },
+        ].map((c) => (
+          <Text
+            key={c.label}
+            style={{ flex: c.flex, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}
+          >
+            {c.label}
+          </Text>
+        ))}
+        <Text
+          style={{ width: 72, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}
+        >
+          Materiały
+        </Text>
+        <View style={{ width: 36 }} />
+      </View>
+    )}
     {visibleBuilds.map((b) => {
       const buildReports = savedReports
         .filter((r) => r.buildId === b.id)
@@ -1049,9 +1142,71 @@ export function BuildsScreen() {
       return (
         <View
           key={b.id}
-          className="bg-surface border border-border rounded-2xl mb-3 overflow-hidden"
+          className={
+            isWide
+              ? "bg-surface border border-border rounded-xl mb-2 overflow-hidden"
+              : "bg-surface border border-border rounded-2xl mb-3 overflow-hidden"
+          }
           style={isClosed ? { opacity: 0.85 } : undefined}
         >
+          {isWide ? (
+            <Pressable
+              onPress={() => setExpandedBuildId(isOpen ? null : b.id)}
+              style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={{ flex: 3, paddingRight: 12 }}>
+                  <Text numberOfLines={1} className="text-base font-bold text-foreground">
+                    {b.name}
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 }}>
+                    <Text numberOfLines={1} style={{ color: COLORS.muted, fontSize: 12 }}>
+                      {b.number}
+                    </Text>
+                    {isClosed && <StatusBadge status="ok" label="ZAMKNIĘTA" />}
+                    {pendingCount > 0 && (
+                      <StatusBadge
+                        status="warning"
+                        label={`${pendingCount} ${pendingCount === 1 ? "raport" : "raporty"} do sprawdzenia`}
+                      />
+                    )}
+                  </View>
+                </View>
+                <Text numberOfLines={1} style={{ flex: 2, color: COLORS.foreground, fontSize: 14, paddingRight: 12 }}>
+                  {b.manager}
+                </Text>
+                <Text numberOfLines={1} style={{ flex: 2, color: COLORS.foreground, fontSize: 14, paddingRight: 12 }}>
+                  {b.startDate && b.durationDays
+                    ? `${formatDatePL(b.startDate)} – ${formatDatePL(addDaysISO(b.startDate, b.durationDays))}`
+                    : "—"}
+                </Text>
+                {(() => {
+                  const matCount = assignments.filter((a) => a.buildId === b.id).length;
+                  return (
+                    <Text
+                      style={{
+                        width: 72,
+                        textAlign: "right",
+                        color: matCount === 0 ? COLORS.muted : COLORS.foreground,
+                        fontSize: 14,
+                        fontWeight: matCount === 0 ? "400" : "600",
+                        opacity: matCount === 0 ? 0.6 : 1,
+                      }}
+                    >
+                      {matCount}
+                    </Text>
+                  );
+                })()}
+                <View style={{ width: 36, alignItems: "flex-end" }}>
+                  <MaterialIcons
+                    name={isOpen ? "expand-less" : "expand-more"}
+                    size={24}
+                    color={COLORS.muted}
+                  />
+                </View>
+              </View>
+            </Pressable>
+          ) : (
           <Pressable
             onPress={() => setExpandedBuildId(isOpen ? null : b.id)}
             style={{ padding: 16 }}
@@ -1101,6 +1256,7 @@ export function BuildsScreen() {
               </View>
             )}
           </Pressable>
+          )}
 
           {isOpen && (
             <View

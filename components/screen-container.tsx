@@ -54,7 +54,7 @@ export function ScreenContainer({
   // ~256px calkowicie martwej, czarnej przestrzeni PO KAZDEJ stronie
   // (niewidoczne na ciemnym tle, wygladalo jak "tresc przyklejona do
   // lewej + pustka z prawej", a w rzeczywistosci bylo wysrodkowane).
-  // Stale 1040px (sidebar 200px wliczony w ten box) daje wyraznie wiecej
+  // Stale 1248px (1040px + 20%; sidebar 200px wliczony w ten box) daje wyraznie wiecej
   // miejsca na tresc list/kart bez rozciagania sie na cala szerokosc
   // ultrawide monitorow.
   return (
@@ -69,7 +69,7 @@ export function ScreenContainer({
       >
         <View
           className={cn(
-            "flex-1 w-full lg:max-w-[1040px] lg:min-w-[480px] lg:self-center",
+            "flex-1 w-full lg:max-w-[1248px] lg:min-w-[480px] lg:self-center",
             className,
           )}
         >

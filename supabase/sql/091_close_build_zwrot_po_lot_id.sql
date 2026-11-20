@@ -123,7 +123,7 @@ begin
         -- trafia do nowej partii (ta sama ilość i cena), jak w
         -- 028_fix_zwrot_do_usunietej_partii.sql / 053.
         insert into material_batches ("materialId", quantity, "unitPrice", "receivedAt", source)
-          values (v_material_id, v_qty, v_lot_price, current_date, 'zwrot z budowy');
+          values (v_material_id, v_qty, v_lot_price, current_date, 'zwrot');
       end if;
       perform fn_recalc_material(v_material_id);
     else

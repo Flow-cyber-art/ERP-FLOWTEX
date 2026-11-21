@@ -26,6 +26,7 @@ import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { BuildPortalSection } from "@/components/build-portal-section";
 import { TechnologyPicker } from "@/components/technology-picker";
+import { BuildTeamsSection } from "@/components/build-teams-section";
 import { todayISO } from "@/components/report-ui";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
@@ -1625,6 +1626,7 @@ export function BuildsScreen() {
                 </View>
               );
             })()}
+          <BuildTeamsSection buildId={b.id} mainTeamId={b.teamId} readOnly={isClosed} />
           </View>
           )}
           {/* Technologia (Faza 2) — plan materiałowy = m² budowy × zużycie
@@ -3079,6 +3081,7 @@ export function BuildsScreen() {
                 buildReports.map((report) => (
                   <ReportCard
                     key={report.id}
+                    subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
                     report={report}
                     build={b}
                     materials={materials}

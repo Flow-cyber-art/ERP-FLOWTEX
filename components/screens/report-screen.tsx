@@ -21,6 +21,7 @@ import { BuildPhotosSection } from "@/components/build-photos-section";
 import { materialReportKey } from "@/lib/material-report-key";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
+import { TECHNOLOGY_UNIT_LABEL } from "@/lib/data/technologies";
 
 export function ReportScreen() {
   const {
@@ -83,7 +84,43 @@ export function ReportScreen() {
     removeFromDraft,
     commitAssignments,
     removeBuildAssignment,
+    isSubcontractorLead,
+    mySubcontractorBuildTeam,
+    buildTechnologySnapshots,
+    draftStageProgress,
+    setDraftStageProgress,
   } = useAppData();
+
+  // Tryb podwykonawcy (supabase/sql/112_podwykonawcy_raport_i_brygady_
+  // budowy.sql): brygadzista brygady podwykonawcy raportuje tylko na
+  // budowach, do których jego brygada jest przypisana, tylko etapy ze
+  // swojego zakresu, bez osób/godzin, kilometrówki i kosztów dodatkowych
+  // — za to z wykonaną dziś ilością per etap (krok 2 "Wykonane").
+  const subMode = isSubcontractorLead;
+  const subBuildTeam = subMode ? mySubcontractorBuildTeam(activeBuild?.id) : null;
+  const subScope = subBuildTeam?.stageNames ?? null;
+  const stageInScope = (stageName: string) =>
+    !subMode || !subScope || subScope.includes(stageName);
+  const activeSnapshot = buildTechnologySnapshots.find(
+    (s) => String(s.buildId) === String(activeBuild?.id),
+  );
+  const buildUnitLabel = TECHNOLOGY_UNIT_LABEL[activeSnapshot?.unit ?? "m2"];
+  const reportableBuilds = builds.filter(
+    (b) => b.status !== "zamknięta" && (!subMode || mySubcontractorBuildTeam(b.id) !== null),
+  );
+  // Podwykonawca nie może zostać na budowie spoza swojego przydziału
+  // (domyślnie wybrana jest pierwsza budowa z listy) — przeskok na
+  // pierwszą przypisaną, o ile nie edytuje już zapisanego raportu.
+  useEffect(() => {
+    if (!subMode || subBuildTeam || editingReportId) return;
+    const first = reportableBuilds[0];
+    if (first && first.id !== activeBuild?.id) {
+      setSelectedBuildId(first.id);
+      setReportValues(getReportDefaults(first.id));
+      setDraftStageProgress({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subMode, subBuildTeam, editingReportId, reportableBuilds.length]);
 
   const editingReport = editingReportId
     ? savedReports.find((report) => report.id === editingReportId)
@@ -174,6 +211,15 @@ export function ReportScreen() {
   // faktyczne pola na ekranie (renderMaterialRow) — do kroku 3
   // (podsumowanie) i walidacji "czy coś wpisano". Bez tego materiał
   // rozbity na dwa etapy zlewałby się w jeden wiersz/klucz podsumowania.
+  // Etapy do wpisania wykonanej ilości (podwykonawca): wszystkie etapy
+  // zamrożonej receptury (także te bez materiałów), zawężone do zakresu
+  // jego brygady; awaryjnie etapy z planu materiałowego.
+  const progressStages = (
+    activeSnapshot?.stageNames.length ? activeSnapshot.stageNames : stageOrder
+  ).filter(stageInScope);
+  const progressRows = progressStages
+    .map((stageName) => ({ stageName, quantity: (draftStageProgress[stageName] ?? "").trim() }))
+    .filter((row) => Number(row.quantity.replace(",", ".")) > 0);
   const materialSummaryRows: { key: string; name: string; unit?: string }[] = [];
   for (const a of buildAssignments) {
     const m = materials.find((x) => x.id === a.materialId);
@@ -356,7 +402,30 @@ export function ReportScreen() {
         }
       />
 
-      <ReportStepper step={reportStep} />
+      <ReportStepper
+        step={reportStep}
+        labels={subMode ? ["Zużycie", "Wykonane", "Podsumowanie"] : undefined}
+      />
+
+      {subMode && !subBuildTeam && (
+        <View
+          style={{
+            backgroundColor: COLORS.warningBg,
+            borderRadius: RADIUS.card,
+            padding: 13,
+            marginBottom: 12,
+          }}
+        >
+          <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+            {reportableBuilds.length === 0
+              ? "Twoja brygada nie jest jeszcze przypisana do żadnej budowy."
+              : "Twoja brygada nie jest przypisana do tej budowy — wybierz inną."}
+          </Text>
+          <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
+            Przypisanie robi administrator na karcie budowy (Brygady na budowie).
+          </Text>
+        </View>
+      )}
 
       <View className="bg-surface border border-border rounded-card overflow-hidden">
         {reportApproved && (
@@ -440,8 +509,7 @@ export function ReportScreen() {
                   nestedScrollEnabled
                   showsVerticalScrollIndicator
                 >
-                  {builds
-                    .filter((b) => b.status !== "zamknięta")
+                  {reportableBuilds
                     .map((b) => (
                     <Pressable
                       disabled={reportApproved}
@@ -455,6 +523,7 @@ export function ReportScreen() {
                         setReportValues(getReportDefaults(b.id));
                         setDraftExtraCosts([]);
                         setDraftNote("");
+                        setDraftStageProgress({});
                         setReportSaved(false);
                       }}
                       style={{
@@ -589,7 +658,7 @@ export function ReportScreen() {
             {stageOrder.length > 0 && (
               <View className="border-t border-border p-4">
                 <Text className="text-xs text-muted uppercase mb-2">Technologia</Text>
-                {stageOrder.map((stageName) => {
+                {stageOrder.filter(stageInScope).map((stageName) => {
                   const stagePlan = planByStage.get(stageName) ?? [];
                   const isCollapsed = collapsedStages[stageName] ?? true;
                   const isStageCompleted = buildStageStatuses.some(
@@ -897,6 +966,8 @@ export function ReportScreen() {
               )}
             </View>
 
+            {!subMode && (
+            <>
             <View className="border-t border-border p-4">
               <Text className="text-xs text-muted uppercase mb-2">
                 Kilometrówka
@@ -929,10 +1000,60 @@ export function ReportScreen() {
                 onRemove={removeExtraCostFromDraft}
               />
             </View>
+            </>
+            )}
           </>
         )}
 
-        {reportStep === 2 && (
+        {reportStep === 2 && subMode && (
+          <View className="p-4">
+            <Text className="text-xs text-muted uppercase mb-1">
+              Wykonane dziś ({buildUnitLabel})
+            </Text>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>
+              Wpisz, ile zrobiliście dziś na każdym etapie. Do zapłaty liczy się
+              odbiór etapu przez administratora — tu tylko postęp prac.
+            </Text>
+            {progressStages.length === 0 ? (
+              <Text className="text-sm text-muted py-2">
+                Ta budowa nie ma jeszcze etapów technologii.
+              </Text>
+            ) : (
+              progressStages.map((stageName, i) => {
+                const done = buildStageStatuses.some(
+                  (s) => s.buildId === Number(activeBuild?.id) && s.stageName === stageName,
+                );
+                return (
+                  <View
+                    key={stageName}
+                    className={`flex-row items-center py-2 ${i > 0 ? "border-t border-border" : ""}`}
+                    style={{ gap: 10 }}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text className="text-sm text-foreground" numberOfLines={2}>
+                        {stageName}
+                      </Text>
+                      {done && (
+                        <Text style={{ color: COLORS.success, fontSize: 11, marginTop: 2 }}>
+                          Etap zakończony
+                        </Text>
+                      )}
+                    </View>
+                    <QuantityStepper
+                      value={draftStageProgress[stageName] ?? ""}
+                      onChangeText={(v) =>
+                        setDraftStageProgress({ ...draftStageProgress, [stageName]: v })
+                      }
+                      unit={buildUnitLabel}
+                    />
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        {reportStep === 2 && !subMode && (
           <View className="p-4">
             <View className="flex-row items-center justify-between">
               <Text className="text-xs text-muted uppercase">
@@ -1327,6 +1448,39 @@ export function ReportScreen() {
               </>
             )}
 
+            {subMode && (
+              <>
+                <Text className="text-xs text-muted uppercase mt-5 mb-1">
+                  Wykonane dziś
+                </Text>
+                {progressRows.length === 0 ? (
+                  <Text className="text-sm text-muted py-2">
+                    Nie wpisano wykonanych ilości.
+                  </Text>
+                ) : (
+                  progressRows.map((row, i) => (
+                    <View
+                      key={row.stageName}
+                      className={`flex-row items-center justify-between py-2 ${i > 0 ? "border-t border-border" : ""}`}
+                    >
+                      <Text
+                        className="text-sm text-foreground"
+                        numberOfLines={1}
+                        style={{ flex: 1, minWidth: 0, marginRight: 8 }}
+                      >
+                        {row.stageName}
+                      </Text>
+                      <Text className="text-sm font-bold text-foreground">
+                        {row.quantity} {buildUnitLabel}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </>
+            )}
+
+            {!subMode && (
+            <>
             <Text className="text-xs text-muted uppercase mt-5 mb-1">
               Zespół
             </Text>
@@ -1370,6 +1524,8 @@ export function ReportScreen() {
                 );
               })
             )}
+            </>
+            )}
 
             {/* Notatka do raportu (Decyzja B) — jedna, dowolna notatka na
                 cały dzień, czysto informacyjna dla Admina (np. "deszcz do
@@ -1408,7 +1564,9 @@ export function ReportScreen() {
               textAlign: "center",
             }}
           >
-            Raport zapisany — materiały zdjęte z magazynu, godziny zapisane
+            {subMode
+              ? "Raport zapisany — materiały zdjęte z magazynu, wykonane ilości zapisane"
+              : "Raport zapisany — materiały zdjęte z magazynu, godziny zapisane"}
           </Text>
         </View>
       )}
@@ -1430,8 +1588,11 @@ export function ReportScreen() {
           <Text
             style={{ color: COLORS.muted, fontSize: 13, flex: 1, minWidth: 0 }}
           >
-            Gotowe do zapisania · {draftPeople.length}{" "}
-            {pluralPL(draftPeople.length, "osoba", "osoby", "osób")} ·{" "}
+            Gotowe do zapisania ·{" "}
+            {subMode
+              ? `${progressRows.length} ${pluralPL(progressRows.length, "etap", "etapy", "etapów")}`
+              : `${draftPeople.length} ${pluralPL(draftPeople.length, "osoba", "osoby", "osób")}`}{" "}
+            ·{" "}
             {materialSummaryRows.length}{" "}
             {pluralPL(materialSummaryRows.length, "materiał", "materiały", "materiałów")}
           </Text>
@@ -1473,6 +1634,7 @@ export function ReportScreen() {
                   }
                 } else if (
                   reportStep === 2 &&
+                  !subMode &&
                   draftPeople.length === 0 &&
                   !teamWarningShown
                 ) {

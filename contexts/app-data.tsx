@@ -83,6 +83,14 @@ import { useRegisterPushToken } from "@/lib/notifications/use-register-push-toke
 import { useRegisterWebPush } from "@/lib/notifications/use-register-web-push";
 import { listReports, updateReportStatus, type ReportRow } from "@/lib/data/reports";
 import {
+  listBuildTeams,
+  removeBuildTeam as removeBuildTeamRemote,
+  saveBuildTeam as saveBuildTeamRemote,
+  subcontractorTeamIdsLedBy,
+  type BuildTeamRow,
+} from "@/lib/data/build-teams";
+import { listTeamSubcontractors } from "@/lib/data/subcontractors";
+import {
   getSettings,
   updateKmRate as updateKmRateRemote,
   updateCloseBuildPin as updateCloseBuildPinRemote,
@@ -224,7 +232,16 @@ export type SavedReport = {
   // supabase/functions/generate-report-note oraz 063_portal_klienta_
   // podsumowanie_ai.sql.
   clientNote?: string | null;
+  // Brygada podwykonawcy, która wysłała raport (null/undefined = brygada
+  // własna) — od 112 tego samego dnia na budowie może być kilka raportów.
+  teamId?: number | null;
+  // Wykonana ilość per etap (raport podwykonawcy).
+  stageProgress?: { stageName: string; quantity: number; unit: string }[];
 };
+
+/** Klucz "slotu" raportu: budowa + dzień + brygada (null = własna). */
+export const reportSlotKey = (r: { buildId: string; date: string; teamId?: number | null }) =>
+  `${r.buildId}:${r.date}:${r.teamId ?? ""}`;
 
 // Mapuje wiersz z bazy (reports + zagnieżdżone report_materials/
 // report_people/report_extra_costs/builds, patrz lib/data/reports.ts)
@@ -274,6 +291,12 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
     submittedByProfileId: row.submittedByProfileId,
     note: row.note ?? undefined,
     clientNote: row.clientNote ?? null,
+    teamId: row.teamId ?? null,
+    stageProgress: (row.report_stage_progress ?? []).map((sp) => ({
+      stageName: sp.stageName,
+      quantity: Number(sp.quantity),
+      unit: sp.unit,
+    })),
   };
 }
 
@@ -552,6 +575,61 @@ function useAppDataState(
     () => (teamMembersQuery.data ?? []) as TeamMemberRow[],
     [teamMembersQuery.data],
   );
+  // Brygady na budowie (własne i podwykonawców, z zakresem etapów) oraz
+  // które brygady są brygadami podwykonawców — patrz
+  // supabase/sql/112_podwykonawcy_raport_i_brygady_budowy.sql. Zawsze
+  // włączone: brygadzista potrzebuje ich od pierwszego ekranu (tryb
+  // raportu, lista budów), a obie tabele są małe.
+  const buildTeamsQuery = useQuery({
+    queryKey: ["buildTeams", "list"],
+    queryFn: listBuildTeams,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  const teamSubcontractorsQuery = useQuery({
+    queryKey: ["teamSubcontractors", "list"],
+    queryFn: listTeamSubcontractors,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  const buildTeams = useMemo(
+    () => (buildTeamsQuery.data ?? []) as BuildTeamRow[],
+    [buildTeamsQuery.data],
+  );
+  const teamSubcontractorMap = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const row of teamSubcontractorsQuery.data ?? []) map.set(row.teamId, row.subcontractorId);
+    return map;
+  }, [teamSubcontractorsQuery.data]);
+  // Brygady podwykonawców, których liderem jest zalogowany pracownik —
+  // niepuste = brygadzista podwykonawcy (raport bez osób/km/kosztów, z
+  // wykonanymi ilościami; tylko budowy, do których jego brygada jest
+  // przypisana). Baza ustala to samo niezależnie przy zapisie raportu.
+  const mySubcontractorTeamIds = useMemo(
+    () =>
+      subcontractorTeamIdsLedBy(
+        myEmployeeId != null && myEmployeeId !== "" ? Number(myEmployeeId) : null,
+        teams,
+        teamSubcontractorMap,
+      ),
+    [myEmployeeId, teams, teamSubcontractorMap],
+  );
+  const isSubcontractorLead = mySubcontractorTeamIds.length > 0;
+  /** Wpis brygady podwykonawcy zalogowanego brygadzisty na danej budowie. */
+  const mySubcontractorBuildTeam = useCallback(
+    (buildId: string | number | null | undefined): BuildTeamRow | null => {
+      if (buildId == null || buildId === "") return null;
+      const numeric = Number(buildId);
+      return (
+        buildTeams
+          .filter((bt) => bt.buildId === numeric && mySubcontractorTeamIds.includes(bt.teamId))
+          .sort((a, b) => a.teamId - b.teamId)[0] ?? null
+      );
+    },
+    [buildTeams, mySubcontractorTeamIds],
+  );
   // Leniwe — reszta poniżej odpala się dopiero przy pierwszym wejściu na
   // zakładkę, która ich faktycznie potrzebuje (tabDataEnabled wyżej),
   // zamiast wszystkie naraz na starcie aplikacji. Każde `enabled` wymienia
@@ -584,8 +662,13 @@ function useAppDataState(
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: Infinity,
-    enabled: tabDataEnabled(["builds"]),
+    // "report": etapy i jednostka budowy w raporcie podwykonawcy (112).
+    enabled: tabDataEnabled(["builds", "report"]),
   });
+  const buildTechnologySnapshots = useMemo(
+    () => (buildTechnologySnapshotsQuery.data ?? []) as BuildTechnologySnapshotRow[],
+    [buildTechnologySnapshotsQuery.data],
+  );
   // Plan materiałowy per etap — Budowy (karta budowy), Raport (grupowanie
   // materiałów po etapie) i Rozliczenie (tabela plan/przypisano/zużyto).
   const buildMaterialPlansQuery = useQuery({
@@ -894,13 +977,9 @@ function useAppDataState(
   useEffect(() => {
     if (!reportsQuery.data) return;
     const serverReports = reportsQuery.data.map(mapReportRowToSavedReport);
-    const serverKeys = new Set(
-      serverReports.map((r) => `${r.buildId}:${r.date}`),
-    );
+    const serverKeys = new Set(serverReports.map(reportSlotKey));
     setSavedReports((previous) => {
-      const localOnly = previous.filter(
-        (r) => !serverKeys.has(`${r.buildId}:${r.date}`),
-      );
+      const localOnly = previous.filter((r) => !serverKeys.has(reportSlotKey(r)));
       return [...serverReports, ...localOnly].sort((a, b) =>
         b.updatedAt.localeCompare(a.updatedAt),
       );
@@ -1138,8 +1217,12 @@ function useAppDataState(
       receiveBuildOrderRemote(vars.orderId, vars.items, vars.documentNumber, vars.supplier),
   });
   const approveReportMutation = useMutation({
-    mutationFn: (vars: { buildId: number; date: string; status: "approved" | "do_poprawy" }) =>
-      updateReportStatus(vars.buildId, vars.date, vars.status),
+    mutationFn: (vars: {
+      buildId: number;
+      date: string;
+      status: "approved" | "do_poprawy";
+      teamId?: number | null;
+    }) => updateReportStatus(vars.buildId, vars.date, vars.status, undefined, vars.teamId ?? null),
   });
 
   function reportMutationError(error: unknown, fallback: string) {
@@ -1190,6 +1273,9 @@ function useAppDataState(
   // materiał — to zostaje osobnym polem "reasons", patrz wyżej), czysto
   // informacyjna, nie wpływa na żadne wyliczenia.
   const [draftNote, setDraftNote] = useState("");
+  // Raport brygadzisty podwykonawcy (112): wykonana dziś ilość per etap
+  // (nazwa etapu -> ilość jako tekst z pola, jednostka budowy).
+  const [draftStageProgress, setDraftStageProgress] = useState<Record<string, string>>({});
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   useEffect(() => {
     AsyncStorage.getItem("budowy-simulator").then((raw) => {
@@ -1578,6 +1664,28 @@ function useAppDataState(
     }
   }, [invalidate, transferMaterialMutation]);
   // Status etapu technologii (Faza 6) — wyłącznie brygadzista/admin, ręcznie.
+  // Brygady na budowie (112) — dopinane/odpinane przez Admina w dowolnym
+  // momencie budowy, z zakresem etapów (null = wszystkie).
+  const saveBuildTeam = useCallback(async (row: BuildTeamRow) => {
+    try {
+      await saveBuildTeamRemote(row);
+      await invalidate("buildTeams");
+      return true;
+    } catch (error) {
+      reportMutationError(error, "Nie udało się zapisać brygady na budowie.");
+      return false;
+    }
+  }, [invalidate]);
+  const removeBuildTeam = useCallback(async (buildId: number, teamId: number) => {
+    try {
+      await removeBuildTeamRemote(buildId, teamId);
+      await invalidate("buildTeams");
+      return true;
+    } catch (error) {
+      reportMutationError(error, "Nie udało się odpiąć brygady od budowy.");
+      return false;
+    }
+  }, [invalidate]);
   const completeBuildStage = useCallback(async (buildId: string, stageName: string) => {
     const numericBuildId = Number(buildId);
     if (Number.isNaN(numericBuildId)) return;
@@ -1696,6 +1804,8 @@ function useAppDataState(
         contractValue: newBuild.contractValue ? Number(newBuild.contractValue) : undefined,
       });
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      // builds."teamId" -> build_teams (trigger w 112).
+      await queryClient.invalidateQueries({ queryKey: ["buildTeams", "list"] });
       onSaved(String(build.id));
       // Katalog na zdjęcia (Google Drive) NIE jest tworzony tu automatycznie
       // — Admin robi to świadomie przyciskiem "Stwórz katalog na zdjęcia"
@@ -1740,6 +1850,8 @@ function useAppDataState(
         contractValue: input.contractValue ? Number(input.contractValue) : undefined,
       });
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      // builds."teamId" -> build_teams (trigger w 112).
+      await queryClient.invalidateQueries({ queryKey: ["buildTeams", "list"] });
       onSaved?.();
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać danych budowy.");
@@ -1769,6 +1881,8 @@ function useAppDataState(
         plannedHoursPerDay,
       });
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
+      // builds."teamId" -> build_teams (trigger w 112).
+      await queryClient.invalidateQueries({ queryKey: ["buildTeams", "list"] });
       onSaved?.();
     } catch (error) {
       reportMutationError(error, "Nie udało się zapisać brygady/planu robocizny.");
@@ -1906,11 +2020,45 @@ function useAppDataState(
       );
       return;
     }
+    // Brygadzista podwykonawcy raportuje we własnym raporcie (osobnym od
+    // brygady własnej tego samego dnia) — tylko na budowach, do których
+    // jego brygada jest przypisana; bez osób, km i kosztów dodatkowych.
+    const subBuildTeam = isSubcontractorLead ? mySubcontractorBuildTeam(buildId) : null;
+    if (isSubcontractorLead && !subBuildTeam) {
+      notify(
+        "Budowa nie jest przypisana",
+        "Twoja brygada nie jest przypisana do tej budowy — poproś administratora o dodanie jej na karcie budowy.",
+      );
+      return;
+    }
+    const reportTeamId = subBuildTeam?.teamId ?? null;
+    const effectivePeople = reportTeamId ? [] : draftPeople;
+    const effectiveExtraCosts = reportTeamId ? [] : draftExtraCosts;
+    const effectiveKm = reportTeamId ? undefined : Number(draftKm.replace(",", ".")) || undefined;
+    const buildUnit =
+      buildTechnologySnapshots.find((s) => String(s.buildId) === String(buildId))?.unit ?? "m2";
+    const stageProgress = reportTeamId
+      ? Object.entries(draftStageProgress)
+          .map(([stageName, raw]) => ({
+            stageName,
+            quantity: Number(String(raw).replace(/\s/g, "").replace(",", ".")),
+            unit: buildUnit,
+          }))
+          .filter(
+            (sp) =>
+              Number.isFinite(sp.quantity) &&
+              sp.quantity > 0 &&
+              (!subBuildTeam?.stageNames || subBuildTeam.stageNames.includes(sp.stageName)),
+          )
+      : [];
     const date = todayISO();
     const existingReport = savedReports.find(
       (report) =>
         report.id === editingReportId ||
-        (!editingReportId && report.date === date && report.buildId === buildId),
+        (!editingReportId &&
+          report.date === date &&
+          report.buildId === buildId &&
+          (report.teamId ?? null) === reportTeamId),
     );
     if (existingReport?.status === "approved") {
       notify(
@@ -1996,18 +2144,20 @@ function useAppDataState(
       materialValues: { ...reportValues },
       materialCosts: reportMaterialCosts,
       reasons: { ...reasons },
-      people: [...draftPeople],
-      extraCosts: [...draftExtraCosts],
+      people: [...effectivePeople],
+      extraCosts: [...effectiveExtraCosts],
       status: existingReport?.status || "submitted",
       updatedAt: new Date().toISOString(),
       // km/kmRateApplied/kmCost lokalnie: km od razu (wpisane przez
       // brygadzistę), stawka/koszt dopiero po odpowiedzi z bazy niżej
       // (submitDailyReport) — baza jest tu autorytatywna, tak samo jak
       // przy FIFO materiałów.
-      km: Number(draftKm.replace(",", ".")) || undefined,
+      km: effectiveKm,
       kmRateApplied: existingReport?.kmRateApplied,
       kmCost: existingReport?.kmCost,
       note: draftNote.trim() || undefined,
+      teamId: reportTeamId,
+      stageProgress,
     };
     setSavedReports((previous) =>
       existingReport
@@ -2051,8 +2201,8 @@ function useAppDataState(
         return { ...a, used: Math.max(0, a.used + delta) };
       }),
     );
-    if (draftPeople.length) {
-      const entries = draftPeople.map((person) => {
+    if (effectivePeople.length) {
+      const entries = effectivePeople.map((person) => {
         const [sh, sm] = person.start.split(":").map(Number);
         const [eh, em] = person.end.split(":").map(Number);
         return {
@@ -2076,6 +2226,7 @@ function useAppDataState(
     setDraftExtraCosts([]);
     setDraftKm("");
     setDraftNote("");
+    setDraftStageProgress({});
     setHrSaved(true);
     setReportSaved(true);
     setReportStatus("wysłany");
@@ -2110,7 +2261,7 @@ function useAppDataState(
         };
       })
       .filter((m) => !Number.isNaN(m.materialId));
-    const peoplePayload = draftPeople
+    const peoplePayload = effectivePeople
       .map((p) => ({
         employeeId: Number(p.employeeId),
         start: p.start,
@@ -2132,6 +2283,7 @@ function useAppDataState(
         extraCosts: extraCostsPayload,
         km: reportSnapshot.km,
         note: reportSnapshot.note,
+        stageProgress: stageProgress.length ? stageProgress : undefined,
       }).then(({ sent, errorMessage, isNetworkError }) => {
         if (!sent) {
           // isNetworkError === false znaczy, że serwer AKTYWNIE odrzucił
@@ -2187,6 +2339,10 @@ function useAppDataState(
     draftKm,
     draftNote,
     draftPeople,
+    draftStageProgress,
+    buildTechnologySnapshots,
+    isSubcontractorLead,
+    mySubcontractorBuildTeam,
     editingReportId,
     invalidate,
     materialBatches,
@@ -2714,6 +2870,11 @@ function useAppDataState(
     setDraftExtraCosts([...(report.extraCosts || [])]);
     setDraftKm(report.km != null ? String(report.km) : "");
     setDraftNote(report.note ?? "");
+    setDraftStageProgress(
+      Object.fromEntries(
+        (report.stageProgress ?? []).map((sp) => [sp.stageName, String(sp.quantity).replace(".", ",")]),
+      ),
+    );
     setReportSaved(false);
     setReportStep(1);
     setTab("report");
@@ -2750,6 +2911,7 @@ function useAppDataState(
     setDraftExtraCosts([]);
     setDraftKm("");
     setDraftNote("");
+    setDraftStageProgress({});
     setReportStep(1);
     setReportSaved(false);
     setHrSaved(false);
@@ -2773,7 +2935,7 @@ function useAppDataState(
     const numericBuildId = report ? Number(report.buildId) : NaN;
     if (!report || Number.isNaN(numericBuildId)) return;
     approveReportMutation.mutate(
-      { buildId: numericBuildId, date: report.date, status: "approved" },
+      { buildId: numericBuildId, date: report.date, status: "approved", teamId: report.teamId ?? null },
       {
         onError: (error) =>
           reportMutationError(
@@ -2868,8 +3030,15 @@ function useAppDataState(
     buildMaterialActualCost,
     builds,
     technologies: (technologiesQuery.data ?? []) as TechnologyRow[],
-    buildTechnologySnapshots: (buildTechnologySnapshotsQuery.data ??
-      []) as BuildTechnologySnapshotRow[],
+    buildTechnologySnapshots,
+    buildTeams,
+    teamSubcontractorMap,
+    isSubcontractorLead,
+    mySubcontractorBuildTeam,
+    saveBuildTeam,
+    removeBuildTeam,
+    draftStageProgress,
+    setDraftStageProgress,
     buildMaterialPlans,
     assignBuildTechnology,
     buildOrders: (buildOrdersQuery.data ?? []) as BuildOrderRow[],
@@ -3040,7 +3209,14 @@ function useAppDataState(
     buildMaterialReturnsQuery.data,
     buildOrdersQuery.data,
     buildStageStatusesQuery.data,
-    buildTechnologySnapshotsQuery.data,
+    buildTechnologySnapshots,
+    buildTeams,
+    teamSubcontractorMap,
+    isSubcontractorLead,
+    mySubcontractorBuildTeam,
+    saveBuildTeam,
+    removeBuildTeam,
+    draftStageProgress,
     builds,
     buildsView,
     cancelBuildOrder,

@@ -17,6 +17,10 @@ export type BuildTechnologySnapshotRow = {
   // Druga miara zamrożona w chwili przypisania (null = brak).
   unit2: "m2" | "mb" | "szt" | null;
   label2: string | null;
+  // Wszystkie etapy zamrożonej receptury w kolejności (także etapy bez
+  // materiałów, których nie ma w build_material_plan) — zakres etapów
+  // brygady na budowie i wykonane ilości w raporcie podwykonawcy.
+  stageNames: string[];
 };
 
 export type BuildMaterialPlanRow = {
@@ -41,10 +45,19 @@ export async function listBuildTechnologySnapshots(): Promise<BuildTechnologySna
   const { data, error } = await supabase
     .from("build_technology_snapshot")
     .select(
-      "buildId:build_id, technologyCode:technology_code, technologyName:technology_name, technologyVersion:technology_version, unit, unit2, label2",
+      "buildId:build_id, technologyCode:technology_code, technologyName:technology_name, technologyVersion:technology_version, unit, unit2, label2, snapshotJson:snapshot_json",
     );
   if (error) throw new Error(error.message);
-  return (data ?? []) as BuildTechnologySnapshotRow[];
+  return ((data ?? []) as any[]).map(({ snapshotJson, ...row }) => {
+    const stages = Array.isArray(snapshotJson) ? snapshotJson : [];
+    return {
+      ...row,
+      stageNames: [...stages]
+        .sort((a, b) => Number(a?.orderIndex ?? 0) - Number(b?.orderIndex ?? 0))
+        .map((s) => String(s?.stageName ?? ""))
+        .filter(Boolean),
+    };
+  }) as BuildTechnologySnapshotRow[];
 }
 
 export async function listBuildMaterialPlans(): Promise<BuildMaterialPlanRow[]> {

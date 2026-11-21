@@ -33,3 +33,6 @@ Szczegóły w sekcjach „Uwagi" poszczególnych kart (51 kart). Najważniejsze:
 1. Uruchomić 110 w Supabase (SQL Editor) po przeglądzie; sprawdzić NOTICE z pominięciami.
 2. Rozstrzygnąć duplikaty `ST/PU/24` (Deckshield LBD czeka na nową numerację) i `ST/EPO/4`.
 3. Powiązać nowe materiały z magazynem (`linked_material_id`) w edytorze technologii.
+
+## Migracja 111 - cokoły (druga miara)
+`supabase/sql/111_cokoly_druga_miara_powierzchnia.sql`: CT/2, CT/3, CT/5 dostają drugą miarę „Powierzchnia cokołu" (m², ilość podawana na budowie ręcznie) i dawki lakierów z kart (Peran SL 0.50, Flowshield LXP 0.50, Flowseal EPW 2 x 0.25 kg/m²) jako materiały z `basis = 'secondary'`. CT/6 i CT/7 bez zmian (karty bez dawek).

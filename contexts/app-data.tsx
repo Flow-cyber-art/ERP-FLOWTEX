@@ -68,6 +68,7 @@ import {
 } from "@/lib/data/leave";
 import {
   assignMaterialBatchesToBuild,
+  transferMaterialBetweenBuilds as transferMaterialBetweenBuildsRemote,
   unassignMaterialFromBuild,
   listBuildMaterialLots as listBuildMaterialLotsRemote,
   listBuildMaterialReturns as listBuildMaterialReturnsRemote,
@@ -75,6 +76,7 @@ import {
   type AssignMaterialBatchItem,
   type BuildMaterialLotRow,
   type BuildMaterialReturnRow,
+  type TransferMaterialInput,
 } from "@/lib/data/build-materials";
 import { generateReportClientNote } from "@/lib/data/ai-summary";
 import { useRegisterPushToken } from "@/lib/notifications/use-register-push-token";
@@ -635,7 +637,7 @@ function useAppDataState(
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: Infinity,
-    enabled: tabDataEnabled(["builds", "settlement"]),
+    enabled: tabDataEnabled(["warehouse", "builds", "settlement"]),
   });
   // Decyzje zwrot/wyrzucenie przy zamknięciu budowy (Faza 9) — do
   // wyliczenia "Straty materiałowe" w Rozliczeniu na żywo (§6,
@@ -941,6 +943,7 @@ function useAppDataState(
     } else if (tab === "warehouse") {
       invalidate("materials");
       invalidate("warehouseBatches");
+      invalidate("buildMaterialLots");
       queryClient.invalidateQueries({ queryKey: ["technologies"] });
     }
     // "reports" zasila plakietkę "ile do sprawdzenia" w PASKU NAWIGACJI —
@@ -1020,6 +1023,10 @@ function useAppDataState(
   const unassignMaterialMutation = useMutation({
     mutationFn: (vars: { buildId: number; materialId: number }) =>
       unassignMaterialFromBuild(vars.buildId, vars.materialId),
+  });
+  const transferMaterialMutation = useMutation({
+    mutationFn: (input: TransferMaterialInput) =>
+      transferMaterialBetweenBuildsRemote(input),
   });
   const completeBuildStageMutation = useMutation({
     mutationFn: (vars: { buildId: number; stageName: string }) =>
@@ -1529,6 +1536,47 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się usunąć przypisania materiału.");
     }
   }, [invalidate, unassignMaterialMutation]);
+
+  const transferMaterialBetweenBuilds = useCallback(async (input: {
+    sourceBuildId: string;
+    targetBuildId: string;
+    materialId: string;
+    quantity: number;
+    note?: string;
+  }): Promise<boolean> => {
+    const sourceBuildId = Number(input.sourceBuildId);
+    const targetBuildId = Number(input.targetBuildId);
+    const materialId = Number(input.materialId);
+    if (
+      Number.isNaN(sourceBuildId) ||
+      Number.isNaN(targetBuildId) ||
+      Number.isNaN(materialId) ||
+      !Number.isFinite(input.quantity) ||
+      input.quantity <= 0
+    ) {
+      notify("Nieprawidłowe dane", "Wybierz budowę docelową i podaj ilość większą od zera.");
+      return false;
+    }
+
+    try {
+      await transferMaterialMutation.mutateAsync({
+        sourceBuildId,
+        targetBuildId,
+        materialId,
+        quantity: input.quantity,
+        note: input.note,
+      });
+      await Promise.all([
+        invalidate("buildMaterialLots"),
+        invalidate("buildMaterials"),
+        invalidate("materials"),
+      ]);
+      return true;
+    } catch (error) {
+      reportMutationError(error, "Nie udało się przenieść materiału między budowami.");
+      return false;
+    }
+  }, [invalidate, transferMaterialMutation]);
   // Status etapu technologii (Faza 6) — wyłącznie brygadzista/admin, ręcznie.
   const completeBuildStage = useCallback(async (buildId: string, stageName: string) => {
     const numericBuildId = Number(buildId);
@@ -2935,6 +2983,7 @@ function useAppDataState(
     removeFromDraft,
     commitAssignments,
     removeBuildAssignment,
+    transferMaterialBetweenBuilds,
     saveMaterial,
     saveBuild,
     updateBuildBasicInfo,
@@ -3037,6 +3086,7 @@ function useAppDataState(
     receiveBuildOrder,
     receiveOrder,
     removeBuildAssignment,
+    transferMaterialBetweenBuilds,
     removeExtraCostFromDraft,
     removeFromDraft,
     removePersonFromDraft,

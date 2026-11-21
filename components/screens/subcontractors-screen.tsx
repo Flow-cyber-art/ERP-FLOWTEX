@@ -123,6 +123,11 @@ function SubcontractorForm({
   );
 }
 
+/** Osobna zakładka nawigacji "Podwykonawcy" (na mobile przełączana z HR). */
+export function SubcontractorsScreen() {
+  return <SubcontractorsSection />;
+}
+
 export function SubcontractorsSection() {
   const queryClient = useQueryClient();
   const { teams } = useAppData();

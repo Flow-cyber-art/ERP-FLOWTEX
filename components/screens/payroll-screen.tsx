@@ -58,8 +58,21 @@ function countBusinessDaysInRange(from: string, to: string): number {
 }
 
 export function PayrollSection() {
-  const { employees, timeEntries, leaveRequests, savedReports, workdayHours, approveReport } =
-    useAppData();
+  const {
+    employees: allEmployees,
+    timeEntries,
+    leaveRequests,
+    savedReports,
+    workdayHours,
+    approveReport,
+    subcontractorLeadEmployeeIds,
+  } = useAppData();
+  // Brygadziści podwykonawców nie są rozliczani godzinowo — firma
+  // podwykonawcy dostaje zapłatę z protokołów odbioru (113).
+  const employees = useMemo(
+    () => allEmployees.filter((e) => !subcontractorLeadEmployeeIds.has(e.id)),
+    [allEmployees, subcontractorLeadEmployeeIds],
+  );
   const [mode, setMode] = useState<PeriodMode>("month");
   const [offset, setOffset] = useState(0);
   const [view, setView] = useState<ViewMode>("list");

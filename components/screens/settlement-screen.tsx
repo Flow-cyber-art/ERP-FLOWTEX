@@ -6,6 +6,7 @@ import { ComparisonBarChart, DonutChart, KpiTile } from "@/components/charts";
 import { useAppData } from "@/contexts/app-data";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import { listMaterialIssuesForBuild, type StockMovementRow } from "@/lib/data/stock-movements";
+import { listSubcontractAcceptances } from "@/lib/data/subcontracts";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
 import { TECHNOLOGY_QUANTITY_NOUN, TECHNOLOGY_UNIT_LABEL, type TechnologyUnit } from "@/lib/data/technologies";
@@ -264,9 +265,22 @@ export function SettlementScreen() {
         .reduce((sum, r) => sum + Number(r.quantity) * Number(r.unitPrice), 0)
     : 0;
 
+  // Podwykonawcy (113) — suma protokołów odbioru tej budowy (etapy ×
+  // zamrożona stawka + prace dodatkowe − potrącenia); to samo wlicza
+  // close_build do build_settlements."subcontractCost".
+  const acceptancesQuery = useQuery({
+    queryKey: ["subcontractAcceptances", "list"],
+    queryFn: listSubcontractAcceptances,
+  });
+  const subcontractCost = build
+    ? (acceptancesQuery.data ?? [])
+        .filter((a) => a.buildId === Number(build.id))
+        .reduce((sum, a) => sum + a.total, 0)
+    : 0;
+
   const totalCost = frozen
     ? frozen.totalCost
-    : materialsCostTech + materialsCostAux + kmCost + laborCost + extraCostsTotal + wasteCost;
+    : materialsCostTech + materialsCostAux + kmCost + laborCost + extraCostsTotal + wasteCost + subcontractCost;
   const contractValue = Number(build?.contractValue) || 0;
   const profit = contractValue - totalCost;
   const margin = contractValue > 0 ? (profit / contractValue) * 100 : null;
@@ -291,8 +305,9 @@ export function SettlementScreen() {
         { key: "km", label: "Kilometrówka", value: kmCost, color: COLORS.success },
         { key: "extra", label: "Koszty dodatkowe", value: extraCostsTotal, color: COLORS.warning },
         { key: "waste", label: "Straty materiałowe", value: wasteCost, color: COLORS.danger },
+        { key: "subcontract", label: "Podwykonawcy", value: subcontractCost, color: "#D97BB0" },
       ].filter((seg) => seg.value > 0),
-    [materialsCostTech, materialsCostAux, laborCost, kmCost, extraCostsTotal, wasteCost],
+    [materialsCostTech, materialsCostAux, laborCost, kmCost, extraCostsTotal, wasteCost, subcontractCost],
   );
 
   return (
@@ -501,6 +516,9 @@ export function SettlementScreen() {
             <SummaryRow label="Koszty dodatkowe" value={formatPLN(extraCostsTotal)} />
             {wasteCost > 0 && (
               <SummaryRow label="Straty materiałowe" value={formatPLN(wasteCost)} />
+            )}
+            {subcontractCost > 0 && (
+              <SummaryRow label="Podwykonawcy (protokoły)" value={formatPLN(subcontractCost)} />
             )}
             <View
               style={{

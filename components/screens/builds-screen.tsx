@@ -27,6 +27,7 @@ import { BuildPhotosSection } from "@/components/build-photos-section";
 import { BuildPortalSection } from "@/components/build-portal-section";
 import { TechnologyPicker } from "@/components/technology-picker";
 import { BuildTeamsSection } from "@/components/build-teams-section";
+import { BuildSubcontractsSection } from "@/components/build-subcontracts-section";
 import { todayISO } from "@/components/report-ui";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
@@ -184,7 +185,7 @@ export function BuildsScreen() {
   const [expandedBuildId, setExpandedBuildId] = useState<string | null>(null);
   const [workspaceBuildId, setWorkspaceBuildId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<
-    "overview" | "materials" | "orders" | "reports" | "client" | "settlement"
+    "overview" | "materials" | "orders" | "reports" | "subcontractors" | "client" | "settlement"
   >("overview");
   // Edycja linku do zdjęć (Google Drive itp.) — jeden ekran edycji na
   // raz, wg tego samego wzorca co edycja stawki w admin-screen.tsx.
@@ -1275,6 +1276,7 @@ export function BuildsScreen() {
                   ["materials", "Materiały"],
                   ["orders", "Zamówienia"],
                   ["reports", "Raporty i zdjęcia"],
+                  ["subcontractors", "Podwykonawcy"],
                   ["client", "Portal klienta"],
                   ["settlement", "Rozliczenie"],
                 ] as const).map(([key, label]) => {
@@ -2252,7 +2254,9 @@ export function BuildsScreen() {
           })()}
 
           {/* Zawartość robocza wybranej zakładki. */}
-          {(["materials", "reports", "client", "settlement"] as const).includes(detailTab as "materials" | "reports" | "client" | "settlement") && (
+          {(["materials", "reports", "subcontractors", "client", "settlement"] as const).includes(
+            detailTab as "materials" | "reports" | "subcontractors" | "client" | "settlement",
+          ) && (
           <View
             style={{
               marginTop: 14,
@@ -2268,9 +2272,11 @@ export function BuildsScreen() {
                 ? "Materiały na budowie"
                 : detailTab === "reports"
                   ? "Raporty i dokumentacja"
-                  : detailTab === "client"
-                    ? "Portal klienta"
-                    : "Rozliczenie budowy"}
+                  : detailTab === "subcontractors"
+                    ? "Podwykonawcy — zlecenia i odbiory"
+                    : detailTab === "client"
+                      ? "Portal klienta"
+                      : "Rozliczenie budowy"}
             </Text>
           {/* Materiały dodatkowe (pomocnicze, spoza planu technologii) —
               dawniej globalny przycisk "+ Przypisz materiał" nad listą
@@ -2685,6 +2691,10 @@ export function BuildsScreen() {
             <View style={{ marginTop: 12 }}>
               <BuildPortalSection buildId={Number(b.id)} />
             </View>
+          )}
+
+          {detailTab === "subcontractors" && (
+            <BuildSubcontractsSection buildId={b.id} isClosed={isClosed} />
           )}
 
           {detailTab === "settlement" && (isClosed && b.settlement ? (

@@ -113,6 +113,7 @@ function HomeScreenInner() {
     shortages,
     reportsPendingApprovalCount,
     reportsNeedingFixCount,
+    isSubcontractorLead,
   } = useAppData();
   const shortageCount = belowMinimumMaterials.length;
   // Badge Zamówień: zamówienia już zgłoszone ("do realizacji") + braki,
@@ -430,8 +431,14 @@ function HomeScreenInner() {
               isActive: tab === "savedReports" || tab === "report",
               badgeCount: reportsNeedingFixCount,
             }),
-            routeButton("teamTime", "clock", "Czas zespołu"),
-            routeButton("leaves", "sun", "Urlopy"),
+            // Brygadzista podwykonawcy: bez "Czas zespołu" i "Urlopy" —
+            // nie raportuje godzin, a ludźmi zajmuje się jego firma.
+            ...(isSubcontractorLead
+              ? []
+              : [
+                  routeButton("teamTime", "clock", "Czas zespołu"),
+                  routeButton("leaves", "sun", "Urlopy"),
+                ]),
             routeButton("admin", "settings", "Admin"),
           ]
         : [

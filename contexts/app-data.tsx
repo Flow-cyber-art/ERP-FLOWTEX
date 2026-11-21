@@ -617,6 +617,18 @@ function useAppDataState(
     [myEmployeeId, teams, teamSubcontractorMap],
   );
   const isSubcontractorLead = mySubcontractorTeamIds.length > 0;
+  // Konta (employees.id jako string), które są liderami brygad
+  // podwykonawców — nie są rozliczane godzinowo (HR → Rozliczenie je
+  // pomija, Zespół je oznacza).
+  const subcontractorLeadEmployeeIds = useMemo(
+    () =>
+      new Set(
+        teams
+          .filter((t) => t.leadEmployeeId != null && teamSubcontractorMap.get(t.id) != null)
+          .map((t) => String(t.leadEmployeeId)),
+      ),
+    [teams, teamSubcontractorMap],
+  );
   /** Wpis brygady podwykonawcy zalogowanego brygadzisty na danej budowie. */
   const mySubcontractorBuildTeam = useCallback(
     (buildId: string | number | null | undefined): BuildTeamRow | null => {
@@ -3034,6 +3046,7 @@ function useAppDataState(
     buildTeams,
     teamSubcontractorMap,
     isSubcontractorLead,
+    subcontractorLeadEmployeeIds,
     mySubcontractorBuildTeam,
     saveBuildTeam,
     removeBuildTeam,
@@ -3213,6 +3226,7 @@ function useAppDataState(
     buildTeams,
     teamSubcontractorMap,
     isSubcontractorLead,
+    subcontractorLeadEmployeeIds,
     mySubcontractorBuildTeam,
     saveBuildTeam,
     removeBuildTeam,

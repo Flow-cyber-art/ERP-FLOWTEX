@@ -381,6 +381,7 @@ export function AdminTeamSection() {
     updateEmployeeRate,
     updateEmployeeCostRate,
     setEmployeeActive,
+    subcontractorLeadEmployeeIds,
   } = useAppData();
 
   const [newEmployee, setNewEmployee] = useState<NewEmployeeInput>(EMPTY_NEW_EMPLOYEE);
@@ -616,6 +617,7 @@ export function AdminTeamSection() {
                     </View>
                     <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 1 }}>
                       {employee.role}
+                      {subcontractorLeadEmployeeIds.has(employee.id) ? " · podwykonawca" : ""}
                       {!employee.active ? " · zarchiwizowany" : ""}
                     </Text>
                   </View>

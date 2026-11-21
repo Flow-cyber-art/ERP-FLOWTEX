@@ -86,6 +86,34 @@ export async function unassignMaterialFromBuild(
   if (error) throw new Error(error.message);
 }
 
+export type TransferMaterialInput = {
+  sourceBuildId: number;
+  targetBuildId: number;
+  materialId: number;
+  quantity: number;
+  note?: string;
+};
+
+/**
+ * Atomowy transfer FIFO między podmagazynami dwóch budów. Wyboru partii,
+ * zachowania ich cen oraz pokrycia ewentualnego niedoboru budowy docelowej
+ * pilnuje RPC. Uprawnienia są sprawdzane ponownie w bazie, niezależnie od
+ * ukrycia przycisku w interfejsie.
+ */
+export async function transferMaterialBetweenBuilds(
+  input: TransferMaterialInput,
+): Promise<string> {
+  const { data, error } = await supabase.rpc("transfer_material_between_builds", {
+    p_source_build_id: input.sourceBuildId,
+    p_target_build_id: input.targetBuildId,
+    p_material_id: input.materialId,
+    p_quantity: input.quantity,
+    p_note: input.note?.trim() || null,
+  });
+  if (error) throw new Error(error.message);
+  return String(data);
+}
+
 export type BuildMaterialLotRow = {
   id: number;
   buildId: number;

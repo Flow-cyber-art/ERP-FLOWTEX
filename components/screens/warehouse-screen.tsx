@@ -13,6 +13,7 @@ import {
   QuantityStepper,
   ScreenHeader,
   SearchField,
+  SearchablePicker,
   SegmentedControl,
   ToggleChip,
   UNIT_OPTIONS,
@@ -35,6 +36,8 @@ const EMPTY_NEW_MATERIAL: NewMaterialInput = {
 export function WarehouseScreen() {
   const {
     materials,
+    builds,
+    realRole,
     warehouseBatches,
     buildMaterialLots,
     saveMaterial,
@@ -42,6 +45,7 @@ export function WarehouseScreen() {
     updateMaterialStock,
     updateMaterialIndex,
     setMaterialActive,
+    transferMaterialBetweenBuilds,
   } = useAppData();
 
   const [query, setQuery] = useState("");
@@ -51,7 +55,8 @@ export function WarehouseScreen() {
   // podpowiadane przy dopasowaniu nazwy (materials pozostaje pełną listą),
   // tylko nie zaśmiecają widoku do codziennej pracy.
   const [showArchivedMaterials, setShowArchivedMaterials] = useState(false);
-  // Filtr "przypisania do budowy". Budowy traktujemy jak pod-magazyny:
+  // Budowy są podmagazynami. Ten sam indeks może mieć jednocześnie część
+  // zapasu w magazynie głównym i część na jednej lub wielu budowach.
   // materiał może mieć CZĘŚĆ ilości przypisaną do budowy i CZĘŚĆ nadal
   // wolną w głównym magazynie naraz (np. partia 5 szt., 2 poszły na
   // budowę, 3 zostały wolne) — to NIE jest stan wykluczający się.
@@ -69,15 +74,33 @@ export function WarehouseScreen() {
   const [assignmentFilter, setAssignmentFilter] = useState<
     "all" | "assigned" | "unassigned"
   >("all");
-  const assignedMaterialIds = useMemo(
-    () =>
-      new Set(
-        buildMaterialLots
-          .filter((l) => Number(l.quantity) > 0)
-          .map((l) => String(l.materialId)),
-      ),
-    [buildMaterialLots],
+  const [selectedSiteBuildId, setSelectedSiteBuildId] = useState<string | "all">("all");
+  const [buildPickerOpen, setBuildPickerOpen] = useState(false);
+  const [buildPickerQuery, setBuildPickerQuery] = useState("");
+  const activeBuilds = useMemo(
+    () => builds.filter((b) => b.status !== "zamknięta"),
+    [builds],
   );
+  const siteQuantityByMaterial = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const lot of buildMaterialLots) {
+      if (Number(lot.quantity) <= 0) continue;
+      if (selectedSiteBuildId !== "all" && String(lot.buildId) !== selectedSiteBuildId) continue;
+      const materialId = String(lot.materialId);
+      totals.set(materialId, (totals.get(materialId) ?? 0) + Number(lot.quantity));
+    }
+    return totals;
+  }, [buildMaterialLots, selectedSiteBuildId]);
+  const [transferSource, setTransferSource] = useState<{
+    buildId: string;
+    materialId: string;
+  } | null>(null);
+  const [transferTargetBuildId, setTransferTargetBuildId] = useState<string | null>(null);
+  const [transferQuantity, setTransferQuantity] = useState("");
+  const [transferNote, setTransferNote] = useState("");
+  const [transferPickerOpen, setTransferPickerOpen] = useState(false);
+  const [transferPickerQuery, setTransferPickerQuery] = useState("");
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
   const [showMaterial, setShowMaterial] = useState(false);
   const [newMaterial, setNewMaterial] = useState<NewMaterialInput>(EMPTY_NEW_MATERIAL);
   const filtered = useMemo(
@@ -89,10 +112,10 @@ export function WarehouseScreen() {
         )
         .filter((m) => {
           if (assignmentFilter === "all") return true;
-          if (assignmentFilter === "assigned") return assignedMaterialIds.has(m.id);
+          if (assignmentFilter === "assigned") return (siteQuantityByMaterial.get(m.id) ?? 0) > 0;
           return m.stock > 0;
         }),
-    [materials, query, showArchivedMaterials, assignmentFilter, assignedMaterialIds],
+    [materials, query, showArchivedMaterials, assignmentFilter, siteQuantityByMaterial],
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
@@ -293,19 +316,80 @@ export function WarehouseScreen() {
       <SegmentedControl
         options={[
           { key: "all", label: "Wszystkie" },
-          { key: "assigned", label: "Przypisane" },
-          { key: "unassigned", label: "Nieprzypisane" },
+          { key: "unassigned", label: "W magazynie" },
+          { key: "assigned", label: "Na budowach" },
         ] as const}
         value={assignmentFilter}
         onChange={setAssignmentFilter}
       />
     </View>
+    {assignmentFilter === "assigned" && (
+      <>
+        <Pressable
+          onPress={() => {
+            setBuildPickerQuery("");
+            setBuildPickerOpen(true);
+          }}
+          className="bg-surface border border-border rounded-card"
+          style={{
+            marginTop: 10,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>Budowa</Text>
+            <Text style={{ color: COLORS.foreground, fontWeight: "700", marginTop: 2 }} numberOfLines={1}>
+              {selectedSiteBuildId === "all"
+                ? "Wszystkie aktywne budowy"
+                : (() => {
+                    const build = builds.find((b) => b.id === selectedSiteBuildId);
+                    return build ? `${build.number} · ${build.name}` : "Wszystkie aktywne budowy";
+                  })()}
+            </Text>
+          </View>
+          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>Zmień</Text>
+        </Pressable>
+        <SearchablePicker
+          visible={buildPickerOpen}
+          onClose={() => setBuildPickerOpen(false)}
+          query={buildPickerQuery}
+          onQueryChange={setBuildPickerQuery}
+          placeholder="Szukaj budowy..."
+          selectedKey={selectedSiteBuildId}
+          onSelect={(key) => {
+            setSelectedSiteBuildId(key as string | "all");
+            setBuildPickerOpen(false);
+          }}
+          items={[
+            { key: "all", title: "Wszystkie aktywne budowy" },
+            ...activeBuilds
+              .filter((b) => {
+                const q = buildPickerQuery.trim().toLowerCase();
+                return !q || `${b.number} ${b.name} ${b.address ?? ""}`.toLowerCase().includes(q);
+              })
+              .map((b) => ({
+                key: b.id,
+                title: `${b.number} · ${b.name}`,
+                subtitle: b.address ?? undefined,
+              })),
+          ]}
+        />
+      </>
+    )}
     {isWide && filtered.length > 0 && (
       <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
         <Text style={{ flex: 1, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>
           Materiał
         </Text>
-        {["Minimum", "Cena", "Stan"].map((h) => (
+        {[
+          assignmentFilter === "assigned" ? "Budowy" : "Minimum",
+          "Cena",
+          assignmentFilter === "assigned" ? "Na budowach" : "Stan",
+        ].map((h) => (
           <Text
             key={h}
             style={{ width: 110, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}
@@ -321,6 +405,39 @@ export function WarehouseScreen() {
         const batchCount = warehouseBatches.filter(
           (b) => String(b.materialId) === m.id,
         ).length;
+        const displayedQuantity = assignmentFilter === "assigned"
+          ? siteQuantityByMaterial.get(m.id) ?? 0
+          : m.stock;
+        const belowMinimum = assignmentFilter !== "assigned" && m.stock <= m.min;
+        const siteRows = builds
+          .filter((b) => b.status !== "zamknięta")
+          .map((build) => ({
+            build,
+            quantity: buildMaterialLots
+              .filter(
+                (lot) =>
+                  String(lot.buildId) === build.id &&
+                  String(lot.materialId) === m.id &&
+                  Number(lot.quantity) > 0,
+              )
+              .reduce((sum, lot) => sum + Number(lot.quantity), 0),
+          }))
+          .filter(
+            ({ build, quantity }) =>
+              quantity > 0 &&
+              (selectedSiteBuildId === "all" || build.id === selectedSiteBuildId),
+          );
+        const scopedSiteLots = buildMaterialLots.filter(
+          (lot) =>
+            String(lot.materialId) === m.id &&
+            Number(lot.quantity) > 0 &&
+            (selectedSiteBuildId === "all" || String(lot.buildId) === selectedSiteBuildId),
+        );
+        const siteValue = scopedSiteLots.reduce(
+          (sum, lot) => sum + Number(lot.quantity) * Number(lot.unitPrice),
+          0,
+        );
+        const siteAveragePrice = displayedQuantity > 0 ? siteValue / displayedQuantity : 0;
         return (
         <View
           key={m.id}
@@ -353,10 +470,12 @@ export function WarehouseScreen() {
                   </Text>
                 </View>
                 <Text style={{ width: 110, textAlign: "right", color: COLORS.muted, fontSize: 13 }}>
-                  {m.min} {m.unit}
+                  {assignmentFilter === "assigned"
+                    ? `${siteRows.length} ${siteRows.length === 1 ? "budowa" : "budowy"}`
+                    : `${m.min} ${m.unit}`}
                 </Text>
                 <Text style={{ width: 110, textAlign: "right", color: COLORS.foreground, fontSize: 13 }}>
-                  {formatPLN(m.unitPrice || 0)}/{m.unit}
+                  {formatPLN(assignmentFilter === "assigned" ? siteAveragePrice : m.unitPrice || 0)}/{m.unit}
                 </Text>
                 {/* Kolor ostrzeżenia = konkretny sygnał "stan na/poniżej
                     minimum", nie dekoracja; złoto zostaje dla akcji. */}
@@ -366,10 +485,10 @@ export function WarehouseScreen() {
                     textAlign: "right",
                     fontSize: 15,
                     fontWeight: "700",
-                    color: m.stock <= m.min ? COLORS.warning : COLORS.foreground,
+                    color: belowMinimum ? COLORS.warning : COLORS.foreground,
                   }}
                 >
-                  {m.stock} {m.unit}
+                  {displayedQuantity} {m.unit}
                 </Text>
                 <View style={{ width: 36, alignItems: "flex-end" }}>
                   <Icon
@@ -396,10 +515,12 @@ export function WarehouseScreen() {
                 pozycjami, bo są zawsze w tym samym miejscu. */}
             <View className="items-end pr-3">
               <Text className="text-xs text-muted">
-                min {m.min} {m.unit}
+                {assignmentFilter === "assigned"
+                  ? `${siteRows.length} ${siteRows.length === 1 ? "budowa" : "budowy"}`
+                  : `min ${m.min} ${m.unit}`}
               </Text>
               <Text className="text-xs text-muted mt-0.5">
-                {formatPLN(m.unitPrice || 0)}/{m.unit}
+                {formatPLN(assignmentFilter === "assigned" ? siteAveragePrice : m.unitPrice || 0)}/{m.unit}
               </Text>
             </View>
             <View className="items-end" style={{ minWidth: 44 }}>
@@ -407,9 +528,9 @@ export function WarehouseScreen() {
                   nie dekoracja — standardowy kolor, gdy stan jest OK. */}
               <Text
                 className="text-lg font-bold"
-                style={{ color: m.stock <= m.min ? COLORS.warning : COLORS.foreground }}
+                style={{ color: belowMinimum ? COLORS.warning : COLORS.foreground }}
               >
-                {m.stock}
+                {displayedQuantity}
               </Text>
               <Text className="text-xs text-muted">{m.unit}</Text>
             </View>
@@ -418,6 +539,181 @@ export function WarehouseScreen() {
           </Pressable>
           {editingId === m.id && (
             <View className="px-4 pb-4">
+              {assignmentFilter === "assigned" && (
+                <DetailSection
+                  label="Stan na budowach"
+                  count={siteRows.length}
+                  style={{ marginTop: 0, marginBottom: 14 }}
+                >
+                  {siteRows.map(({ build, quantity }) => {
+                    const transferOpen =
+                      transferSource?.buildId === build.id &&
+                      transferSource.materialId === m.id;
+                    const targetBuild = builds.find((b) => b.id === transferTargetBuildId);
+                    return (
+                      <View
+                        key={build.id}
+                        style={{
+                          paddingVertical: 10,
+                          borderBottomWidth: 1,
+                          borderBottomColor: COLORS.border,
+                        }}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{ color: COLORS.foreground, fontSize: 13, fontWeight: "700" }} numberOfLines={1}>
+                              {build.number} · {build.name}
+                            </Text>
+                            <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                              {quantity} {m.unit}
+                            </Text>
+                          </View>
+                          {realRole === "Admin" && (
+                            <Pressable
+                              onPress={() => {
+                                if (transferOpen) {
+                                  setTransferSource(null);
+                                } else {
+                                  setTransferSource({ buildId: build.id, materialId: m.id });
+                                  setTransferTargetBuildId(null);
+                                  setTransferQuantity("");
+                                  setTransferNote("");
+                                }
+                              }}
+                              style={({ pressed }) => ({
+                                borderWidth: 1,
+                                borderColor: COLORS.border,
+                                borderRadius: RADIUS.control,
+                                paddingHorizontal: 10,
+                                paddingVertical: 7,
+                                opacity: pressed ? 0.7 : 1,
+                              })}
+                            >
+                              <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                                {transferOpen ? "Anuluj" : "Przenieś"}
+                              </Text>
+                            </Pressable>
+                          )}
+                        </View>
+
+                        {transferOpen && (
+                          <View
+                            style={{
+                              marginTop: 12,
+                              padding: 12,
+                              backgroundColor: COLORS.background,
+                              borderRadius: RADIUS.control,
+                            }}
+                          >
+                            <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 6 }}>
+                              Do budowy
+                            </Text>
+                            <Pressable
+                              onPress={() => {
+                                setTransferPickerQuery("");
+                                setTransferPickerOpen(true);
+                              }}
+                              style={{
+                                borderWidth: 1,
+                                borderColor: COLORS.border,
+                                borderRadius: RADIUS.control,
+                                paddingHorizontal: 12,
+                                paddingVertical: 11,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                              }}
+                            >
+                              <Text style={{ color: targetBuild ? COLORS.foreground : COLORS.muted, fontSize: 13, fontWeight: "600" }} numberOfLines={1}>
+                                {targetBuild
+                                  ? `${targetBuild.number} · ${targetBuild.name}`
+                                  : "Wybierz budowę docelową"}
+                              </Text>
+                              <Icon name="chevron-down" size={18} color={COLORS.muted} />
+                            </Pressable>
+                            <SearchablePicker
+                              visible={transferPickerOpen}
+                              onClose={() => setTransferPickerOpen(false)}
+                              query={transferPickerQuery}
+                              onQueryChange={setTransferPickerQuery}
+                              placeholder="Szukaj budowy docelowej..."
+                              selectedKey={transferTargetBuildId ?? undefined}
+                              onSelect={(key) => {
+                                setTransferTargetBuildId(key);
+                                setTransferPickerOpen(false);
+                              }}
+                              items={activeBuilds
+                                .filter((candidate) => candidate.id !== build.id)
+                                .filter((candidate) => {
+                                  const q = transferPickerQuery.trim().toLowerCase();
+                                  return !q || `${candidate.number} ${candidate.name} ${candidate.address ?? ""}`.toLowerCase().includes(q);
+                                })
+                                .map((candidate) => ({
+                                  key: candidate.id,
+                                  title: `${candidate.number} · ${candidate.name}`,
+                                  subtitle: candidate.address ?? undefined,
+                                }))}
+                            />
+
+                            <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 12, marginBottom: 6 }}>
+                              Ilość · dostępne {quantity} {m.unit}
+                            </Text>
+                            <QuantityStepper
+                              value={transferQuantity}
+                              onChangeText={setTransferQuantity}
+                              min={0}
+                              unit={m.unit}
+                            />
+                            <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 12, marginBottom: 6 }}>
+                              Uwaga opcjonalna
+                            </Text>
+                            <Field
+                              value={transferNote}
+                              onChangeText={setTransferNote}
+                              placeholder="Np. nadwyżka po zakończeniu etapu"
+                            />
+                            <View style={{ marginTop: 12 }}>
+                              <Button
+                                label={transferSubmitting ? "Przenoszenie..." : "Przenieś materiał"}
+                                fullWidth
+                                disabled={
+                                  transferSubmitting ||
+                                  !transferTargetBuildId ||
+                                  Number(transferQuantity) <= 0 ||
+                                  Number(transferQuantity) > quantity
+                                }
+                                onPress={async () => {
+                                  if (!transferTargetBuildId) return;
+                                  setTransferSubmitting(true);
+                                  const success = await transferMaterialBetweenBuilds({
+                                    sourceBuildId: build.id,
+                                    targetBuildId: transferTargetBuildId,
+                                    materialId: m.id,
+                                    quantity: Number(transferQuantity),
+                                    note: transferNote,
+                                  });
+                                  setTransferSubmitting(false);
+                                  if (success) {
+                                    setTransferSource(null);
+                                    setTransferTargetBuildId(null);
+                                    setTransferQuantity("");
+                                    setTransferNote("");
+                                  }
+                                }}
+                              />
+                            </View>
+                            <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 8 }}>
+                              Partie zostaną pobrane automatycznie według FIFO.
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </DetailSection>
+              )}
+              {assignmentFilter !== "assigned" && (
+                <>
               {(() => {
                 // Faza 4 — realne partie z bazy (data, ilość dostępna,
                 // cena, dokument, dostawca), zamiast wcześniejszej
@@ -556,6 +852,8 @@ export function WarehouseScreen() {
                   }}
                 />
               </View>
+                </>
+              )}
             </View>
           )}
         </View>

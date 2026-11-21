@@ -55,6 +55,8 @@ export type PendingReportSubmission = {
   km?: number;
   // Notatka do raportu (Decyzja B) — patrz submitDailyReport w lib/data/reports.ts.
   note?: string;
+  // Wykonana ilość per etap (raport brygadzisty podwykonawcy, 112).
+  stageProgress?: { stageName: string; quantity: number; unit: string }[];
   /** Kiedy dodane do kolejki lokalnie — do sortowania i debugowania. */
   queuedAt: string;
   /** Liczba nieudanych prób — do prostego backoffu / ostrzeżenia w UI. */
@@ -175,6 +177,7 @@ export async function flushOutbox(): Promise<{
           extraCosts: item.extraCosts,
           km: item.km,
           note: item.note,
+          stageProgress: item.stageProgress,
         });
         succeededKeys.push(reportKey(item));
         // Push do Adminów "na bieżąco" — best-effort, patrz komentarz na

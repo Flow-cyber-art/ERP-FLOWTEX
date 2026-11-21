@@ -51,6 +51,16 @@ export type SubmitDailyReportInput = {
   km?: number;
   // Notatka do raportu (Decyzja B) — jedna, dowolna, czysto informacyjna.
   note?: string;
+  // Wykonana ilość per etap — raport brygadzisty podwykonawcy (patrz
+  // supabase/sql/112_podwykonawcy_raport_i_brygady_budowy.sql). Baza
+  // przyjmuje tylko etapy z zakresu jego brygady na tej budowie.
+  stageProgress?: SubmitReportStageProgress[];
+};
+
+export type SubmitReportStageProgress = {
+  stageName: string;
+  quantity: number;
+  unit: string;
 };
 
 export type SubmitDailyReportResult = {
@@ -98,6 +108,7 @@ export async function submitDailyReport(
     p_extra_costs: input.extraCosts,
     p_km: input.km || null,
     p_note: input.note?.trim() || null,
+    p_stage_progress: input.stageProgress?.length ? input.stageProgress : null,
   });
   if (error) throw new SupabaseRpcError(error.message, error.code);
   const result = data as {
@@ -114,18 +125,25 @@ export async function submitDailyReport(
   };
 }
 
-/** Zatwierdzenie / odesłanie do poprawy raportu po (buildId, date). */
+/**
+ * Zatwierdzenie / odesłanie do poprawy raportu po (buildId, date, brygada)
+ * — od 112 tego samego dnia na budowie może być raport brygady własnej
+ * (teamId = null) i osobny raport każdej brygady podwykonawcy.
+ */
 export async function updateReportStatus(
   buildId: number,
   date: string,
   status: "approved" | "do_poprawy",
   adminComment?: string,
+  teamId: number | null = null,
 ): Promise<void> {
-  const { error } = await supabase
+  let query = supabase
     .from("reports")
     .update({ status, adminComment: adminComment ?? null, updatedAt: new Date().toISOString() })
     .eq("buildId", buildId)
     .eq("date", date);
+  query = teamId == null ? query.is("team_id", null) : query.eq("team_id", teamId);
+  const { error } = await query;
   if (error) throw new Error(error.message);
 }
 
@@ -142,6 +160,9 @@ export type ReportRow = {
   submittedByProfileId: string | null;
   note: string | null;
   clientNote: string | null;
+  /** Brygada podwykonawcy, która wysłała raport (null = brygada własna). */
+  teamId: number | null;
+  report_stage_progress: { stageName: string; quantity: string; unit: string }[];
   builds: { number: string; name: string } | null;
   report_materials: {
     materialId: number;
@@ -164,6 +185,8 @@ const REPORT_SELECT = `
   id, buildId, date, status, adminComment, updatedAt, km, kmRateApplied, kmCost,
   submittedByProfileId, note,
   clientNote:client_note,
+  teamId:team_id,
+  report_stage_progress ( stageName:stage_name, quantity, unit ),
   builds ( number, name ),
   report_materials ( materialId, usedQuantity, cost, reason, stageName:stage_name ),
   report_people ( employeeId, start, end ),

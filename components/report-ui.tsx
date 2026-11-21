@@ -1115,11 +1115,13 @@ const REPORT_STEPS: { n: 1 | 2 | 3; label: string }[] = [
 // FIX: w key brakowalo otwierajacej klamry przed template literalem
 // (było: key=backtick..., miało być: key={backtick...}), co całkowicie
 // psuło parsowanie JSX i wywalało cały plik.
-const ReportStepper = ({ step }: { step: 1 | 2 | 3 }) => (
+// `labels` — własne nazwy kroków (np. raport podwykonawcy: krok 2 to
+// "Wykonane" zamiast "Zespół"); domyślnie REPORT_STEPS.
+const ReportStepper = ({ step, labels }: { step: 1 | 2 | 3; labels?: [string, string, string] }) => (
   <View
     style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 20 }}
   >
-    {REPORT_STEPS.flatMap((s, i) => {
+    {REPORT_STEPS.map((s, i) => (labels ? { ...s, label: labels[i] } : s)).flatMap((s, i) => {
       const circle = (
         <View key={`c${s.n}`} style={{ alignItems: "center", width: 76 }}>
           <View
@@ -1294,7 +1296,11 @@ export type ReportCardData = {
   // Gemini uznało notatkę za niepokazywalną klientowi (same skargi/brak
   // treści); undefined = jeszcze nie generowana.
   clientNote?: string | null;
+  // Raport brygady podwykonawcy (112): wykonana ilość per etap.
+  stageProgress?: { stageName: string; quantity: number; unit: string }[];
 };
+
+const PROGRESS_UNIT_LABEL: Record<string, string> = { m2: "m²", mb: "mb", szt: "szt" };
 
 // Jedna karta raportu dziennego, używana zarówno w globalnej skrzynce
 // "Raporty" (przekrojowo po wszystkich budowach) jak i w szczegółach
@@ -1508,6 +1514,7 @@ const ReportCard = ({
   onApprove,
   showBuildInfo = true,
   showClientNoteStatus = false,
+  subcontractorTeamName = null,
 }: {
   report: ReportCardData;
   build?: Build;
@@ -1535,8 +1542,15 @@ const ReportCard = ({
   // wyłącznie w widoku Admina (builds-screen.tsx), nie w "Moje raporty"
   // brygadzisty, gdzie ta informacja nie ma znaczenia.
   showClientNoteStatus?: boolean;
+  // Nazwa brygady podwykonawcy, jeśli raport jest od niej (null = brygada
+  // własna) — zamiast liczby osób, której podwykonawca nie raportuje.
+  subcontractorTeamName?: string | null;
 }) => {
   const isWide = useWideLayout();
+  const progress = report.stageProgress ?? [];
+  const whoLabel = subcontractorTeamName
+    ? `Podwykonawca: ${subcontractorTeamName}`
+    : `${report.people.length} ${pluralPL(report.people.length, "osoba", "osoby", "osób")}`;
   const approved = report.status === "approved";
   const planned = assignments.filter((a) => a.buildId === build?.id);
   const plansForBuild = buildMaterialPlans.filter((p) => p.buildId === Number(build?.id));
@@ -1577,7 +1591,7 @@ const ReportCard = ({
           </View>
           <Text style={{ width: 110, color: COLORS.foreground, fontSize: 13 }}>{report.date}</Text>
           <Text style={{ flex: 2, color: COLORS.muted, fontSize: 13 }}>
-            {report.people.length} {pluralPL(report.people.length, "osoba", "osoby", "osób")} ·{" "}
+            {whoLabel} ·{" "}
             {Object.keys(report.materialValues).length}{" "}
             {pluralPL(Object.keys(report.materialValues).length, "materiał", "materiały", "materiałów")}
           </Text>
@@ -1618,8 +1632,7 @@ const ReportCard = ({
             }}
           >
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-              {report.people.length}{" "}
-              {pluralPL(report.people.length, "osoba", "osoby", "osób")} ·{" "}
+              {whoLabel} ·{" "}
               {Object.keys(report.materialValues).length}{" "}
               {pluralPL(
                 Object.keys(report.materialValues).length,
@@ -1653,6 +1666,33 @@ const ReportCard = ({
               to samo "MATERIAŁY / KOSZTY / ZESPÓŁ" jedno pod drugim bez
               oddechu sprawiało, że całość czytała się jak jeden nierozróżnialny
               blob, mimo że treściowo to cztery różne grupy informacji. */}
+          {(subcontractorTeamName || progress.length > 0) && (
+            <DetailSection label="Wykonane" count={progress.length}>
+              {progress.length === 0 ? (
+                <Text className="text-sm text-muted py-1">
+                  Nie zgłoszono wykonanych ilości.
+                </Text>
+              ) : (
+                progress.map((row, i) => (
+                  <View
+                    key={row.stageName}
+                    className={`flex-row items-center justify-between py-2 ${i > 0 ? "border-t border-border" : ""}`}
+                  >
+                    <Text
+                      className="text-sm text-foreground"
+                      numberOfLines={1}
+                      style={{ flex: 1, minWidth: 0, marginRight: 8 }}
+                    >
+                      {row.stageName}
+                    </Text>
+                    <Text className="text-sm font-bold text-foreground">
+                      {row.quantity.toLocaleString("pl-PL")} {PROGRESS_UNIT_LABEL[row.unit] ?? row.unit}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </DetailSection>
+          )}
           <DetailSection label="Materiały" count={Object.keys(report.materialValues).length}>
             {Object.keys(report.materialValues).length === 0 ? (
               <Text className="text-sm text-muted py-1">
@@ -1973,6 +2013,7 @@ const ReportCard = ({
             </DetailSection>
           )}
 
+          {!subcontractorTeamName && (
           <DetailSection
             label="Zespół"
             count={`${report.people.length} ${pluralPL(report.people.length, "osoba", "osoby", "osób")} · ${totalHours.toFixed(2)} godz.`}
@@ -2008,6 +2049,7 @@ const ReportCard = ({
               })
             )}
           </DetailSection>
+          )}
 
           {report.note && (
             <View

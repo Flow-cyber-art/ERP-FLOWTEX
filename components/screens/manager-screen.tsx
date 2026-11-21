@@ -43,6 +43,7 @@ export function ManagerScreen() {
     approveReport,
     employees,
     materials,
+    teams,
   } = useAppData();
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -153,6 +154,7 @@ export function ManagerScreen() {
               {pendingReports.map((report) => (
                 <ReportCard
                   key={report.id}
+                  subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
                   report={report}
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}
@@ -185,6 +187,7 @@ export function ManagerScreen() {
               {approvedReports.map((report) => (
                 <ReportCard
                   key={report.id}
+                  subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
                   report={report}
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}

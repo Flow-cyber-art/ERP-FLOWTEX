@@ -11,7 +11,7 @@ Porównanie z: `supabase/sql/` (094, 095, 099, 101, 106, 107) i `lib/data/techno
   - `ST/PU/24`: ten sam kod w dwóch kartach (Flowfresh SF 3 mm oraz Deckshield LBD 5-6 mm). ERP trzyma tylko Flowfresh SF 3 mm. LBD czeka na nową numerację (komentarz w 101).
   - `ST/EPO/4`: dwie karty (TIKSO i ściany pionowe) pod jednym kodem; ERP linkuje wersję „OK".
   - Nazwy materiałów różnią się zapisem (np. „Masa poliuretanowa Boll" vs „Poliuretanowa masa uszczelniająca Boll"; beton C25/30 w WL/K/1 jest w ERP jako materiał).
-- **ACO/K/2 (wzorzec z zadania):** źródło podaje SikaGrout-314 jako 2.20 kg/dm³, wzorzec użytkownika 2.2 kg/mb - do decyzji, jaka jednostka ma być w ERP.
+- **ACO/K/2 (wzorzec z zadania):** źródło podaje SikaGrout-314 jako 2.20 kg/dm³; ERP (095) trzyma 2.20 kg na jednostkę technologii (mb), zgodnie ze wzorcem użytkownika. Rozstrzygnięte: zostaje 2.2 kg/mb.
 - **Jednostki (106):** `N/1, N/2, N/3, N/8, N/12, P/2` jako mb - zgodne z kartami (dawki na mb rysy/dylatacji). `N/13` i `ST/S/1` czekają na decyzję.
 
 ## Anomalie w źródłach (do poprawy w Księdze)
@@ -22,7 +22,14 @@ Szczegóły w sekcjach „Uwagi" poszczególnych kart (51 kart). Najważniejsze:
 - Jedna z kopii P/12 w `WL_K_1` zawiera treść karty ACO/K/2.
 - Brakujące numery faz: P/1, N/2, P/10, SP/EPO/1, ST/S/1.
 
-## Proponowane kolejne kroki
-1. Decyzja: jednostka SikaGrout-314 (kg/dm³ vs kg/mb) i dawki `ACO/K/1, ACO/K/2, ACO/W/1`.
-2. Wygenerować migrację SQL (następna po 109) z etapami/materiałami dla ~78 technologii bez receptury, z kart md (kolumna Warstwa = etap, Materiał, Dawka).
-3. Dodać `P/6`, `P/12`, `ST/PU/25` do katalogu, rozstrzygnąć duplikaty `ST/PU/24`, `ST/EPO/4`.
+## Wdrożone brakujące (migracja 110)
+`supabase/sql/110_receptury_z_ksiegi_technicznej.sql` (idempotentna, test na lokalnym Postgresie: 2 uruchomienia = ten sam stan):
+- dodaje 3 brakujące technologie: `P/6`, `P/12` (mb), `ST/PU/25` + wpis do pilotażu ofert,
+- zakłada etapy i materiały z kart dla 81 technologii bez receptury (277 pozycji z dawką); technologie, które mają już etapy, nie są ruszane,
+- dawka trafia do bazy tylko gdy jej mianownik (m²/mb) zgadza się z `technologies.unit`; niezgodne są pomijane z `NOTICE` (np. cokoły rozliczane w mb z dawką w kg/m²: CT/3 - do ręcznej decyzji, czy dodać drugą miarę),
+- pominięte w całości (brak dawki w liczbach): CS/1, CT/6, CT/7 (proporcje/opakowania), „klamry co 20 cm" w N/1.
+
+## Dalsze kroki
+1. Uruchomić 110 w Supabase (SQL Editor) po przeglądzie; sprawdzić NOTICE z pominięciami.
+2. Rozstrzygnąć duplikaty `ST/PU/24` (Deckshield LBD czeka na nową numerację) i `ST/EPO/4`.
+3. Powiązać nowe materiały z magazynem (`linked_material_id`) w edytorze technologii.

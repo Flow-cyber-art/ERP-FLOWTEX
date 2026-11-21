@@ -27,6 +27,7 @@ import {
   setSubcontractorActive,
   setTeamSubcontractor,
   updateSubcontractor,
+  type SaveRateInput,
   type SubcontractorInput,
   type SubcontractorRateRow,
   type SubcontractorRow,
@@ -154,6 +155,10 @@ export function SubcontractorsSection() {
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [newSub, setNewSub] = useState<SubcontractorInput>(EMPTY_SUBCONTRACTOR);
+  // Stawki dodawane od razu w formularzu nowej firmy — zapisywane razem z
+  // nią (firma najpierw, bo stawka potrzebuje jej id).
+  const [newRates, setNewRates] = useState<RateDraft[]>([]);
+  const [newRateFormOpen, setNewRateFormOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -223,19 +228,128 @@ export function SubcontractorsSection() {
       {addOpen && (
         <View className="bg-surface border border-border rounded-card p-4 mb-3">
           <SubcontractorForm value={newSub} onChange={setNewSub} />
-          <View style={{ marginTop: 10 }}>
+
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 16,
+              marginBottom: 8,
+            }}
+          >
+            <Text className="text-xs text-muted uppercase">
+              Stawki za etap (netto){newRates.length ? ` · ${newRates.length}` : ""}
+            </Text>
+            <Pressable onPress={() => setNewRateFormOpen(!newRateFormOpen)}>
+              <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+                {newRateFormOpen ? "Anuluj" : "+ Dodaj stawkę"}
+              </Text>
+            </Pressable>
+          </View>
+          {newRates.length === 0 && !newRateFormOpen && (
+            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+              Opcjonalnie — stawki możesz dodać teraz albo później na karcie firmy.
+            </Text>
+          )}
+          {newRates.map((r) => {
+            const techName = technologies.find((t) => t.code === r.technologyCode)?.name;
+            return (
+              <View
+                key={rateDraftKey(r)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  paddingVertical: 6,
+                  borderTopWidth: 1,
+                  borderTopColor: COLORS.border,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ color: COLORS.foreground, fontSize: 13 }} numberOfLines={1}>
+                    {r.technologyCode}
+                    {techName ? ` · ${techName}` : ""}
+                  </Text>
+                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                    {r.stageName ?? "Cała technologia"}
+                  </Text>
+                </View>
+                <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
+                  {formatPLN(r.rate)}/{TECHNOLOGY_UNIT_LABEL[r.unit]}
+                </Text>
+                <Pressable
+                  onPress={() =>
+                    setNewRates(newRates.filter((x) => rateDraftKey(x) !== rateDraftKey(r)))
+                  }
+                >
+                  <Text style={{ color: COLORS.danger, fontSize: 12, fontWeight: "700" }}>
+                    Usuń
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+          {newRateFormOpen && (
+            <View style={{ marginTop: 8 }}>
+              <RateForm
+                technologies={technologies}
+                existing={null}
+                busy={busy}
+                submitLabel="Dodaj do listy"
+                onSubmit={(draft) => {
+                  // Ta sama technologia + etap drugi raz = nadpisanie stawki.
+                  setNewRates([
+                    ...newRates.filter((x) => rateDraftKey(x) !== rateDraftKey(draft)),
+                    draft,
+                  ]);
+                  return true;
+                }}
+                onDone={() => setNewRateFormOpen(false)}
+              />
+            </View>
+          )}
+
+          <View style={{ marginTop: 14 }}>
             <Button
-              label="Dodaj podwykonawcę"
+              label={
+                newRates.length
+                  ? `Dodaj podwykonawcę i ${newRates.length} ${pluralPL(newRates.length, "stawkę", "stawki", "stawek")}`
+                  : "Dodaj podwykonawcę"
+              }
               disabled={busy}
               onPress={async () => {
                 if (!newSub.name.trim()) {
                   notify("Uzupełnij wymagane pola", "Nazwa firmy");
                   return;
                 }
-                const ok = await run(() => createSubcontractor(newSub), [SUBS_KEY]);
-                if (ok) {
+                let createdId: number | null = null;
+                const ok = await run(async () => {
+                  const id = await createSubcontractor(newSub);
+                  createdId = id;
+                  try {
+                    for (const r of newRates) {
+                      await saveSubcontractorRate({ ...r, id: undefined, subcontractorId: id });
+                    }
+                  } catch (err) {
+                    // Firma już jest — nie gubimy jej przez błąd stawki.
+                    setExpandedId(id);
+                    throw new Error(
+                      `Podwykonawca został dodany, ale nie wszystkie stawki się zapisały (${errorMessage(err)}). Uzupełnij je na karcie firmy.`,
+                    );
+                  }
+                }, [SUBS_KEY, RATES_KEY]);
+                // Firma zapisana (nawet gdy padła któraś stawka) = formularz
+                // się zamyka, żeby ponowne "Dodaj" nie utworzyło duplikatu.
+                if (ok || createdId !== null) {
                   setNewSub(EMPTY_SUBCONTRACTOR);
+                  setNewRates([]);
+                  setNewRateFormOpen(false);
                   setAddOpen(false);
+                }
+                if (!ok && createdId !== null) {
+                  await queryClient.invalidateQueries({ queryKey: [...SUBS_KEY] });
+                  await queryClient.invalidateQueries({ queryKey: [...RATES_KEY] });
                 }
               }}
             />
@@ -538,11 +652,12 @@ function SubcontractorDetails({
       {rateFormOpen && (
         <RateForm
           key={editingRate?.id ?? "new"}
-          subcontractorId={sub.id}
           technologies={technologies}
           existing={editingRate}
           busy={busy}
-          run={run}
+          onSubmit={(draft) =>
+            run(() => saveSubcontractorRate({ ...draft, subcontractorId: sub.id }), [RATES_KEY])
+          }
           onDone={() => {
             setRateFormOpen(false);
             setEditingRate(null);
@@ -624,20 +739,28 @@ function SubcontractorDetails({
 const WHOLE_TECHNOLOGY = "__whole__";
 const UNITS: TechnologyUnit[] = ["m2", "mb", "szt"];
 
+/** Stawka z formularza, jeszcze bez podwykonawcy (przy dodawaniu nowej
+ * firmy zbierana lokalnie i zapisywana razem z nią). */
+type RateDraft = Omit<SaveRateInput, "subcontractorId">;
+
+const rateDraftKey = (r: { technologyCode: string; stageName: string | null }) =>
+  `${r.technologyCode}::${r.stageName ?? ""}`;
+
 function RateForm({
-  subcontractorId,
   technologies,
   existing,
   busy,
-  run,
+  onSubmit,
   onDone,
+  submitLabel = "Zapisz stawkę",
 }: {
-  subcontractorId: number;
   technologies: TechnologyRow[];
-  existing: SubcontractorRateRow | null;
+  existing: (RateDraft & { technologyCode: string }) | null;
   busy: boolean;
-  run: RunFn;
+  /** true = stawka przyjęta, formularz się zamyka. */
+  onSubmit: (draft: RateDraft) => Promise<boolean> | boolean;
   onDone: () => void;
+  submitLabel?: string;
 }) {
   const [techId, setTechId] = useState<number | null>(
     existing ? technologies.find((t) => t.code === existing.technologyCode)?.id ?? null : null,
@@ -737,7 +860,7 @@ function RateForm({
       <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
         <View style={{ flex: 1 }}>
           <Button
-            label="Zapisz stawkę"
+            label={submitLabel}
             disabled={busy || !technologyCode}
             onPress={async () => {
               const amount = parseAmount(rate);
@@ -749,19 +872,14 @@ function RateForm({
                 notify("Uzupełnij wymagane pola", missing.join(", "));
                 return;
               }
-              const ok = await run(
-                () =>
-                  saveSubcontractorRate({
-                    id: existing?.id,
-                    subcontractorId,
-                    technologyCode: technologyCode!,
-                    stageName: stage === WHOLE_TECHNOLOGY ? null : stage,
-                    unit,
-                    rate: amount!,
-                    note,
-                  }),
-                [RATES_KEY],
-              );
+              const ok = await onSubmit({
+                id: existing?.id,
+                technologyCode: technologyCode!,
+                stageName: stage === WHOLE_TECHNOLOGY ? null : stage,
+                unit,
+                rate: amount!,
+                note,
+              });
               if (ok) onDone();
             }}
           />

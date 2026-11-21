@@ -55,9 +55,15 @@ export async function listSubcontractors(): Promise<SubcontractorRow[]> {
   return (data ?? []) as unknown as SubcontractorRow[];
 }
 
-export async function createSubcontractor(input: SubcontractorInput): Promise<void> {
-  const { error } = await supabase.from("subcontractors").insert(toDb(input));
+/** Zwraca id nowej firmy — potrzebne, żeby od razu zapisać jej stawki. */
+export async function createSubcontractor(input: SubcontractorInput): Promise<number> {
+  const { data, error } = await supabase
+    .from("subcontractors")
+    .insert(toDb(input))
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
+  return (data as { id: number }).id;
 }
 
 export async function updateSubcontractor(id: number, input: SubcontractorInput): Promise<void> {

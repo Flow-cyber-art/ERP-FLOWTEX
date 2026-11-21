@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { COLORS, SegmentedControl } from "@/components/report-ui";
 import { PayrollSection } from "@/components/screens/payroll-screen";
 import { AdminLeaveSection, AdminTeamSection } from "@/components/screens/admin-screen";
@@ -29,13 +29,9 @@ export function HrPanelScreen() {
 
   return (
     <>
-      {/* Cztery sekcje nie mieszczą się na wąskim telefonie jako równe
-          segmenty (fullWidth) — naturalna szerokość + poziome przewijanie. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 20, flexGrow: 0 }}
-      >
+      {/* Cztery sekcje nie mieszczą się na wąskim telefonie w jednym
+          wierszu — zawijają się do drugiego zamiast być ucięte. */}
+      <View style={{ marginBottom: 20 }}>
         <SegmentedControl
           options={[
             { key: "payroll", label: "Rozliczenie" },
@@ -45,8 +41,9 @@ export function HrPanelScreen() {
           ] as const}
           value={section}
           onChange={setSection}
+          wrap
         />
-      </ScrollView>
+      </View>
 
       {section === "team" ? (
         <AdminTeamSection />

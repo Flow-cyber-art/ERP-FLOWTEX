@@ -521,16 +521,21 @@ function SegmentedControl<K extends string>({
   value,
   onChange,
   fullWidth = false,
+  // Zawijanie segmentów do kolejnego wiersza, gdy nie mieszczą się na
+  // wąskim ekranie (np. 4 sekcje HR na telefonie) — zamiast ucinania.
+  wrap = false,
 }: {
   options: readonly { key: K; label: string }[];
   value: K;
   onChange: (key: K) => void;
   fullWidth?: boolean;
+  wrap?: boolean;
 }) {
   return (
     <View
       style={{
         flexDirection: "row",
+        flexWrap: wrap ? "wrap" : "nowrap",
         alignSelf: fullWidth ? "stretch" : "flex-start",
         backgroundColor: COLORS.background,
         borderWidth: 1,

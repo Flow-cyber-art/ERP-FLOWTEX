@@ -189,11 +189,23 @@ export function SubcontractorsSection() {
 
   return (
     <>
-      <View className="flex-row justify-between items-center mb-3">
+      {/* Tytuł i akcje w osobnych wierszach — w jednym nie mieściły się na
+          telefonie ("+ Dodaj podwykonawcę" było ucięte). */}
+      <View className="mb-3">
         <Text className="text-base font-bold text-foreground">
           Podwykonawcy ({subcontractors.filter((s) => s.active).length})
         </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            columnGap: 16,
+            rowGap: 8,
+            marginTop: 10,
+          }}
+        >
           <ToggleChip label="Archiwum" value={showArchived} onChange={setShowArchived} />
           <Pressable onPress={() => setAddOpen(!addOpen)}>
             <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>

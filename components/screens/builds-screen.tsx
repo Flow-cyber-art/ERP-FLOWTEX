@@ -1258,10 +1258,17 @@ export function BuildsScreen() {
 
           {isOpen && (
             <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border }}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 6 }}
+              {/* Zawijanie zamiast poziomego przewijania — na telefonie
+                  ostatnia zakładka była ucięta na krawędzi ekranu i
+                  wyglądała jak błąd układu. */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  gap: 6,
+                }}
               >
                 {([
                   ["overview", "Przegląd"],
@@ -1295,7 +1302,7 @@ export function BuildsScreen() {
                     </Pressable>
                   );
                 })}
-              </ScrollView>
+              </View>
             </View>
           )}
 
@@ -2982,7 +2989,15 @@ export function BuildsScreen() {
                   </Pressable>
                 )}
                 {!b.photosUrl && (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      columnGap: 14,
+                      rowGap: 8,
+                    }}
+                  >
                     <Pressable
                       disabled={creatingDriveFolderId === b.id}
                       onPress={async () => {
@@ -3065,7 +3080,15 @@ export function BuildsScreen() {
               zamiast rozjeżdżania się z ekranem "Raporty". */}
           {detailTab === "reports" && (
           <>
-            <Text className="text-xs text-muted uppercase">
+            <Text
+              className="text-xs text-muted uppercase"
+              style={{
+                marginTop: 16,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: COLORS.border,
+              }}
+            >
               Raporty ({buildReports.length}
               {pendingCount > 0 ? ` · ${pendingCount} do sprawdzenia` : ""})
             </Text>

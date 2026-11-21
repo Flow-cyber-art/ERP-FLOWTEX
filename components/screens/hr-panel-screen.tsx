@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { COLORS, SegmentedControl } from "@/components/report-ui";
 import { PayrollSection } from "@/components/screens/payroll-screen";
 import { AdminLeaveSection, AdminTeamSection } from "@/components/screens/admin-screen";
-import { SubcontractorsSection } from "@/components/screens/subcontractors-screen";
 import { RADIUS } from "@/constants/radius";
 
 /**
@@ -18,42 +17,34 @@ import { RADIUS } from "@/constants/radius";
  * te same dane w dwóch miejscach, więc scalone w jedną "Rozliczenie"
  * (patrz payroll-screen.tsx).
  *
- * Czwarta sekcja "Podwykonawcy" — firmy rozliczane za etap (m²/mb/szt),
- * nie za godziny; patrz subcontractors-screen.tsx i
- * supabase/sql/111_podwykonawcy.sql.
+ * Podwykonawcy (firmy rozliczane za etap) mają osobną pozycję nawigacji —
+ * na mobile ten sam przycisk co HR, powtórne wciśnięcie przełącza (patrz
+ * app/(tabs)/index.tsx i subcontractors-screen.tsx).
  */
-type HrTab = "team" | "payroll" | "leaves" | "subcontractors";
+type HrTab = "team" | "payroll" | "leaves";
 
 export function HrPanelScreen() {
   const [section, setSection] = useState<HrTab>("payroll");
 
   return (
     <>
-      {/* Cztery sekcje nie mieszczą się na wąskim telefonie jako równe
-          segmenty (fullWidth) — naturalna szerokość + poziome przewijanie. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 20, flexGrow: 0 }}
-      >
+      <View style={{ marginBottom: 20 }}>
         <SegmentedControl
           options={[
             { key: "payroll", label: "Rozliczenie" },
             { key: "leaves", label: "Urlopy" },
             { key: "team", label: "Zespół" },
-            { key: "subcontractors", label: "Podwykonawcy" },
           ] as const}
           value={section}
           onChange={setSection}
+          fullWidth
         />
-      </ScrollView>
+      </View>
 
       {section === "team" ? (
         <AdminTeamSection />
       ) : section === "payroll" ? (
         <PayrollSection />
-      ) : section === "subcontractors" ? (
-        <SubcontractorsSection />
       ) : (
         <AdminLeaveSection />
       )}

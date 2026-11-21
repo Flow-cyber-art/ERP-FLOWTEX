@@ -92,6 +92,11 @@ const HrPanelScreen = lazy(() =>
     default: m.HrPanelScreen,
   })),
 );
+const SubcontractorsScreen = lazy(() =>
+  import("@/components/screens/subcontractors-screen").then((m) => ({
+    default: m.SubcontractorsScreen,
+  })),
+);
 
 function HomeScreenInner() {
   const {
@@ -391,7 +396,25 @@ function HomeScreenInner() {
               ]
             : [ordersManagerButton]),
           ...(isDesktop ? [settlementButton] : []),
-          routeButton("hr", "users", "HR"),
+          // HR/Podwykonawcy: na desktopie dwie osobne pozycje, na mobile
+          // jedna (jak Magazyn/Technologie) — powtórne wciśnięcie
+          // przełącza między pracownikami (HR) a podwykonawcami.
+          ...(isDesktop
+            ? [
+                routeButton("hr", "users", "HR"),
+                routeButton("subcontractors", "briefcase", "Podwykonawcy"),
+              ]
+            : [
+                routeButton(
+                  "hrSubcontractors",
+                  tab === "subcontractors" ? "briefcase" : "users",
+                  tab === "subcontractors" ? "Podwyk." : "HR",
+                  {
+                    isActive: tab === "hr" || tab === "subcontractors",
+                    onPress: () => setTab(tab === "hr" ? "subcontractors" : "hr"),
+                  },
+                ),
+              ]),
           adminButton,
         ]
       : devRole === "Brygadzista"
@@ -590,6 +613,7 @@ function HomeScreenInner() {
               {tab === "manager" && devRole === "Admin" && <ManagerScreen />}
               {tab === "settlement" && devRole === "Admin" && <SettlementScreen />}
               {tab === "hr" && devRole === "Admin" && <HrPanelScreen />}
+              {tab === "subcontractors" && devRole === "Admin" && <SubcontractorsScreen />}
               {tab === "admin" && devRole === "Admin" && <AdminScreen />}
               {tab === "report" && devRole === "Brygadzista" && <ReportScreen />}
               {tab === "savedReports" && devRole === "Brygadzista" && (

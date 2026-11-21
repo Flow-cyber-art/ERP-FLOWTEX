@@ -56,9 +56,12 @@ declare
   v_actor text := auth.uid()::text;
   v_source_lot record;
   v_deficit_lot record;
+  v_allocation record;
   v_source_take decimal;
   v_chunk_left decimal;
   v_cover decimal;
+  v_allocation_left decimal;
+  v_allocation_take decimal;
   v_new_lot_id integer;
   v_transferred decimal := 0;
   v_transfer_value decimal := 0;
@@ -201,6 +204,68 @@ begin
       -- koszt budowy do ceny faktycznie przeniesionego materiału.
       v_cost_adjustment := v_cost_adjustment
         + v_cover * (v_source_lot."unitPrice" - v_deficit_lot."unitPrice");
+
+      -- Niedobór powstał przy konkretnym raporcie i jego append-only
+      -- rozkładzie report_material_lots. Samo skorygowanie actualCost nie
+      -- wystarcza: późniejsza korekta raportu w dół odwraca koszt właśnie
+      -- na podstawie tych alokacji. Stornujemy więc pokryty fragment po
+      -- cenie zastępczej i dopisujemy go jako nową alokację po faktycznej
+      -- cenie partii transferowej. Nowy wpis ma lotId = null, bo materiał
+      -- został już zużyty; sourceBatchId zachowuje pochodzenie, jeśli
+      -- źródłowa partia magazynowa nadal istnieje.
+      v_allocation_left := v_cover;
+      for v_allocation in
+        select
+          rml.id,
+          rml."reportId",
+          rml.stage_name,
+          rml."unitPrice",
+          rml.quantity + coalesce(rev.reversed, 0) as outstanding
+        from report_material_lots rml
+        left join (
+          select "reversalOfId", sum(quantity) as reversed
+            from report_material_lots
+            where "reversalOfId" is not null
+            group by "reversalOfId"
+        ) rev on rev."reversalOfId" = rml.id
+        where rml."lotId" = v_deficit_lot.id
+          and rml."materialId" = p_material_id
+          and rml."reversalOfId" is null
+        order by rml.id asc
+        for update of rml
+      loop
+        exit when v_allocation_left <= 0.0001;
+        if v_allocation.outstanding <= 0.0001 then
+          continue;
+        end if;
+
+        v_allocation_take := least(v_allocation.outstanding, v_allocation_left);
+
+        insert into report_material_lots
+          ("reportId", "materialId", "lotId", "sourceBatchId", quantity,
+           "unitPrice", "reversalOfId", stage_name)
+        values
+          (v_allocation."reportId", p_material_id, v_deficit_lot.id, null,
+           -v_allocation_take, v_allocation."unitPrice", v_allocation.id,
+           v_allocation.stage_name);
+
+        insert into report_material_lots
+          ("reportId", "materialId", "lotId", "sourceBatchId", quantity,
+           "unitPrice", stage_name)
+        values
+          (v_allocation."reportId", p_material_id, null,
+           v_source_lot."sourceBatchId", v_allocation_take,
+           v_source_lot."unitPrice", v_allocation.stage_name);
+
+        update report_materials
+          set cost = cost + v_allocation_take
+            * (v_source_lot."unitPrice" - v_allocation."unitPrice")
+          where "reportId" = v_allocation."reportId"
+            and "materialId" = p_material_id
+            and stage_name is not distinct from v_allocation.stage_name;
+
+        v_allocation_left := v_allocation_left - v_allocation_take;
+      end loop;
 
       update build_material_lots
         set quantity = quantity + v_cover

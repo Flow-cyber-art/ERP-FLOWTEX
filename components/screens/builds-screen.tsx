@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { DateField } from "@/components/date-field";
 import {
@@ -160,8 +160,7 @@ export function BuildsScreen() {
   const isArchiveView = buildsView === "archive";
   const isWide = useWideLayout();
 
-  // Które budowy mają rozwiniętą sekcję raportów, i który konkretny raport
-  // (w obrębie dowolnej budowy) jest rozwinięty — jeden na raz wystarcza.
+  // Który konkretny raport jest rozwinięty — jeden na raz wystarcza.
   // Szukajka po numerze/nazwie budowy — ten sam mechanizm co w Raportach
   // Admina (manager-screen.tsx). Aktywne/Archiwum: mały przełącznik
   // "Archiwum" obok wyszukiwarki (ten sam standard co w Magazynie/
@@ -175,9 +174,6 @@ export function BuildsScreen() {
   const [wizardManagerQuery, setWizardManagerQuery] = useState("");
   const [managerPickerBuildId, setManagerPickerBuildId] = useState<string | null>(null);
   const [managerPickerQuery, setManagerPickerQuery] = useState("");
-  const [expandedBuildReports, setExpandedBuildReports] = useState<
-    Record<string, boolean>
-  >({});
   const [expandedReportId, setExpandedReportId] = useState<string | null>(
     null,
   );
@@ -185,14 +181,10 @@ export function BuildsScreen() {
   // rozwijana pojedynczo, żeby po rozwinięciu było dużo miejsca na
   // materiały/koszty/raporty zamiast upychania wszystkiego naraz.
   const [expandedBuildId, setExpandedBuildId] = useState<string | null>(null);
-  // Redesign karty budowy: Materiały dodatkowe/Portal klienta/Zdjęcia/
-  // Raporty zwinięte razem pod jednym nagłówkiem, żeby na starcie nie
-  // zabierały uwagi — te sekcje same w sobie mają już własne akordeony
-  // (np. Raporty), ten toggle jest jeden poziom wyżej i chowa/pokazuje
-  // wszystkie cztery naraz.
-  const [buildExtrasExpandedId, setBuildExtrasExpandedId] = useState<
-    string | null
-  >(null);
+  const [workspaceBuildId, setWorkspaceBuildId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<
+    "overview" | "materials" | "orders" | "reports" | "client" | "settlement"
+  >("overview");
   // Edycja linku do zdjęć (Google Drive itp.) — jeden ekran edycji na
   // raz, wg tego samego wzorca co edycja stawki w admin-screen.tsx.
   const [editingPhotosBuildId, setEditingPhotosBuildId] = useState<
@@ -207,17 +199,6 @@ export function BuildsScreen() {
   // Łączna liczba zdjęć w folderze, do nagłówka "ZDJĘCIA (n)" — zgłaszana
   // przez BuildPhotosSection (onCountChange), które i tak już ją pobiera.
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
-  // Zdjęcia budowy — zwinięte domyślnie, ten sam wzorzec akordeonu co
-  // reszta sekcji na karcie budowy (Portal klienta, Materiały dodatkowe).
-  const [expandedPhotosBuildId, setExpandedPhotosBuildId] = useState<
-    string | null
-  >(null);
-  // Portal klienta (QR/PIN/link) — konfiguracja ustawiana raz na budowę,
-  // domyślnie zwinięta, żeby nie zajmowała miejsca przy każdym wejściu
-  // (ten sam wzorzec zwijania co przy edycji technologii/zdjęć wyżej).
-  const [expandedPortalBuildId, setExpandedPortalBuildId] = useState<
-    string | null
-  >(null);
   // Lista "Materiały dodatkowe" — ten sam wzorzec zwijania co Portal
   // klienta wyżej, żeby długa lista przypisanych materiałów nie musiała
   // stać zawsze rozwinięta pod spodem.
@@ -368,6 +349,21 @@ export function BuildsScreen() {
         : buildsForView,
     [buildsForView, buildQueryNormalized],
   );
+  useEffect(() => {
+    if (!isWide) return;
+    const selectedStillVisible = visibleBuilds.some((b) => b.id === workspaceBuildId);
+    if (selectedStillVisible) return;
+    setWorkspaceBuildId(visibleBuilds[0]?.id ?? null);
+    setDetailTab("overview");
+  }, [isWide, visibleBuilds, workspaceBuildId]);
+  const effectiveWorkspaceBuildId = visibleBuilds.some(
+    (build) => build.id === workspaceBuildId,
+  )
+    ? workspaceBuildId
+    : (visibleBuilds[0]?.id ?? null);
+  const buildsToRender = isWide
+    ? visibleBuilds.filter((b) => b.id === effectiveWorkspaceBuildId)
+    : visibleBuilds;
 
   return (
     <>
@@ -1055,45 +1051,89 @@ export function BuildsScreen() {
         </Text>
       </View>
     )}
-    {isWide && visibleBuilds.length > 0 && (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 16,
-          paddingBottom: 8,
-        }}
-      >
-        {[
-          { label: "Budowa", flex: 3 },
-          { label: "Odpowiedzialny", flex: 2 },
-          { label: "Termin", flex: 2 },
-        ].map((c) => (
-          <Text
-            key={c.label}
-            style={{ flex: c.flex, color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}
-          >
-            {c.label}
-          </Text>
-        ))}
-        <Text
-          style={{ width: 72, textAlign: "right", color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}
+    <View
+      style={isWide ? { flexDirection: "row", alignItems: "flex-start", gap: 16 } : undefined}
+    >
+      {isWide && visibleBuilds.length > 0 && (
+        <View
+          style={{
+            width: 320,
+            flexShrink: 0,
+            backgroundColor: COLORS.surface,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            borderRadius: RADIUS.card,
+            overflow: "hidden",
+          }}
         >
-          Materiały
-        </Text>
-        <View style={{ width: 36 }} />
-      </View>
-    )}
-    {visibleBuilds.map((b) => {
+          <View style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+            <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.6 }}>
+              {isArchiveView ? "ZAMKNIĘTE BUDOWY" : "AKTYWNE BUDOWY"} · {visibleBuilds.length}
+            </Text>
+          </View>
+          {visibleBuilds.map((build) => {
+            const selected = build.id === effectiveWorkspaceBuildId;
+            const reports = savedReports.filter((report) => report.buildId === build.id);
+            const pending = reports.filter((report) => report.status !== "approved").length;
+            const materialCount = assignments.filter((assignment) => assignment.buildId === build.id).length;
+            return (
+              <Pressable
+                key={build.id}
+                onPress={() => {
+                  setWorkspaceBuildId(build.id);
+                  setDetailTab("overview");
+                  setExpandedReportId(null);
+                }}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 14,
+                  paddingVertical: 13,
+                  borderBottomWidth: 1,
+                  borderBottomColor: COLORS.border,
+                  backgroundColor: selected ? COLORS.background : "transparent",
+                  borderLeftWidth: 3,
+                  borderLeftColor: selected ? COLORS.primary : "transparent",
+                  opacity: pressed ? 0.75 : 1,
+                })}
+              >
+                <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ color: COLORS.foreground, fontSize: 14, fontWeight: "800" }} numberOfLines={1}>
+                      {build.name}
+                    </Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 3 }} numberOfLines={1}>
+                      {build.number} · {build.manager || "Bez odpowiedzialnego"}
+                    </Text>
+                  </View>
+                  {pending > 0 && <StatusBadge status="warning" label={String(pending)} />}
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                    {build.startDate && build.durationDays
+                      ? `${formatDatePL(build.startDate)}–${formatDatePL(addDaysISO(build.startDate, build.durationDays))}`
+                      : "Termin nieustalony"}
+                  </Text>
+                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>· {materialCount} mat.</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+      <View style={{ flex: 1, minWidth: 0 }}>
+    {buildsToRender.map((b) => {
       const buildReports = savedReports
         .filter((r) => r.buildId === b.id)
         .sort((x, y) => y.updatedAt.localeCompare(x.updatedAt));
       const pendingCount = buildReports.filter(
         (r) => r.status !== "approved",
       ).length;
+      const materialCount = assignments.filter((a) => a.buildId === b.id).length;
+      const buildOrderCount = buildOrders.filter((order) => order.buildId === Number(b.id)).length;
+      const totalHours = timeEntries
+        .filter((entry) => entry.buildId === b.id)
+        .reduce((sum, entry) => sum + entry.hours, 0);
       const isClosed = b.status === "zamknięta";
-      const reportsExpanded = !!expandedBuildReports[b.id];
-      const isOpen = expandedBuildId === b.id;
+      const isOpen = isWide || expandedBuildId === b.id;
 
       return (
         <View
@@ -1106,65 +1146,68 @@ export function BuildsScreen() {
           style={isClosed ? { opacity: 0.85 } : undefined}
         >
           {isWide ? (
-            <Pressable
-              onPress={() => setExpandedBuildId(isOpen ? null : b.id)}
-              style={{ paddingHorizontal: 16, paddingVertical: 12 }}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ flex: 3, paddingRight: 12 }}>
-                  <Text numberOfLines={1} className="text-base font-bold text-foreground">
-                    {b.name}
-                  </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 }}>
-                    <Text numberOfLines={1} style={{ color: COLORS.muted, fontSize: 12 }}>
-                      {b.number}
+            <View style={{ padding: 20 }}>
+              <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <Text style={{ color: COLORS.foreground, fontSize: 22, fontWeight: "800" }} numberOfLines={1}>
+                      {b.name}
                     </Text>
-                    {isClosed && <StatusBadge status="ok" label="ZAMKNIĘTA" />}
-                    {pendingCount > 0 && (
-                      <StatusBadge
-                        status="warning"
-                        label={`${pendingCount} ${pendingCount === 1 ? "raport" : "raporty"} do sprawdzenia`}
-                      />
-                    )}
+                    <StatusBadge status="ok" label={isClosed ? "ZAMKNIĘTA" : "AKTYWNA"} />
                   </View>
-                </View>
-                <Text numberOfLines={1} style={{ flex: 2, color: COLORS.foreground, fontSize: 14, paddingRight: 12 }}>
-                  {b.manager}
-                </Text>
-                <Text numberOfLines={1} style={{ flex: 2, color: COLORS.foreground, fontSize: 14, paddingRight: 12 }}>
-                  {b.startDate && b.durationDays
-                    ? `${formatDatePL(b.startDate)} – ${formatDatePL(addDaysISO(b.startDate, b.durationDays))}`
-                    : "—"}
-                </Text>
-                {(() => {
-                  const matCount = assignments.filter((a) => a.buildId === b.id).length;
-                  return (
-                    <Text
-                      style={{
-                        width: 72,
-                        textAlign: "right",
-                        color: matCount === 0 ? COLORS.muted : COLORS.foreground,
-                        fontSize: 14,
-                        fontWeight: matCount === 0 ? "400" : "600",
-                        opacity: matCount === 0 ? 0.6 : 1,
-                      }}
-                    >
-                      {matCount}
+                  <Text style={{ color: COLORS.muted, fontSize: 13, marginTop: 5 }} numberOfLines={2}>
+                    {b.number} · {b.manager || "Bez odpowiedzialnego"}
+                    {b.startDate && b.durationDays
+                      ? ` · ${formatDatePL(b.startDate)}–${formatDatePL(addDaysISO(b.startDate, b.durationDays))}`
+                      : ""}
+                  </Text>
+                  {(b.clientName || b.address) && (
+                    <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 3 }} numberOfLines={1}>
+                      {[b.clientName, b.address].filter(Boolean).join(" · ")}
                     </Text>
-                  );
-                })()}
-                <View style={{ width: 36, alignItems: "flex-end" }}>
-                  <Icon
-                    name={isOpen ? "chevron-up" : "chevron-down"}
-                    size={24}
-                    color={COLORS.muted}
-                  />
+                  )}
                 </View>
+                {pendingCount > 0 && (
+                  <StatusBadge
+                    status="warning"
+                    label={`${pendingCount} ${pendingCount === 1 ? "raport" : "raporty"} do sprawdzenia`}
+                  />
+                )}
               </View>
-            </Pressable>
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 18 }}>
+                {[
+                  { label: "Materiały", value: String(materialCount) },
+                  { label: "Zamówienia", value: String(buildOrderCount) },
+                  { label: "Raporty", value: String(buildReports.length) },
+                  { label: "Czas pracy", value: `${Math.round(totalHours * 10) / 10} h` },
+                ].map((metric) => (
+                  <View
+                    key={metric.label}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      backgroundColor: COLORS.background,
+                      borderRadius: RADIUS.control,
+                    }}
+                  >
+                    <Text style={{ color: COLORS.foreground, fontSize: 17, fontWeight: "800" }}>
+                      {metric.value}
+                    </Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                      {metric.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
           ) : (
           <Pressable
-            onPress={() => setExpandedBuildId(isOpen ? null : b.id)}
+            onPress={() => {
+              setExpandedBuildId(isOpen ? null : b.id);
+              if (!isOpen) setDetailTab("overview");
+            }}
             style={{ padding: 16 }}
           >
             <View
@@ -1213,6 +1256,49 @@ export function BuildsScreen() {
           )}
 
           {isOpen && (
+            <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 6 }}
+              >
+                {([
+                  ["overview", "Przegląd"],
+                  ["materials", "Materiały"],
+                  ["orders", "Zamówienia"],
+                  ["reports", "Raporty i zdjęcia"],
+                  ["client", "Portal klienta"],
+                  ["settlement", "Rozliczenie"],
+                ] as const).map(([key, label]) => {
+                  const selected = detailTab === key;
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => setDetailTab(key)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: RADIUS.control,
+                        backgroundColor: selected ? COLORS.primary : COLORS.background,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: selected ? COLORS.background : COLORS.muted,
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          {isOpen && (
             <View
               style={{
                 borderTopWidth: 1,
@@ -1225,6 +1311,7 @@ export function BuildsScreen() {
               brygada. Reszta zawartości (Technologia/Zamówienia/"Reszta")
               to kolejne, wizualnie odrębne karty niżej, zamiast jednego
               ciągłego bloku. */}
+          {detailTab === "overview" && (
           <View
             style={{
               backgroundColor: COLORS.background,
@@ -1539,11 +1626,12 @@ export function BuildsScreen() {
               );
             })()}
           </View>
+          )}
           {/* Technologia (Faza 2) — plan materiałowy = m² budowy × zużycie
               z receptury, zamrożony w momencie przypisania (patrz
               build_technology_snapshot). Późniejsza zmiana/nowa wersja
               technologii NIE rusza już przypisanego planu. */}
-          {(() => {
+          {detailTab === "materials" && (() => {
             const snapshot = buildTechnologySnapshots.find(
               (s) => s.buildId === Number(b.id),
             );
@@ -1795,7 +1883,7 @@ export function BuildsScreen() {
               (nagłówek+pozycje) generowane z build_material_plan wyżej;
               ilość zamawiana edytowalna dopóki "robocze", przyjęcie
               dostawy dopisuje partię per pozycja (własna cena). */}
-          {(() => {
+          {detailTab === "orders" && (() => {
             const buildOrdersForBuild = buildOrders.filter(
               (o) => o.buildId === Number(b.id),
             );
@@ -2154,12 +2242,8 @@ export function BuildsScreen() {
             );
           })()}
 
-          {/* "Reszta" — Materiały dodatkowe/Portal klienta/Zdjęcia/Raporty
-              zwinięte razem pod jednym nagłówkiem (redesign karty budowy):
-              te sekcje nie zabierają uwagi na starcie, ale są kliknięcie od
-              dostępu. Zawartość każdej z nich niżej bez zmian — tylko
-              dodatkowy warunek buildExtrasExpandedId spinający widoczność
-              całej czwórki naraz. */}
+          {/* Zawartość robocza wybranej zakładki. */}
+          {(["materials", "reports", "client", "settlement"] as const).includes(detailTab as "materials" | "reports" | "client" | "settlement") && (
           <View
             style={{
               marginTop: 14,
@@ -2170,23 +2254,15 @@ export function BuildsScreen() {
               padding: 14,
             }}
           >
-            <Pressable
-              onPress={() =>
-                setBuildExtrasExpandedId(buildExtrasExpandedId === b.id ? null : b.id)
-              }
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: COLORS.muted, fontSize: 13, fontWeight: "600" }}>
-                Materiały dodatkowe, portal klienta, zdjęcia, raporty
-              </Text>
-              <Icon name={buildExtrasExpandedId === b.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
-            </Pressable>
-            {buildExtrasExpandedId === b.id && (
-              <>
+            <Text style={{ color: COLORS.foreground, fontSize: 16, fontWeight: "800", marginBottom: 2 }}>
+              {detailTab === "materials"
+                ? "Materiały na budowie"
+                : detailTab === "reports"
+                  ? "Raporty i dokumentacja"
+                  : detailTab === "client"
+                    ? "Portal klienta"
+                    : "Rozliczenie budowy"}
+            </Text>
           {/* Materiały dodatkowe (pomocnicze, spoza planu technologii) —
               dawniej globalny przycisk "+ Przypisz materiał" nad listą
               budów (z ręcznym wyborem budowy) i lista przypisanych
@@ -2194,7 +2270,7 @@ export function BuildsScreen() {
               własna sekcja od razu pod Zamówieniami, budowa ustawiana
               automatycznie na tę, w której jesteśmy (setSelectedBuildId
               przy otwarciu), zanim dojdzie do Zdjęć i Kosztów. */}
-          {!isClosed &&
+          {detailTab === "materials" && !isClosed &&
             (() => {
               const buildAssignments = assignments.filter(
                 (a) => a.buildId === b.id,
@@ -2596,39 +2672,13 @@ export function BuildsScreen() {
               );
             })()}
 
-          <View
-            style={{
-              marginTop: 12,
-              paddingTop: 12,
-              borderTopWidth: 1,
-              borderTopColor: COLORS.border,
-            }}
-          >
-            <Pressable
-              onPress={() =>
-                setExpandedPortalBuildId(
-                  expandedPortalBuildId === b.id ? null : b.id,
-                )
-              }
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                PORTAL KLIENTA
-              </Text>
-              <Icon name={expandedPortalBuildId === b.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
-            </Pressable>
-            {expandedPortalBuildId === b.id && (
-              <View style={{ marginTop: 10 }}>
-                <BuildPortalSection buildId={Number(b.id)} />
-              </View>
-            )}
-          </View>
+          {detailTab === "client" && (
+            <View style={{ marginTop: 12 }}>
+              <BuildPortalSection buildId={Number(b.id)} />
+            </View>
+          )}
 
-          {isClosed && b.settlement ? (
+          {detailTab === "settlement" && (isClosed && b.settlement ? (
             <DetailSection
               label="Rozliczenie końcowe"
               count={`zamknięto ${b.settlement.closedAt.slice(0, 10)}`}
@@ -2894,13 +2944,11 @@ export function BuildsScreen() {
                 </DetailSection>
               );
             })()
-          )}
+          ))}
 
-          {/* Zdjęcia budowy — katalog na Google Drive (utworzony przyciskiem
-              niżej albo, dla starszych budów, wklejony ręcznie jako zwykły
-              link) + dołączanie zdjęć wprost z apki (build-photos-section.tsx).
-              Zwinięte domyślnie, ten sam wzorzec akordeonu co Portal klienta
-              i Materiały dodatkowe wyżej. */}
+          {/* Zdjęcia i raporty są pełną zawartością dedykowanej zakładki —
+              bez kolejnej warstwy akordeonów. */}
+          {detailTab === "reports" && (
           <View
             style={{
               marginTop: 12,
@@ -2909,24 +2957,9 @@ export function BuildsScreen() {
               borderTopColor: COLORS.border,
             }}
           >
-            <Pressable
-              onPress={() =>
-                setExpandedPhotosBuildId(
-                  expandedPhotosBuildId === b.id ? null : b.id,
-                )
-              }
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                ZDJĘCIA{photoCounts[b.id] ? ` (${photoCounts[b.id]})` : ""}
-              </Text>
-              <Icon name={expandedPhotosBuildId === b.id ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
-            </Pressable>
-            {expandedPhotosBuildId === b.id && (
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+              ZDJĘCIA{photoCounts[b.id] ? ` (${photoCounts[b.id]})` : ""}
+            </Text>
               <View style={{ marginTop: 10 }}>
                 {/* Możliwość poprawienia linku zostaje, ale jako drobna,
                     drugorzędna akcja — nie "Zmień link" jako główny przycisk:
@@ -3023,36 +3056,17 @@ export function BuildsScreen() {
                   />
                 </View>
               </View>
-            )}
           </View>
+          )}
 
           {/* Raporty tej konkretnej budowy — pojedyncze źródło prawdy,
               zamiast rozjeżdżania się z ekranem "Raporty". */}
-          <Pressable
-            onPress={() =>
-              setExpandedBuildReports((prev) => ({
-                ...prev,
-                [b.id]: !prev[b.id],
-              }))
-            }
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginTop: 18,
-              paddingTop: 16,
-              borderTopWidth: 1,
-              borderTopColor: COLORS.border,
-            }}
-          >
+          {detailTab === "reports" && (
+          <>
             <Text className="text-xs text-muted uppercase">
               Raporty ({buildReports.length}
               {pendingCount > 0 ? ` · ${pendingCount} do sprawdzenia` : ""})
             </Text>
-            <Icon name={reportsExpanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
-          </Pressable>
-
-          {reportsExpanded && (
             <View style={{ marginTop: 12 }}>
               {buildReports.length === 0 ? (
                 <View className="items-center py-4">
@@ -3085,12 +3099,12 @@ export function BuildsScreen() {
                 ))
               )}
             </View>
+          </>
           )}
-              </>
-            )}
           </View>
+          )}
 
-          {!isClosed &&
+          {detailTab === "settlement" && !isClosed &&
             (() => {
               // Pozostałość materiałowa (Faza 9): build_material_lots trzyma
               // na żywo dostępną, jeszcze nie zużytą ilość per partia
@@ -3395,7 +3409,7 @@ export function BuildsScreen() {
                 </View>
               );
             })()}
-          {isClosed && (
+          {detailTab === "settlement" && isClosed && (
             <View style={{ marginTop: 18 }}>
               <Button
                 label="Wznów budowę"
@@ -3416,6 +3430,8 @@ export function BuildsScreen() {
         </View>
       );
     })}
+      </View>
+    </View>
   </>
     </>
   );

@@ -12,49 +12,42 @@ import {
   SearchField,
   ToggleChip,
 } from "@/components/report-ui";
-import { TechnologyPicker } from "@/components/technology-picker";
 import { Icon } from "@/components/icon";
 import { RADIUS } from "@/constants/radius";
 import { useAppData } from "@/contexts/app-data";
 import {
   EMPTY_SUBCONTRACTOR,
   createSubcontractor,
-  deleteSubcontractorRate,
-  listSubcontractorRates,
   listSubcontractors,
   listTeamSubcontractors,
-  saveSubcontractorRate,
+  parseRateInput,
   setSubcontractorActive,
   setTeamSubcontractor,
+  subcontractorToInput,
   updateSubcontractor,
-  type SaveRateInput,
   type SubcontractorInput,
-  type SubcontractorRateRow,
   type SubcontractorRow,
 } from "@/lib/data/subcontractors";
-import {
-  TECHNOLOGY_UNIT_LABEL,
-  listActiveTechnologies,
-  type TechnologyRow,
-  type TechnologyUnit,
-} from "@/lib/data/technologies";
 
 /**
- * HR → Podwykonawcy (krok 1, patrz supabase/sql/111_podwykonawcy.sql):
- * kartoteka firm, przypisanie brygad (brygada podwykonawcy = zwykła
- * brygada z ustawionym podwykonawcą) i cennik za etap technologii.
- * Zlecenia na budowie, odbiory etapów i protokoły to kolejne kroki.
+ * Podwykonawcy (osobna zakładka; na mobile przełączana z HR):
+ * kartoteka firm z JEDNĄ stawką netto zł/m² (niezależną od technologii,
+ * patrz supabase/sql/114_podwykonawca_jedna_stawka_m2.sql) i przypisanie
+ * brygad (brygada podwykonawcy = zwykła brygada z ustawionym
+ * podwykonawcą). Zlecenia i protokoły odbioru są na karcie budowy.
  */
 
 const SUBS_KEY = ["subcontractors", "list"] as const;
-const RATES_KEY = ["subcontractorRates", "list"] as const;
 const TEAM_SUBS_KEY = ["teamSubcontractors", "list"] as const;
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : "Nieznany błąd.");
 
-const parseAmount = (value: string) => {
-  const n = Number(value.trim().replace(/\s/g, "").replace(",", "."));
-  return value.trim() !== "" && Number.isFinite(n) ? n : null;
+/** Walidacja formularza firmy — lista brakujących/błędnych pól. */
+const validateSubcontractor = (input: SubcontractorInput) => {
+  const problems: string[] = [];
+  if (!input.name.trim()) problems.push("Nazwa firmy");
+  if (parseRateInput(input.rate) === null) problems.push("Stawka (liczba, np. 25,00)");
+  return problems;
 };
 
 function Chip({
@@ -114,6 +107,7 @@ function SubcontractorForm({
   return (
     <>
       {field("name", "Nazwa firmy *")}
+      {field("rate", "Stawka netto (zł/m²), np. 25,00", { keyboardType: "decimal-pad" })}
       {field("nip", "NIP", { keyboardType: "number-pad" })}
       {field("contactPerson", "Osoba kontaktowa")}
       {field("phone", "Telefon", { keyboardType: "phone-pad" })}
@@ -134,16 +128,9 @@ export function SubcontractorsSection() {
   const { teams } = useAppData();
 
   const subsQuery = useQuery({ queryKey: SUBS_KEY, queryFn: listSubcontractors });
-  const ratesQuery = useQuery({ queryKey: RATES_KEY, queryFn: listSubcontractorRates });
   const teamSubsQuery = useQuery({ queryKey: TEAM_SUBS_KEY, queryFn: listTeamSubcontractors });
-  const techQuery = useQuery({
-    queryKey: ["technologies", "active"],
-    queryFn: listActiveTechnologies,
-  });
 
   const subcontractors = subsQuery.data ?? [];
-  const rates = ratesQuery.data ?? [];
-  const technologies = techQuery.data ?? [];
 
   const teamSubMap = useMemo(() => {
     const map = new Map<number, number | null>();
@@ -155,10 +142,6 @@ export function SubcontractorsSection() {
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [newSub, setNewSub] = useState<SubcontractorInput>(EMPTY_SUBCONTRACTOR);
-  // Stawki dodawane od razu w formularzu nowej firmy — zapisywane razem z
-  // nią (firma najpierw, bo stawka potrzebuje jej id).
-  const [newRates, setNewRates] = useState<RateDraft[]>([]);
-  const [newRateFormOpen, setNewRateFormOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -228,128 +211,22 @@ export function SubcontractorsSection() {
       {addOpen && (
         <View className="bg-surface border border-border rounded-card p-4 mb-3">
           <SubcontractorForm value={newSub} onChange={setNewSub} />
-
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginTop: 16,
-              marginBottom: 8,
-            }}
-          >
-            <Text className="text-xs text-muted uppercase">
-              Stawki za etap (netto){newRates.length ? ` · ${newRates.length}` : ""}
-            </Text>
-            <Pressable onPress={() => setNewRateFormOpen(!newRateFormOpen)}>
-              <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-                {newRateFormOpen ? "Anuluj" : "+ Dodaj stawkę"}
-              </Text>
-            </Pressable>
-          </View>
-          {newRates.length === 0 && !newRateFormOpen && (
-            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-              Opcjonalnie — stawki możesz dodać teraz albo później na karcie firmy.
-            </Text>
-          )}
-          {newRates.map((r) => {
-            const techName = technologies.find((t) => t.code === r.technologyCode)?.name;
-            return (
-              <View
-                key={rateDraftKey(r)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                  paddingVertical: 6,
-                  borderTopWidth: 1,
-                  borderTopColor: COLORS.border,
-                }}
-              >
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ color: COLORS.foreground, fontSize: 13 }} numberOfLines={1}>
-                    {r.technologyCode}
-                    {techName ? ` · ${techName}` : ""}
-                  </Text>
-                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                    {r.stageName ?? "Cała technologia"}
-                  </Text>
-                </View>
-                <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
-                  {formatPLN(r.rate)}/{TECHNOLOGY_UNIT_LABEL[r.unit]}
-                </Text>
-                <Pressable
-                  onPress={() =>
-                    setNewRates(newRates.filter((x) => rateDraftKey(x) !== rateDraftKey(r)))
-                  }
-                >
-                  <Text style={{ color: COLORS.danger, fontSize: 12, fontWeight: "700" }}>
-                    Usuń
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-          {newRateFormOpen && (
-            <View style={{ marginTop: 8 }}>
-              <RateForm
-                technologies={technologies}
-                existing={null}
-                busy={busy}
-                submitLabel="Dodaj do listy"
-                onSubmit={(draft) => {
-                  // Ta sama technologia + etap drugi raz = nadpisanie stawki.
-                  setNewRates([
-                    ...newRates.filter((x) => rateDraftKey(x) !== rateDraftKey(draft)),
-                    draft,
-                  ]);
-                  return true;
-                }}
-                onDone={() => setNewRateFormOpen(false)}
-              />
-            </View>
-          )}
-
-          <View style={{ marginTop: 14 }}>
+          <View style={{ marginTop: 12 }}>
             <Button
-              label={
-                newRates.length
-                  ? `Dodaj podwykonawcę i ${newRates.length} ${pluralPL(newRates.length, "stawkę", "stawki", "stawek")}`
-                  : "Dodaj podwykonawcę"
-              }
+              label="Dodaj podwykonawcę"
               disabled={busy}
               onPress={async () => {
-                if (!newSub.name.trim()) {
-                  notify("Uzupełnij wymagane pola", "Nazwa firmy");
+                const problems = validateSubcontractor(newSub);
+                if (problems.length) {
+                  notify("Uzupełnij wymagane pola", problems.join(", "));
                   return;
                 }
-                let createdId: number | null = null;
                 const ok = await run(async () => {
-                  const id = await createSubcontractor(newSub);
-                  createdId = id;
-                  try {
-                    for (const r of newRates) {
-                      await saveSubcontractorRate({ ...r, id: undefined, subcontractorId: id });
-                    }
-                  } catch (err) {
-                    // Firma już jest — nie gubimy jej przez błąd stawki.
-                    setExpandedId(id);
-                    throw new Error(
-                      `Podwykonawca został dodany, ale nie wszystkie stawki się zapisały (${errorMessage(err)}). Uzupełnij je na karcie firmy.`,
-                    );
-                  }
-                }, [SUBS_KEY, RATES_KEY]);
-                // Firma zapisana (nawet gdy padła któraś stawka) = formularz
-                // się zamyka, żeby ponowne "Dodaj" nie utworzyło duplikatu.
-                if (ok || createdId !== null) {
+                  await createSubcontractor(newSub);
+                }, [SUBS_KEY]);
+                if (ok) {
                   setNewSub(EMPTY_SUBCONTRACTOR);
-                  setNewRates([]);
-                  setNewRateFormOpen(false);
                   setAddOpen(false);
-                }
-                if (!ok && createdId !== null) {
-                  await queryClient.invalidateQueries({ queryKey: [...SUBS_KEY] });
-                  await queryClient.invalidateQueries({ queryKey: [...RATES_KEY] });
                 }
               }}
             />
@@ -380,7 +257,6 @@ export function SubcontractorsSection() {
       {visible.length > 0 && (
         <View className="bg-surface border border-border rounded-card overflow-hidden mb-5">
           {visible.map((sub, i) => {
-            const subRates = rates.filter((r) => r.subcontractorId === sub.id);
             const subTeams = teams.filter((t) => teamSubMap.get(t.id) === sub.id);
             const expanded = expandedId === sub.id;
             return (
@@ -406,7 +282,7 @@ export function SubcontractorsSection() {
                     <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
                       {subTeams.length} {pluralPL(subTeams.length, "brygada", "brygady", "brygad")}
                       {" · "}
-                      {subRates.length} {pluralPL(subRates.length, "stawka", "stawki", "stawek")}
+                      {sub.rate > 0 ? `${formatPLN(sub.rate)}/m²` : "bez stawki"}
                       {sub.nip ? ` · NIP ${sub.nip}` : ""}
                     </Text>
                   </View>
@@ -419,8 +295,6 @@ export function SubcontractorsSection() {
                 {expanded && (
                   <SubcontractorDetails
                     sub={sub}
-                    rates={subRates}
-                    technologies={technologies}
                     teams={teams}
                     teamSubMap={teamSubMap}
                     subcontractors={subcontractors}
@@ -448,8 +322,6 @@ function SectionLabel({ children }: { children: string }) {
 
 function SubcontractorDetails({
   sub,
-  rates,
-  technologies,
   teams,
   teamSubMap,
   subcontractors,
@@ -457,8 +329,6 @@ function SubcontractorDetails({
   run,
 }: {
   sub: SubcontractorRow;
-  rates: SubcontractorRateRow[];
-  technologies: TechnologyRow[];
   teams: { id: number; name: string; active: boolean }[];
   teamSubMap: Map<number, number | null>;
   subcontractors: SubcontractorRow[];
@@ -466,32 +336,7 @@ function SubcontractorDetails({
   run: RunFn;
 }) {
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<SubcontractorInput>(sub);
-  const [rateFormOpen, setRateFormOpen] = useState(false);
-  const [editingRate, setEditingRate] = useState<SubcontractorRateRow | null>(null);
-
-  const techByCode = useMemo(() => {
-    const map = new Map<string, TechnologyRow>();
-    for (const t of technologies) map.set(t.code, t);
-    return map;
-  }, [technologies]);
-
-  const ratesByTech = useMemo(() => {
-    const groups = new Map<string, SubcontractorRateRow[]>();
-    for (const r of rates) {
-      const list = groups.get(r.technologyCode) ?? [];
-      list.push(r);
-      groups.set(r.technologyCode, list);
-    }
-    // Etapy w kolejności receptury, "cała technologia" na początku.
-    for (const [code, list] of groups) {
-      const stages = techByCode.get(code)?.technology_stages ?? [];
-      const order = (name: string | null) =>
-        name === null ? -1 : stages.find((s) => s.name === name)?.orderIndex ?? 999;
-      list.sort((a, b) => order(a.stageName) - order(b.stageName));
-    }
-    return [...groups.entries()];
-  }, [rates, techByCode]);
+  const [form, setForm] = useState<SubcontractorInput>(() => subcontractorToInput(sub));
 
   const detailLine = (label: string, value: string) =>
     value ? (
@@ -513,8 +358,9 @@ function SubcontractorDetails({
                 label="Zapisz"
                 disabled={busy}
                 onPress={async () => {
-                  if (!form.name.trim()) {
-                    notify("Uzupełnij wymagane pola", "Nazwa firmy");
+                  const problems = validateSubcontractor(form);
+                  if (problems.length) {
+                    notify("Uzupełnij wymagane pola", problems.join(", "));
                     return;
                   }
                   const ok = await run(() => updateSubcontractor(sub.id, form), [SUBS_KEY]);
@@ -527,7 +373,7 @@ function SubcontractorDetails({
                 label="Anuluj"
                 secondary
                 onPress={() => {
-                  setForm(sub);
+                  setForm(subcontractorToInput(sub));
                   setEditing(false);
                 }}
               />
@@ -536,6 +382,7 @@ function SubcontractorDetails({
         </>
       ) : (
         <>
+          {detailLine("Stawka", sub.rate > 0 ? `${formatPLN(sub.rate)} netto za m²` : "nie ustawiona")}
           {detailLine("NIP", sub.nip)}
           {detailLine("Kontakt", sub.contactPerson)}
           {detailLine("Telefon", sub.phone)}
@@ -545,7 +392,7 @@ function SubcontractorDetails({
           <View style={{ flexDirection: "row", gap: 16, marginTop: 8 }}>
             <Pressable
               onPress={() => {
-                setForm(sub);
+                setForm(subcontractorToInput(sub));
                 setEditing(true);
               }}
             >
@@ -558,7 +405,7 @@ function SubcontractorDetails({
                 sub.active
                   ? confirmAction(
                       "Archiwizować podwykonawcę?",
-                      `${sub.name} zniknie z listy aktywnych. Historia i cennik zostają.`,
+                      `${sub.name} zniknie z listy aktywnych. Historia zostaje.`,
                       "Archiwizuj",
                       () => run(() => setSubcontractorActive(sub.id, false), [SUBS_KEY]),
                     )
@@ -626,268 +473,6 @@ function SubcontractorDetails({
         </View>
       )}
 
-      {/* Cennik */}
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: 16,
-          marginBottom: 8,
-        }}
-      >
-        <Text className="text-xs text-muted uppercase">Cennik za etap (netto)</Text>
-        <Pressable
-          onPress={() => {
-            setEditingRate(null);
-            setRateFormOpen(!rateFormOpen);
-          }}
-        >
-          <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-            {rateFormOpen && !editingRate ? "Anuluj" : "+ Dodaj stawkę"}
-          </Text>
-        </Pressable>
-      </View>
-
-      {rateFormOpen && (
-        <RateForm
-          key={editingRate?.id ?? "new"}
-          technologies={technologies}
-          existing={editingRate}
-          busy={busy}
-          onSubmit={(draft) =>
-            run(() => saveSubcontractorRate({ ...draft, subcontractorId: sub.id }), [RATES_KEY])
-          }
-          onDone={() => {
-            setRateFormOpen(false);
-            setEditingRate(null);
-          }}
-        />
-      )}
-
-      {ratesByTech.length === 0 && !rateFormOpen && (
-        <Text style={{ color: COLORS.muted, fontSize: 12 }}>Brak stawek.</Text>
-      )}
-
-      {ratesByTech.map(([code, list]) => {
-        const tech = techByCode.get(code);
-        return (
-          <View
-            key={code}
-            style={{
-              borderWidth: 1,
-              borderColor: COLORS.border,
-              borderRadius: RADIUS.control,
-              padding: 10,
-              marginBottom: 8,
-            }}
-          >
-            <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
-              {code}
-              {tech ? ` · ${tech.name}` : " · (technologia nieaktywna)"}
-            </Text>
-            {list.map((r) => (
-              <View
-                key={r.id}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginTop: 6,
-                  gap: 8,
-                }}
-              >
-                <Pressable
-                  style={{ flex: 1 }}
-                  onPress={() => {
-                    setEditingRate(r);
-                    setRateFormOpen(true);
-                  }}
-                >
-                  <Text style={{ color: COLORS.foreground, fontSize: 13 }}>
-                    {r.stageName ?? "Cała technologia"}
-                  </Text>
-                  {r.note ? (
-                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>{r.note}</Text>
-                  ) : null}
-                </Pressable>
-                <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
-                  {formatPLN(r.rate)}/{TECHNOLOGY_UNIT_LABEL[r.unit]}
-                </Text>
-                <Pressable
-                  onPress={() =>
-                    confirmAction(
-                      "Usunąć stawkę?",
-                      `${code} · ${r.stageName ?? "Cała technologia"}`,
-                      "Usuń",
-                      () => run(() => deleteSubcontractorRate(r.id), [RATES_KEY]),
-                    )
-                  }
-                >
-                  <Text style={{ color: COLORS.danger, fontSize: 12, fontWeight: "700" }}>
-                    Usuń
-                  </Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-const WHOLE_TECHNOLOGY = "__whole__";
-const UNITS: TechnologyUnit[] = ["m2", "mb", "szt"];
-
-/** Stawka z formularza, jeszcze bez podwykonawcy (przy dodawaniu nowej
- * firmy zbierana lokalnie i zapisywana razem z nią). */
-type RateDraft = Omit<SaveRateInput, "subcontractorId">;
-
-const rateDraftKey = (r: { technologyCode: string; stageName: string | null }) =>
-  `${r.technologyCode}::${r.stageName ?? ""}`;
-
-function RateForm({
-  technologies,
-  existing,
-  busy,
-  onSubmit,
-  onDone,
-  submitLabel = "Zapisz stawkę",
-}: {
-  technologies: TechnologyRow[];
-  existing: (RateDraft & { technologyCode: string }) | null;
-  busy: boolean;
-  /** true = stawka przyjęta, formularz się zamyka. */
-  onSubmit: (draft: RateDraft) => Promise<boolean> | boolean;
-  onDone: () => void;
-  submitLabel?: string;
-}) {
-  const [techId, setTechId] = useState<number | null>(
-    existing ? technologies.find((t) => t.code === existing.technologyCode)?.id ?? null : null,
-  );
-  const tech = technologies.find((t) => t.id === techId) ?? null;
-  const [stage, setStage] = useState<string>(
-    existing ? existing.stageName ?? WHOLE_TECHNOLOGY : "",
-  );
-  const [unit, setUnit] = useState<TechnologyUnit>(existing?.unit ?? "m2");
-  const [rate, setRate] = useState(existing ? String(existing.rate).replace(".", ",") : "");
-  const [note, setNote] = useState(existing?.note ?? "");
-
-  const stages = useMemo(
-    () => [...(tech?.technology_stages ?? [])].sort((a, b) => a.orderIndex - b.orderIndex),
-    [tech],
-  );
-
-  const technologyCode = existing?.technologyCode ?? tech?.code ?? null;
-
-  return (
-    <View
-      style={{
-        borderWidth: 1,
-        borderColor: COLORS.primary,
-        borderRadius: RADIUS.control,
-        padding: 10,
-        marginBottom: 10,
-      }}
-    >
-      <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13, marginBottom: 6 }}>
-        {existing ? `Edycja stawki · ${existing.technologyCode}` : "Nowa stawka"}
-      </Text>
-
-      {!existing && (
-        <TechnologyPicker
-          technologies={technologies}
-          selectedId={techId}
-          onSelect={(id) => {
-            setTechId(id);
-            setStage("");
-            const picked = technologies.find((t) => t.id === id);
-            if (picked) setUnit(picked.unit);
-          }}
-        />
-      )}
-
-      {technologyCode && (
-        <>
-          <SectionLabel>Etap</SectionLabel>
-          <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-            <Chip
-              label="Cała technologia"
-              selected={stage === WHOLE_TECHNOLOGY}
-              onPress={() => setStage(WHOLE_TECHNOLOGY)}
-            />
-            {stages.map((s) => (
-              <Chip
-                key={s.id}
-                label={s.name}
-                selected={stage === s.name}
-                onPress={() => setStage(s.name)}
-              />
-            ))}
-            {/* Etap, którego nie ma już w aktywnej wersji receptury. */}
-            {existing?.stageName && !stages.some((s) => s.name === existing.stageName) && (
-              <Chip
-                label={existing.stageName}
-                selected={stage === existing.stageName}
-                onPress={() => setStage(existing.stageName!)}
-              />
-            )}
-          </View>
-
-          <SectionLabel>Jednostka</SectionLabel>
-          <View style={{ flexDirection: "row", gap: 6 }}>
-            {UNITS.map((u) => (
-              <Chip
-                key={u}
-                label={TECHNOLOGY_UNIT_LABEL[u]}
-                selected={unit === u}
-                onPress={() => setUnit(u)}
-              />
-            ))}
-          </View>
-
-          <SectionLabel>{`Stawka netto (zł/${TECHNOLOGY_UNIT_LABEL[unit]})`}</SectionLabel>
-          <Field placeholder="np. 25,00" value={rate} onChangeText={setRate} keyboardType="decimal-pad" />
-          <Field
-            placeholder="Notatka (opcjonalnie)"
-            value={note}
-            onChangeText={setNote}
-            style={{ marginTop: 8 }}
-          />
-        </>
-      )}
-
-      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-        <View style={{ flex: 1 }}>
-          <Button
-            label={submitLabel}
-            disabled={busy || !technologyCode}
-            onPress={async () => {
-              const amount = parseAmount(rate);
-              const missing: string[] = [];
-              if (!technologyCode) missing.push("Technologia");
-              if (!stage) missing.push("Etap");
-              if (amount === null || amount < 0) missing.push("Stawka");
-              if (missing.length) {
-                notify("Uzupełnij wymagane pola", missing.join(", "));
-                return;
-              }
-              const ok = await onSubmit({
-                id: existing?.id,
-                technologyCode: technologyCode!,
-                stageName: stage === WHOLE_TECHNOLOGY ? null : stage,
-                unit,
-                rate: amount!,
-                note,
-              });
-              if (ok) onDone();
-            }}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button label="Anuluj" secondary onPress={onDone} />
-        </View>
-      </View>
     </View>
   );
 }

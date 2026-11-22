@@ -1,12 +1,12 @@
 import { supabase } from "@/lib/supabase";
-import type { TechnologyUnit } from "@/lib/data/technologies";
 
 /**
- * Warstwa danych dla podwykonawców (firm) i ich cennika za etap — patrz
- * supabase/sql/111_podwykonawcy.sql. Wszystko tylko dla Admina (RLS).
+ * Warstwa danych dla podwykonawców (firm) i ich stawki za m² — patrz
+ * supabase/sql/111_podwykonawcy.sql i 114. Wszystko tylko dla Admina (RLS).
  *
- * Cennik jest bieżący: stawka zostanie zamrożona dopiero w zleceniu na
- * budowie, więc jej edycja nie zmienia już zleconych prac.
+ * Stawka podwykonawcy to JEDNA kwota netto zł/m², niezależna od
+ * technologii (114). Jest bieżąca — zamraża ją dopiero zlecenie na budowie
+ * (build_subcontracts), więc jej zmiana nie rusza już zleconych prac.
  */
 
 export type SubcontractorRow = {
@@ -19,12 +19,15 @@ export type SubcontractorRow = {
   bankAccount: string;
   note: string;
   active: boolean;
+  /** Stawka netto zł/m² — jedna, niezależna od technologii (114). */
+  rate: number;
 };
 
 const SUBCONTRACTOR_COLUMNS =
-  "id, name, nip, contactPerson:contact_person, phone, email, bankAccount:bank_account, note, active";
+  "id, name, nip, contactPerson:contact_person, phone, email, bankAccount:bank_account, note, active, rate";
 
-export type SubcontractorInput = Omit<SubcontractorRow, "id" | "active">;
+/** Dane z formularza — stawka jako tekst z pola (przecinek dziesiętny). */
+export type SubcontractorInput = Omit<SubcontractorRow, "id" | "active" | "rate"> & { rate: string };
 
 export const EMPTY_SUBCONTRACTOR: SubcontractorInput = {
   name: "",
@@ -34,9 +37,30 @@ export const EMPTY_SUBCONTRACTOR: SubcontractorInput = {
   email: "",
   bankAccount: "",
   note: "",
+  rate: "",
 };
 
+/** Stawka z pola formularza; null = niepoprawna liczba. Puste pole = 0. */
+export const parseRateInput = (value: string): number | null => {
+  const trimmed = value.trim().replace(/\s/g, "").replace(",", ".");
+  if (trimmed === "") return 0;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+export const subcontractorToInput = (row: SubcontractorRow): SubcontractorInput => ({
+  name: row.name,
+  nip: row.nip,
+  contactPerson: row.contactPerson,
+  phone: row.phone,
+  email: row.email,
+  bankAccount: row.bankAccount,
+  note: row.note,
+  rate: row.rate ? String(row.rate).replace(".", ",") : "",
+});
+
 const toDb = (input: SubcontractorInput) => ({
+  rate: parseRateInput(input.rate) ?? 0,
   name: input.name.trim(),
   nip: input.nip.trim(),
   contact_person: input.contactPerson.trim(),
@@ -52,7 +76,7 @@ export async function listSubcontractors(): Promise<SubcontractorRow[]> {
     .select(SUBCONTRACTOR_COLUMNS)
     .order("name");
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as SubcontractorRow[];
+  return ((data ?? []) as any[]).map((r) => ({ ...r, rate: Number(r.rate ?? 0) })) as SubcontractorRow[];
 }
 
 /** Zwraca id nowej firmy — potrzebne, żeby od razu zapisać jej stawki. */
@@ -110,68 +134,5 @@ export async function setTeamSubcontractor(
     .from("teams")
     .update({ subcontractor_id: subcontractorId, updatedAt: new Date().toISOString() })
     .eq("id", teamId);
-  if (error) throw new Error(error.message);
-}
-
-/* ---------- Cennik za etap ---------- */
-
-export type SubcontractorRateRow = {
-  id: number;
-  subcontractorId: number;
-  technologyCode: string;
-  /** null = cała technologia (bez podziału na etapy). */
-  stageName: string | null;
-  unit: TechnologyUnit;
-  rate: number;
-  note: string;
-};
-
-const RATE_COLUMNS =
-  "id, subcontractorId:subcontractor_id, technologyCode:technology_code, stageName:stage_name, unit, rate, note";
-
-export async function listSubcontractorRates(): Promise<SubcontractorRateRow[]> {
-  const { data, error } = await supabase
-    .from("subcontractor_rates")
-    .select(RATE_COLUMNS)
-    .order("technology_code");
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as any[]).map((r) => ({ ...r, rate: Number(r.rate) })) as SubcontractorRateRow[];
-}
-
-export type SaveRateInput = {
-  /** Podane = edycja istniejącej stawki. */
-  id?: number;
-  subcontractorId: number;
-  technologyCode: string;
-  stageName: string | null;
-  unit: TechnologyUnit;
-  rate: number;
-  note: string;
-};
-
-export async function saveSubcontractorRate(input: SaveRateInput): Promise<void> {
-  const row = {
-    subcontractor_id: input.subcontractorId,
-    technology_code: input.technologyCode,
-    stage_name: input.stageName,
-    unit: input.unit,
-    rate: input.rate,
-    note: input.note.trim(),
-    updatedAt: new Date().toISOString(),
-  };
-  const { error } = input.id
-    ? await supabase.from("subcontractor_rates").update(row).eq("id", input.id)
-    : await supabase.from("subcontractor_rates").insert(row);
-  if (error) {
-    // 23505 = unikalny indeks (podwykonawca, technologia, etap).
-    if (error.code === "23505") {
-      throw new Error("Ten podwykonawca ma już stawkę dla tego etapu — edytuj istniejącą.");
-    }
-    throw new Error(error.message);
-  }
-}
-
-export async function deleteSubcontractorRate(id: number): Promise<void> {
-  const { error } = await supabase.from("subcontractor_rates").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

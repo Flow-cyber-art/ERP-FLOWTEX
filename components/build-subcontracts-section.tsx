@@ -15,7 +15,7 @@ import { DateField } from "@/components/date-field";
 import { Icon } from "@/components/icon";
 import { RADIUS } from "@/constants/radius";
 import { useAppData } from "@/contexts/app-data";
-import { listSubcontractorRates, listSubcontractors } from "@/lib/data/subcontractors";
+import { listSubcontractors } from "@/lib/data/subcontractors";
 import {
   deleteBuildSubcontract,
   deleteSubcontractAcceptance,
@@ -35,8 +35,9 @@ import { TECHNOLOGY_UNIT_LABEL, type TechnologyUnit } from "@/lib/data/technolog
  * Karta budowy → "Podwykonawcy" (krok 3, patrz
  * supabase/sql/113_podwykonawcy_zlecenia_i_odbiory.sql). Per podwykonawca
  * pracujący na budowie:
- *   * ZLECENIE — pozycje per etap: ilość zlecona, stawka zamrożona z
- *     cennika, czyj materiał,
+ *   * ZLECENIE — domyślnie jedna pozycja "cała budowa": metraż × stawka
+ *     firmy za m² (114), zamrożona w chwili zlecenia; ręcznie można też
+ *     rozbić na etapy. Czyj materiał — per pozycja,
  *   * PROTOKOŁY ODBIORU — odebrana ilość (podpowiedź z raportów
  *     brygadzisty) × stawka + prace dodatkowe − potrącenia; data zapłaty,
  *   * podsumowanie: wartość zlecenia / odebrano / zapłacono / do zapłaty.
@@ -112,7 +113,6 @@ export function BuildSubcontractsSection({ buildId, isClosed }: { buildId: strin
     useAppData();
   const queryClient = useQueryClient();
   const subsQuery = useQuery({ queryKey: ["subcontractors", "list"], queryFn: listSubcontractors });
-  const ratesQuery = useQuery({ queryKey: ["subcontractorRates", "list"], queryFn: listSubcontractorRates });
   const linesQuery = useQuery({ queryKey: SUBCONTRACTS_KEY, queryFn: listBuildSubcontracts });
   const accQuery = useQuery({ queryKey: ACCEPTANCES_KEY, queryFn: listSubcontractAcceptances });
   const [busy, setBusy] = useState(false);
@@ -190,22 +190,27 @@ export function BuildSubcontractsSection({ buildId, isClosed }: { buildId: strin
           key={subId}
           subId={subId}
           subName={subsQuery.data?.find((s) => s.id === subId)?.name ?? "Podwykonawca"}
+          subRate={subsQuery.data?.find((s) => s.id === subId)?.rate ?? 0}
           teamsOnBuild={subTeams.get(subId) ?? []}
           teamNames={teams}
           lines={lines.filter((l) => l.subcontractorId === subId)}
           acceptances={acceptances.filter((a) => a.subcontractorId === subId)}
-          rates={(ratesQuery.data ?? []).filter((r) => r.subcontractorId === subId)}
           stages={stages}
           technologyCode={snapshot?.technologyCode ?? ""}
           defaultUnit={snapshot?.unit ?? "m2"}
           buildQuantity={buildQuantity}
           reportedByStage={(stageName) => {
             const teamIds = (subTeams.get(subId) ?? []).map((t) => t.teamId);
-            return savedReports
+            const perStage = new Map<string, number>();
+            for (const sp of savedReports
               .filter((r) => r.buildId === buildId && r.teamId != null && teamIds.includes(r.teamId))
-              .flatMap((r) => r.stageProgress ?? [])
-              .filter((sp) => stageName === null || sp.stageName === stageName)
-              .reduce((sum, sp) => sum + sp.quantity, 0);
+              .flatMap((r) => r.stageProgress ?? [])) {
+              perStage.set(sp.stageName, (perStage.get(sp.stageName) ?? 0) + sp.quantity);
+            }
+            // Pozycja na całą budowę: postęp = najdalej zaawansowany etap
+            // (suma po etapach liczyłaby te same m² kilka razy).
+            if (stageName === null) return Math.max(0, ...perStage.values());
+            return perStage.get(stageName) ?? 0;
           }}
           buildId={numericBuildId}
           isClosed={isClosed}
@@ -222,11 +227,11 @@ type RunFn = (action: () => Promise<unknown>, keys: readonly (readonly string[])
 function SubcontractorBlock({
   subId,
   subName,
+  subRate,
   teamsOnBuild,
   teamNames,
   lines,
   acceptances,
-  rates,
   stages,
   technologyCode,
   defaultUnit,
@@ -239,11 +244,11 @@ function SubcontractorBlock({
 }: {
   subId: number;
   subName: string;
+  subRate: number;
   teamsOnBuild: { teamId: number; stageNames: string[] | null }[];
   teamNames: { id: number; name: string }[];
   lines: BuildSubcontractRow[];
   acceptances: AcceptanceRow[];
-  rates: { technologyCode: string; stageName: string | null; unit: TechnologyUnit; rate: number }[];
   stages: string[];
   technologyCode: string;
   defaultUnit: TechnologyUnit;
@@ -274,58 +279,43 @@ function SubcontractorBlock({
     : [...new Set(teamsOnBuild.flatMap((t) => t.stageNames ?? []))];
   const scopeStages = scope ?? stages;
 
-  const rateFor = (stageName: string | null) =>
-    rates.find((r) => r.technologyCode === technologyCode && r.stageName === stageName) ?? null;
+  // Jedna stawka firmy za m², niezależna od technologii i etapu (114).
+  const rateFor = (_stageName: string | null) => (subRate > 0 ? { unit: "m2" as TechnologyUnit, rate: subRate } : null);
 
-  // Zlecenie z cennika: brakujące pozycje dla etapów z zakresu. Gdy cennik
-  // ma tylko stawkę "cała technologia" — jedna pozycja na całość.
-  const fillFromPriceList = () => {
-    const existing = new Set(lines.map((l) => l.stageName ?? WHOLE));
-    const stageRates = scopeStages.filter((s) => rateFor(s));
-    const whole = rateFor(null);
-    const toCreate: { stageName: string | null; unit: TechnologyUnit; rate: number }[] = [];
-    if (stageRates.length === 0 && whole) {
-      if (!existing.has(WHOLE)) toCreate.push({ stageName: null, unit: whole.unit, rate: whole.rate });
-    } else {
-      for (const s of scopeStages) {
-        if (existing.has(s)) continue;
-        const r = rateFor(s);
-        toCreate.push({ stageName: s, unit: r?.unit ?? defaultUnit, rate: r?.rate ?? 0 });
-      }
-    }
-    if (toCreate.length === 0) {
-      notify("Nic do dodania", "Zlecenie ma już pozycje dla wszystkich etapów z zakresu brygady.");
+  // Zlecenie ze stawki: jedna pozycja "cała budowa" = metraż × stawka.
+  const fillFromRate = () => {
+    if (subRate <= 0) {
+      notify("Brak stawki", "Ustaw stawkę za m² na karcie podwykonawcy (zakładka Podwykonawcy) albo dodaj pozycję ręcznie.");
       return;
     }
-    const missingRates = toCreate.filter((c) => c.rate === 0).map((c) => c.stageName ?? "Cała technologia");
-    run(async () => {
-      for (const c of toCreate) {
-        await saveBuildSubcontract({
+    if (lines.some((l) => l.stageName === null)) {
+      notify("Zlecenie już jest", "Pozycja na całą budowę już istnieje — zmień ją przez „Edytuj”.");
+      return;
+    }
+    run(
+      () =>
+        saveBuildSubcontract({
           buildId,
           subcontractorId: subId,
           teamId: teamsOnBuild[0]?.teamId ?? null,
           technologyCode,
-          stageName: c.stageName,
-          unit: c.unit,
-          quantity: buildQuantity(c.unit),
-          rate: c.rate,
+          stageName: null,
+          unit: "m2",
+          quantity: buildQuantity("m2"),
+          rate: subRate,
           materialBy: "flowtex",
           note: "",
-        });
-      }
-    }, [SUBCONTRACTS_KEY]).then((ok) => {
-      if (ok && missingRates.length) {
-        notify(
-          "Brak stawek w cenniku",
-          `Dla etapów: ${missingRates.join(", ")} cennik nie ma stawki — pozycje dodane ze stawką 0 zł, uzupełnij je.`,
-        );
-      }
-    });
+        }),
+      [SUBCONTRACTS_KEY],
+    );
   };
 
   return (
     <View style={{ ...box, marginTop: 14, padding: 12 }}>
       <Text style={{ color: COLORS.foreground, fontWeight: "800", fontSize: 15 }}>{subName}</Text>
+      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+        Stawka: {subRate > 0 ? `${formatPLN(subRate)} netto za m²` : "nie ustawiona"}
+      </Text>
       <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
         {teamsOnBuild.length
           ? teamsOnBuild
@@ -346,7 +336,7 @@ function SubcontractorBlock({
         <Text className="text-xs text-muted uppercase">Zlecenie</Text>
         {!isClosed && (
           <View style={{ flexDirection: "row", gap: 14 }}>
-            <Link label="Z cennika" onPress={fillFromPriceList} />
+            <Link label="Ze stawki" onPress={fillFromRate} />
             <Link label={lineForm === "new" ? "Anuluj" : "+ Pozycja"} onPress={() => setLineForm(lineForm === "new" ? null : "new")} />
           </View>
         )}
@@ -379,7 +369,7 @@ function SubcontractorBlock({
       )}
       {sortedLines.length === 0 && lineForm !== "new" && (
         <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
-          Brak pozycji zlecenia. „Z cennika” doda etapy z zakresu brygady ze stawkami z cennika.
+          Brak pozycji zlecenia. „Ze stawki” doda jedną pozycję na całą budowę: metraż × stawka firmy.
         </Text>
       )}
       {sortedLines.map((l) => {
@@ -391,7 +381,7 @@ function SubcontractorBlock({
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={{ color: COLORS.foreground, fontWeight: "700", fontSize: 13 }}>
-                  {l.stageName ?? "Cała technologia"}
+                  {l.stageName ?? "Cała budowa"}
                 </Text>
                 <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
                   {fmtQty(l.quantity)} {unit} × {formatPLN(l.rate)} = {formatPLN(l.quantity * l.rate)}
@@ -411,7 +401,7 @@ function SubcontractorBlock({
                     label="Usuń"
                     danger
                     onPress={() =>
-                      confirmAction("Usunąć pozycję zlecenia?", l.stageName ?? "Cała technologia", "Usuń", () =>
+                      confirmAction("Usunąć pozycję zlecenia?", l.stageName ?? "Cała budowa", "Usuń", () =>
                         run(() => deleteBuildSubcontract(l.id), [SUBCONTRACTS_KEY]),
                       )
                     }
@@ -585,7 +575,7 @@ function LineForm({
             {[WHOLE, ...stages]
               .filter((s) => !takenStages.includes(s === WHOLE ? null : s))
               .map((s) => (
-                <Chip key={s} label={s === WHOLE ? "Cała technologia" : s} selected={stage === s} onPress={() => pickStage(s)} />
+                <Chip key={s} label={s === WHOLE ? "Cała budowa" : s} selected={stage === s} onPress={() => pickStage(s)} />
               ))}
           </View>
         </>
@@ -691,7 +681,7 @@ function ProtocolForm({
         const over = accepted + q > l.quantity + 0.0001;
         return (
           <View key={l.id} style={{ marginBottom: 10 }}>
-            <Text style={{ color: COLORS.foreground, fontSize: 13, fontWeight: "700" }}>{l.stageName ?? "Cała technologia"}</Text>
+            <Text style={{ color: COLORS.foreground, fontSize: 13, fontWeight: "700" }}>{l.stageName ?? "Cała budowa"}</Text>
             <Text style={{ color: COLORS.muted, fontSize: 11 }}>
               Odebrano {fmtQty(accepted)} z {fmtQty(l.quantity)} {TECHNOLOGY_UNIT_LABEL[l.unit]} · zgłoszono{" "}
               {fmtQty(reportedByStage(l.stageName))} · {formatPLN(l.rate)}/{TECHNOLOGY_UNIT_LABEL[l.unit]}

@@ -1520,6 +1520,7 @@ const ReportCard = ({
   showBuildInfo = true,
   showClientNoteStatus = false,
   subcontractorTeamName = null,
+  onSaveStageProgress,
 }: {
   report: ReportCardData;
   build?: Build;
@@ -1550,13 +1551,22 @@ const ReportCard = ({
   // Nazwa brygady podwykonawcy, jeśli raport jest od niej (null = brygada
   // własna) — zamiast liczby osób, której podwykonawca nie raportuje.
   subcontractorTeamName?: string | null;
+  // Admin: poprawa szacunkowych m² podwykonawcy przed zatwierdzeniem (115).
+  // Brak = tylko odczyt (np. "Moje raporty" brygadzisty).
+  onSaveStageProgress?: (
+    items: { stageName: string; quantity: number; unit: string }[],
+  ) => Promise<boolean>;
 }) => {
   const isWide = useWideLayout();
   const progress = report.stageProgress ?? [];
+  const [editingProgress, setEditingProgress] = useState(false);
+  const [progressDraft, setProgressDraft] = useState<Record<string, string>>({});
+  const [progressBusy, setProgressBusy] = useState(false);
+  const approved = report.status === "approved";
+  const canEditProgress = !!onSaveStageProgress && !approved && progress.length > 0;
   const whoLabel = subcontractorTeamName
     ? `Podwykonawca: ${subcontractorTeamName}`
     : `${report.people.length} ${pluralPL(report.people.length, "osoba", "osoby", "osób")}`;
-  const approved = report.status === "approved";
   const planned = assignments.filter((a) => a.buildId === build?.id);
   const plansForBuild = buildMaterialPlans.filter((p) => p.buildId === Number(build?.id));
   const totalHours = report.people.reduce((sum, person) => {
@@ -1672,8 +1682,58 @@ const ReportCard = ({
               oddechu sprawiało, że całość czytała się jak jeden nierozróżnialny
               blob, mimo że treściowo to cztery różne grupy informacji. */}
           {(subcontractorTeamName || progress.length > 0) && (
-            <DetailSection label="Wykonane" count={progress.length}>
-              {progress.length === 0 ? (
+            <DetailSection label="Wykonane — szacunkowo" count={progress.length}>
+              {editingProgress ? (
+                <View>
+                  {progress.map((row) => (
+                    <View
+                      key={row.stageName}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 }}
+                    >
+                      <Text className="text-sm text-foreground" style={{ flex: 1, minWidth: 0 }} numberOfLines={1}>
+                        {row.stageName}
+                      </Text>
+                      <View style={{ width: 120 }}>
+                        <Field
+                          value={progressDraft[row.stageName] ?? ""}
+                          onChangeText={(v: string) =>
+                            setProgressDraft({ ...progressDraft, [row.stageName]: v })
+                          }
+                          keyboardType="decimal-pad"
+                          style={{ marginTop: 0 }}
+                        />
+                      </View>
+                      <Text style={{ color: COLORS.muted, fontSize: 12, width: 28 }}>
+                        {PROGRESS_UNIT_LABEL[row.unit] ?? row.unit}
+                      </Text>
+                    </View>
+                  ))}
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label={progressBusy ? "Zapisywanie…" : "Zapisz m²"}
+                        disabled={progressBusy}
+                        onPress={async () => {
+                          const items = progress.map((row) => ({
+                            stageName: row.stageName,
+                            quantity: Number(
+                              (progressDraft[row.stageName] ?? "").replace(/\s/g, "").replace(",", "."),
+                            ) || 0,
+                            unit: row.unit,
+                          }));
+                          setProgressBusy(true);
+                          const ok = await onSaveStageProgress!(items);
+                          setProgressBusy(false);
+                          if (ok) setEditingProgress(false);
+                        }}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button label="Anuluj" secondary onPress={() => setEditingProgress(false)} />
+                    </View>
+                  </View>
+                </View>
+              ) : progress.length === 0 ? (
                 <Text className="text-sm text-muted py-1">
                   Nie zgłoszono wykonanych ilości.
                 </Text>
@@ -1695,6 +1755,23 @@ const ReportCard = ({
                     </Text>
                   </View>
                 ))
+              )}
+              {canEditProgress && !editingProgress && (
+                <Pressable
+                  onPress={() => {
+                    setProgressDraft(
+                      Object.fromEntries(
+                        progress.map((row) => [row.stageName, String(row.quantity).replace(".", ",")]),
+                      ),
+                    );
+                    setEditingProgress(true);
+                  }}
+                  style={{ marginTop: 6 }}
+                >
+                  <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
+                    Popraw m² przed zatwierdzeniem
+                  </Text>
+                </Pressable>
               )}
             </DetailSection>
           )}

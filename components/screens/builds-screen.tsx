@@ -22,6 +22,8 @@ import {
   WizardStepper,
 } from "@/components/report-ui";
 import { useAppData, type NewBuildInput } from "@/contexts/app-data";
+import { useQuery } from "@tanstack/react-query";
+import { listSubcontractors } from "@/lib/data/subcontractors";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { BuildPortalSection } from "@/components/build-portal-section";
@@ -54,6 +56,7 @@ const createEmptyNewBuild = (): NewBuildInput => ({
   startDate: todayISO(),
   durationDays: "",
   teamId: "",
+  subcontractorTeamIds: [],
   plannedHoursPerDay: "8",
   clientName: "",
   address: "",
@@ -80,6 +83,7 @@ export function BuildsScreen() {
     savedReports,
     employees,
     teams,
+    teamSubcontractorMap,
     teamMembers,
     timeEntries,
     buildMaterialActualCost,
@@ -115,7 +119,13 @@ export function BuildsScreen() {
     buildsView,
     setBuildsView,
     closeBuildPin,
+    setReportStageProgress,
   } = useAppData();
+  // Kreator: brygady własne (Brygada) i brygady podwykonawców
+  // (Podwykonawcy) w osobnych listach.
+  const ownTeams = teams.filter((t) => t.active && teamSubcontractorMap.get(t.id) == null);
+  const subcontractorTeams = teams.filter((t) => t.active && teamSubcontractorMap.get(t.id) != null);
+  const subcontractorsQuery = useQuery({ queryKey: ["subcontractors", "list"], queryFn: listSubcontractors });
 
   const [showBuild, setShowBuild] = useState(false);
   const [newBuild, setNewBuild] = useState<NewBuildInput>(createEmptyNewBuild);
@@ -541,7 +551,7 @@ export function BuildsScreen() {
           Brygada (opcjonalnie)
         </Text>
         <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-          {teams.map((t) => (
+          {ownTeams.map((t) => (
             <Pressable
               key={t.id}
               onPress={() =>
@@ -573,9 +583,61 @@ export function BuildsScreen() {
               </Text>
             </Pressable>
           ))}
-          {teams.length === 0 && (
+          {ownTeams.length === 0 && (
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-              Brak brygad — dodaj je w Admin → Zespół i dniówka.
+              Brak brygad — dodaj je w HR → Zespół → Brygady.
+            </Text>
+          )}
+        </View>
+
+        {/* Podwykonawcy — jak brygada, ale można wybrać kilku; trafiają do
+            "Brygady na budowie" na wszystkie etapy (zakres i zlecenie
+            ustawia się potem na karcie budowy). */}
+        <Text className="text-xs text-muted uppercase mt-4 mb-2">
+          Podwykonawcy (opcjonalnie)
+        </Text>
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+          {subcontractorTeams.map((t) => {
+            const selected = (newBuild.subcontractorTeamIds ?? []).includes(String(t.id));
+            const firm = subcontractorsQuery.data?.find(
+              (s) => s.id === teamSubcontractorMap.get(t.id),
+            )?.name;
+            return (
+              <Pressable
+                key={t.id}
+                onPress={() => {
+                  const current = newBuild.subcontractorTeamIds ?? [];
+                  setNewBuild({
+                    ...newBuild,
+                    subcontractorTeamIds: selected
+                      ? current.filter((id) => id !== String(t.id))
+                      : [...current, String(t.id)],
+                  });
+                }}
+                style={{
+                  backgroundColor: selected ? COLORS.primary : COLORS.background,
+                  borderRadius: RADIUS.control,
+                  paddingHorizontal: 9,
+                  paddingVertical: 7,
+                  borderWidth: 1,
+                  borderColor: selected ? COLORS.primary : COLORS.border,
+                }}
+              >
+                <Text
+                  style={{
+                    color: selected ? COLORS.background : COLORS.foreground,
+                    fontWeight: "700",
+                    fontSize: 12,
+                  }}
+                >
+                  {firm ? `${firm} (${t.name})` : t.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {subcontractorTeams.length === 0 && (
+            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+              Brak ekip podwykonawców — przypisz brygadę do firmy w zakładce Podwykonawcy.
             </Text>
           )}
         </View>
@@ -3115,6 +3177,7 @@ export function BuildsScreen() {
                   <ReportCard
                     key={report.id}
                     subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
+                  onSaveStageProgress={report.teamId ? (items) => setReportStageProgress(report.id, items) : undefined}
                     report={report}
                     build={b}
                     materials={materials}

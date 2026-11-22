@@ -44,6 +44,7 @@ export function ManagerScreen() {
     employees,
     materials,
     teams,
+    setReportStageProgress,
   } = useAppData();
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -155,6 +156,7 @@ export function ManagerScreen() {
                 <ReportCard
                   key={report.id}
                   subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
+                  onSaveStageProgress={report.teamId ? (items) => setReportStageProgress(report.id, items) : undefined}
                   report={report}
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}
@@ -188,6 +190,7 @@ export function ManagerScreen() {
                 <ReportCard
                   key={report.id}
                   subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
+                  onSaveStageProgress={report.teamId ? (items) => setReportStageProgress(report.id, items) : undefined}
                   report={report}
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}

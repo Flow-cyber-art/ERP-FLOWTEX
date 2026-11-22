@@ -55,6 +55,9 @@ export type SubmitDailyReportInput = {
   // supabase/sql/112_podwykonawcy_raport_i_brygady_budowy.sql). Baza
   // przyjmuje tylko etapy z zakresu jego brygady na tej budowie.
   stageProgress?: SubmitReportStageProgress[];
+  // Admin raportuje W IMIENIU podwykonawcy bez konta (115) — id jego
+  // brygady. Dla innych ról baza ten parametr ignoruje.
+  teamId?: number | null;
 };
 
 export type SubmitReportStageProgress = {
@@ -101,6 +104,9 @@ export async function submitDailyReport(
   input: SubmitDailyReportInput,
 ): Promise<SubmitDailyReportResult> {
   const { data, error } = await supabase.rpc("submit_daily_report", {
+    // p_team_id tylko gdy Admin raportuje za podwykonawcę (115) — bez tego
+    // klucza wywołanie pasuje też do wersji funkcji sprzed 115.
+    ...(input.teamId != null ? { p_team_id: input.teamId } : {}),
     p_build_id: input.buildId,
     p_date: input.date,
     p_people: input.people,
@@ -123,6 +129,21 @@ export async function submitDailyReport(
     kmRateApplied: result.kmRateApplied != null ? Number(result.kmRateApplied) : null,
     kmCost: result.kmCost != null ? Number(result.kmCost) : null,
   };
+}
+
+/**
+ * Korekta szacunkowych m² per etap w raporcie podwykonawcy przez Admina,
+ * przed zatwierdzeniem (115). Zastępuje wszystkie wpisy raportu.
+ */
+export async function setReportStageProgress(
+  reportId: number,
+  items: SubmitReportStageProgress[],
+): Promise<void> {
+  const { error } = await supabase.rpc("set_report_stage_progress", {
+    p_report_id: reportId,
+    p_items: items,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /**

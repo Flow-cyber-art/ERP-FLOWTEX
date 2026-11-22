@@ -89,6 +89,12 @@ export function ReportScreen() {
     buildTechnologySnapshots,
     draftStageProgress,
     setDraftStageProgress,
+    isAdminAccount,
+    draftReportTeamId,
+    setDraftReportTeamId,
+    buildTeams,
+    teams,
+    teamSubcontractorMap,
   } = useAppData();
 
   // Tryb podwykonawcy (supabase/sql/112_podwykonawcy_raport_i_brygady_
@@ -96,8 +102,21 @@ export function ReportScreen() {
   // budowach, do których jego brygada jest przypisana, tylko etapy ze
   // swojego zakresu, bez osób/godzin, kilometrówki i kosztów dodatkowych
   // — za to z wykonaną dziś ilością per etap (krok 2 "Wykonane").
-  const subMode = isSubcontractorLead;
-  const subBuildTeam = subMode ? mySubcontractorBuildTeam(activeBuild?.id) : null;
+  // Admin (w widoku brygadzisty) może też raportować ZA podwykonawcę bez
+  // konta w aplikacji — wybór "Raport za" niżej (115).
+  const adminForSub = isAdminAccount && !isSubcontractorLead && draftReportTeamId != null;
+  const subMode = isSubcontractorLead || adminForSub;
+  const subBuildTeam = isSubcontractorLead
+    ? mySubcontractorBuildTeam(activeBuild?.id)
+    : adminForSub
+      ? buildTeams.find(
+          (bt) => String(bt.buildId) === String(activeBuild?.id) && bt.teamId === draftReportTeamId,
+        ) ?? null
+      : null;
+  // Ekipy podwykonawców przypisane do wybranej budowy — do wyboru "Raport za".
+  const subTeamsOnBuild = buildTeams
+    .filter((bt) => String(bt.buildId) === String(activeBuild?.id) && teamSubcontractorMap.get(bt.teamId) != null)
+    .map((bt) => ({ teamId: bt.teamId, name: teams.find((t) => t.id === bt.teamId)?.name ?? `Brygada #${bt.teamId}` }));
   const subScope = subBuildTeam?.stageNames ?? null;
   const stageInScope = (stageName: string) =>
     !subMode || !subScope || subScope.includes(stageName);
@@ -106,13 +125,14 @@ export function ReportScreen() {
   );
   const buildUnitLabel = TECHNOLOGY_UNIT_LABEL[activeSnapshot?.unit ?? "m2"];
   const reportableBuilds = builds.filter(
-    (b) => b.status !== "zamknięta" && (!subMode || mySubcontractorBuildTeam(b.id) !== null),
+    (b) =>
+      b.status !== "zamknięta" && (!isSubcontractorLead || mySubcontractorBuildTeam(b.id) !== null),
   );
   // Podwykonawca nie może zostać na budowie spoza swojego przydziału
   // (domyślnie wybrana jest pierwsza budowa z listy) — przeskok na
   // pierwszą przypisaną, o ile nie edytuje już zapisanego raportu.
   useEffect(() => {
-    if (!subMode || subBuildTeam || editingReportId) return;
+    if (!isSubcontractorLead || subBuildTeam || editingReportId) return;
     const first = reportableBuilds[0];
     if (first && first.id !== activeBuild?.id) {
       setSelectedBuildId(first.id);
@@ -120,7 +140,13 @@ export function ReportScreen() {
       setDraftStageProgress({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subMode, subBuildTeam, editingReportId, reportableBuilds.length]);
+  }, [isSubcontractorLead, subBuildTeam, editingReportId, reportableBuilds.length]);
+  // Zmiana budowy przez Admina: wybrana ekipa podwykonawcy może nie być na
+  // nowej budowie — wtedy wracamy do raportu brygady własnej.
+  useEffect(() => {
+    if (adminForSub && !subBuildTeam) setDraftReportTeamId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBuild?.id]);
 
   const editingReport = editingReportId
     ? savedReports.find((report) => report.id === editingReportId)
@@ -407,7 +433,59 @@ export function ReportScreen() {
         labels={subMode ? ["Zużycie", "Wykonane", "Podsumowanie"] : undefined}
       />
 
-      {subMode && !subBuildTeam && (
+      {isAdminAccount && !isSubcontractorLead && subTeamsOnBuild.length > 0 && !reportApproved && (
+        <View
+          style={{
+            backgroundColor: COLORS.surface,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            borderRadius: RADIUS.card,
+            padding: 12,
+            marginBottom: 12,
+          }}
+        >
+          <Text className="text-xs text-muted uppercase mb-2">Raport za</Text>
+          <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+            {[{ teamId: null as number | null, name: "Nasza brygada" }, ...subTeamsOnBuild].map((opt) => {
+              const selected = (draftReportTeamId ?? null) === opt.teamId;
+              return (
+                <Pressable
+                  key={opt.teamId ?? "own"}
+                  disabled={!!editingReportId}
+                  onPress={() => {
+                    setDraftReportTeamId(opt.teamId);
+                    setDraftStageProgress({});
+                  }}
+                  style={{
+                    backgroundColor: selected ? COLORS.primary : COLORS.background,
+                    borderRadius: RADIUS.control,
+                    paddingHorizontal: 9,
+                    paddingVertical: 7,
+                    borderWidth: 1,
+                    borderColor: selected ? COLORS.primary : COLORS.border,
+                    opacity: editingReportId && !selected ? 0.4 : 1,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: selected ? COLORS.background : COLORS.foreground,
+                      fontWeight: "700",
+                      fontSize: 12,
+                    }}
+                  >
+                    {opt.teamId == null ? opt.name : `Podwykonawca: ${opt.name}`}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>
+            Dla podwykonawcy bez konta w aplikacji — raport zapisze się jako raport jego ekipy.
+          </Text>
+        </View>
+      )}
+
+      {isSubcontractorLead && !subBuildTeam && (
         <View
           style={{
             backgroundColor: COLORS.warningBg,
@@ -1008,11 +1086,11 @@ export function ReportScreen() {
         {reportStep === 2 && subMode && (
           <View className="p-4">
             <Text className="text-xs text-muted uppercase mb-1">
-              Wykonane dziś ({buildUnitLabel})
+              Wykonane dziś — szacunkowo ({buildUnitLabel})
             </Text>
             <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>
-              Wpisz, ile zrobiliście dziś na każdym etapie. Do zapłaty liczy się
-              odbiór etapu przez administratora — tu tylko postęp prac.
+              Wpisz szacunkowo, ile zrobiliście dziś na każdym etapie. Administrator
+              zatwierdza raport i może poprawić metry.
             </Text>
             {progressStages.length === 0 ? (
               <Text className="text-sm text-muted py-2">

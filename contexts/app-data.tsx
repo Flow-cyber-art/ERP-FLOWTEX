@@ -81,7 +81,13 @@ import {
 import { generateReportClientNote } from "@/lib/data/ai-summary";
 import { useRegisterPushToken } from "@/lib/notifications/use-register-push-token";
 import { useRegisterWebPush } from "@/lib/notifications/use-register-web-push";
-import { listReports, updateReportStatus, type ReportRow } from "@/lib/data/reports";
+import {
+  listReports,
+  setReportStageProgress as setReportStageProgressRemote,
+  updateReportStatus,
+  type ReportRow,
+  type SubmitReportStageProgress,
+} from "@/lib/data/reports";
 import {
   listBuildTeams,
   removeBuildTeam as removeBuildTeamRemote,
@@ -162,6 +168,9 @@ export type NewBuildInput = {
   startDate: string;
   durationDays: string;
   teamId: string;
+  // Brygady podwykonawców wybrane w kreatorze — dopinane do build_teams
+  // (wszystkie etapy) zaraz po utworzeniu budowy.
+  subcontractorTeamIds?: string[];
   plannedHoursPerDay: string;
   clientName: string;
   address: string;
@@ -1288,6 +1297,10 @@ function useAppDataState(
   // Raport brygadzisty podwykonawcy (112): wykonana dziś ilość per etap
   // (nazwa etapu -> ilość jako tekst z pola, jednostka budowy).
   const [draftStageProgress, setDraftStageProgress] = useState<Record<string, string>>({});
+  // Admin raportuje W IMIENIU podwykonawcy bez konta (115): id jego
+  // brygady albo null = raport brygady własnej.
+  const [draftReportTeamId, setDraftReportTeamId] = useState<number | null>(null);
+  const isAdminAccount = initialRole === "Admin";
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   useEffect(() => {
     AsyncStorage.getItem("budowy-simulator").then((raw) => {
@@ -1688,6 +1701,20 @@ function useAppDataState(
       return false;
     }
   }, [invalidate]);
+  // Korekta szacunkowych m² w raporcie podwykonawcy przed zatwierdzeniem (115).
+  const setReportStageProgress = useCallback(
+    async (reportId: string, items: SubmitReportStageProgress[]) => {
+      try {
+        await setReportStageProgressRemote(Number(reportId), items);
+        await invalidate("reports");
+        return true;
+      } catch (error) {
+        reportMutationError(error, "Nie udało się zapisać poprawionych m².");
+        return false;
+      }
+    },
+    [invalidate],
+  );
   const removeBuildTeam = useCallback(async (buildId: number, teamId: number) => {
     try {
       await removeBuildTeamRemote(buildId, teamId);
@@ -1815,6 +1842,18 @@ function useAppDataState(
         address: newBuild.address || undefined,
         contractValue: newBuild.contractValue ? Number(newBuild.contractValue) : undefined,
       });
+      // Podwykonawcy wybrani w kreatorze — na wszystkie etapy; zakres
+      // można potem zawęzić na karcie budowy (Brygady na budowie).
+      for (const teamId of newBuild.subcontractorTeamIds ?? []) {
+        try {
+          await saveBuildTeamRemote({ buildId: build.id, teamId: Number(teamId), stageNames: null });
+        } catch (error) {
+          reportMutationError(
+            error,
+            "Budowa dodana, ale nie udało się przypisać podwykonawcy — dodaj go na karcie budowy.",
+          );
+        }
+      }
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
       // builds."teamId" -> build_teams (trigger w 112).
       await queryClient.invalidateQueries({ queryKey: ["buildTeams", "list"] });
@@ -2035,11 +2074,21 @@ function useAppDataState(
     // Brygadzista podwykonawcy raportuje we własnym raporcie (osobnym od
     // brygady własnej tego samego dnia) — tylko na budowach, do których
     // jego brygada jest przypisana; bez osób, km i kosztów dodatkowych.
-    const subBuildTeam = isSubcontractorLead ? mySubcontractorBuildTeam(buildId) : null;
-    if (isSubcontractorLead && !subBuildTeam) {
+    // Admin może też wysłać raport ZA podwykonawcę bez konta (115) —
+    // wtedy brygada z wyboru "Raport za" na ekranie raportu.
+    const subBuildTeam = isSubcontractorLead
+      ? mySubcontractorBuildTeam(buildId)
+      : isAdminAccount && draftReportTeamId != null
+        ? buildTeams.find(
+            (bt) => String(bt.buildId) === String(buildId) && bt.teamId === draftReportTeamId,
+          ) ?? null
+        : null;
+    if ((isSubcontractorLead || (isAdminAccount && draftReportTeamId != null)) && !subBuildTeam) {
       notify(
         "Budowa nie jest przypisana",
-        "Twoja brygada nie jest przypisana do tej budowy — poproś administratora o dodanie jej na karcie budowy.",
+        isSubcontractorLead
+          ? "Twoja brygada nie jest przypisana do tej budowy — poproś administratora o dodanie jej na karcie budowy."
+          : "Wybrana ekipa podwykonawcy nie jest przypisana do tej budowy — dodaj ją na karcie budowy.",
       );
       return;
     }
@@ -2296,6 +2345,9 @@ function useAppDataState(
         km: reportSnapshot.km,
         note: reportSnapshot.note,
         stageProgress: stageProgress.length ? stageProgress : undefined,
+        // Tylko raport Admina za podwykonawcę — brygadzistę podwykonawcy
+        // baza rozpoznaje sama po koncie.
+        teamId: isAdminAccount && !isSubcontractorLead ? reportTeamId : null,
       }).then(({ sent, errorMessage, isNetworkError }) => {
         if (!sent) {
           // isNetworkError === false znaczy, że serwer AKTYWNIE odrzucił
@@ -2352,6 +2404,9 @@ function useAppDataState(
     draftNote,
     draftPeople,
     draftStageProgress,
+    draftReportTeamId,
+    isAdminAccount,
+    buildTeams,
     buildTechnologySnapshots,
     isSubcontractorLead,
     mySubcontractorBuildTeam,
@@ -2887,6 +2942,7 @@ function useAppDataState(
         (report.stageProgress ?? []).map((sp) => [sp.stageName, String(sp.quantity).replace(".", ",")]),
       ),
     );
+    setDraftReportTeamId(report.teamId ?? null);
     setReportSaved(false);
     setReportStep(1);
     setTab("report");
@@ -2924,6 +2980,7 @@ function useAppDataState(
     setDraftKm("");
     setDraftNote("");
     setDraftStageProgress({});
+    setDraftReportTeamId(null);
     setReportStep(1);
     setReportSaved(false);
     setHrSaved(false);
@@ -3046,6 +3103,10 @@ function useAppDataState(
     buildTeams,
     teamSubcontractorMap,
     isSubcontractorLead,
+    isAdminAccount,
+    draftReportTeamId,
+    setDraftReportTeamId,
+    setReportStageProgress,
     subcontractorLeadEmployeeIds,
     mySubcontractorBuildTeam,
     saveBuildTeam,
@@ -3226,6 +3287,10 @@ function useAppDataState(
     buildTeams,
     teamSubcontractorMap,
     isSubcontractorLead,
+    isAdminAccount,
+    draftReportTeamId,
+    setDraftReportTeamId,
+    setReportStageProgress,
     subcontractorLeadEmployeeIds,
     mySubcontractorBuildTeam,
     saveBuildTeam,

@@ -57,6 +57,8 @@ export type PendingReportSubmission = {
   note?: string;
   // Wykonana ilość per etap (raport brygadzisty podwykonawcy, 112).
   stageProgress?: { stageName: string; quantity: number; unit: string }[];
+  // Raport Admina w imieniu podwykonawcy bez konta (115).
+  teamId?: number | null;
   /** Kiedy dodane do kolejki lokalnie — do sortowania i debugowania. */
   queuedAt: string;
   /** Liczba nieudanych prób — do prostego backoffu / ostrzeżenia w UI. */
@@ -86,9 +88,11 @@ function describeError(error: unknown): { message: string; isNetworkError: boole
   return { message: String(error), isNetworkError: true };
 }
 
-/** Klucz identyfikujący raport w kolejce lokalnej — jeden raport na budowę+dzień. */
-function reportKey(item: Pick<PendingReportSubmission, "buildId" | "date">) {
-  return `${item.buildId}:${item.date}`;
+/** Klucz identyfikujący raport w kolejce lokalnej — budowa + dzień + brygada
+ * (od 115 Admin może z jednego urządzenia wysłać raport własny i raport
+ * za podwykonawcę tego samego dnia). */
+function reportKey(item: Pick<PendingReportSubmission, "buildId" | "date" | "teamId">) {
+  return `${item.buildId}:${item.date}:${item.teamId ?? ""}`;
 }
 
 async function readQueue(): Promise<PendingReportSubmission[]> {
@@ -178,6 +182,7 @@ export async function flushOutbox(): Promise<{
           km: item.km,
           note: item.note,
           stageProgress: item.stageProgress,
+          teamId: item.teamId ?? null,
         });
         succeededKeys.push(reportKey(item));
         // Push do Adminów "na bieżąco" — best-effort, patrz komentarz na

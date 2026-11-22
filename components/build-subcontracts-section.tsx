@@ -203,7 +203,15 @@ export function BuildSubcontractsSection({ buildId, isClosed }: { buildId: strin
             const teamIds = (subTeams.get(subId) ?? []).map((t) => t.teamId);
             const perStage = new Map<string, number>();
             for (const sp of savedReports
-              .filter((r) => r.buildId === buildId && r.teamId != null && teamIds.includes(r.teamId))
+              // Tylko raporty zatwierdzone przez Admina (m² po ewentualnej
+              // korekcie) — szacunki niezatwierdzone nie podpowiadają odbioru.
+              .filter(
+                (r) =>
+                  r.buildId === buildId &&
+                  r.status === "approved" &&
+                  r.teamId != null &&
+                  teamIds.includes(r.teamId),
+              )
               .flatMap((r) => r.stageProgress ?? [])) {
               perStage.set(sp.stageName, (perStage.get(sp.stageName) ?? 0) + sp.quantity);
             }
@@ -387,7 +395,7 @@ function SubcontractorBlock({
                   {fmtQty(l.quantity)} {unit} × {formatPLN(l.rate)} = {formatPLN(l.quantity * l.rate)}
                 </Text>
                 <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                  Odebrano {fmtQty(accepted)} / {fmtQty(l.quantity)} {unit} · zgłoszono w raportach {fmtQty(reported)} {unit}
+                  Odebrano {fmtQty(accepted)} / {fmtQty(l.quantity)} {unit} · zatwierdzono w raportach {fmtQty(reported)} {unit}
                 </Text>
                 <Text style={{ color: l.materialBy === "flowtex" ? COLORS.muted : COLORS.primary, fontSize: 11, marginTop: 2 }}>
                   Materiał: {l.materialBy === "flowtex" ? "nasz (z magazynu)" : "podwykonawcy"}
@@ -673,7 +681,7 @@ function ProtocolForm({
   return (
     <View style={{ ...box, borderColor: COLORS.primary }}>
       <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}>
-        Wpisz ilości faktycznie odebrane (obmiar). Podpowiedź = zgłoszone w raportach, jeszcze nieodebrane.
+        Wpisz ilości faktycznie odebrane (obmiar). Podpowiedź = m² z zatwierdzonych raportów, jeszcze nieodebrane.
       </Text>
       {lines.map((l) => {
         const accepted = acceptedQty(l.id);
@@ -683,7 +691,7 @@ function ProtocolForm({
           <View key={l.id} style={{ marginBottom: 10 }}>
             <Text style={{ color: COLORS.foreground, fontSize: 13, fontWeight: "700" }}>{l.stageName ?? "Cała budowa"}</Text>
             <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-              Odebrano {fmtQty(accepted)} z {fmtQty(l.quantity)} {TECHNOLOGY_UNIT_LABEL[l.unit]} · zgłoszono{" "}
+              Odebrano {fmtQty(accepted)} z {fmtQty(l.quantity)} {TECHNOLOGY_UNIT_LABEL[l.unit]} · zatwierdzono w raportach{" "}
               {fmtQty(reportedByStage(l.stageName))} · {formatPLN(l.rate)}/{TECHNOLOGY_UNIT_LABEL[l.unit]}
             </Text>
             <Field

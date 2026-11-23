@@ -58,7 +58,7 @@ const createEmptyNewBuild = (): NewBuildInput => ({
   // Domyślnie 1 dzień — puste pole blokowało "Zapisz i dalej" (z testów).
   durationDays: "1",
   teamId: "",
-  subcontractorTeamIds: [],
+  subcontractorIds: [],
   plannedHoursPerDay: "8",
   clientName: "",
   address: "",
@@ -133,8 +133,8 @@ export function BuildsScreen() {
   // Kreator: brygady własne (Brygada) i brygady podwykonawców
   // (Podwykonawcy) w osobnych listach.
   const ownTeams = teams.filter((t) => t.active && teamSubcontractorMap.get(t.id) == null);
-  const subcontractorTeams = teams.filter((t) => t.active && teamSubcontractorMap.get(t.id) != null);
   const subcontractorsQuery = useQuery({ queryKey: ["subcontractors", "list"], queryFn: listSubcontractors });
+  const activeSubcontractors = (subcontractorsQuery.data ?? []).filter((sub) => sub.active);
 
   const [showBuild, setShowBuild] = useState(false);
   const [newBuild, setNewBuild] = useState<NewBuildInput>(createEmptyNewBuild);
@@ -669,28 +669,26 @@ export function BuildsScreen() {
           )}
         </View>
 
-        {/* Podwykonawcy — jak brygada, ale można wybrać kilku; trafiają do
-            "Brygady na budowie" na wszystkie etapy (zakres i zlecenie
-            ustawia się potem na karcie budowy). */}
+        {/* Podwykonawcy — wybór FIRMY (nie brygady), można kilku; trafiają
+            do "Brygady na budowie" na wszystkie etapy (zakres i zlecenie
+            ustawia się potem na karcie budowy). Brygadę firmy baza bierze
+            albo zakłada sama (supabase/sql/117_...). */}
         <Text className="text-xs text-muted uppercase mt-4 mb-2">
           Podwykonawcy (opcjonalnie)
         </Text>
         <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-          {subcontractorTeams.map((t) => {
-            const selected = (newBuild.subcontractorTeamIds ?? []).includes(String(t.id));
-            const firm = subcontractorsQuery.data?.find(
-              (s) => s.id === teamSubcontractorMap.get(t.id),
-            )?.name;
+          {activeSubcontractors.map((sub) => {
+            const selected = (newBuild.subcontractorIds ?? []).includes(String(sub.id));
             return (
               <Pressable
-                key={t.id}
+                key={sub.id}
                 onPress={() => {
-                  const current = newBuild.subcontractorTeamIds ?? [];
+                  const current = newBuild.subcontractorIds ?? [];
                   setNewBuild({
                     ...newBuild,
-                    subcontractorTeamIds: selected
-                      ? current.filter((id) => id !== String(t.id))
-                      : [...current, String(t.id)],
+                    subcontractorIds: selected
+                      ? current.filter((id) => id !== String(sub.id))
+                      : [...current, String(sub.id)],
                   });
                 }}
                 style={{
@@ -709,14 +707,16 @@ export function BuildsScreen() {
                     fontSize: 12,
                   }}
                 >
-                  {firm ? `${firm} (${t.name})` : t.name}
+                  {sub.name}
                 </Text>
               </Pressable>
             );
           })}
-          {subcontractorTeams.length === 0 && (
+          {activeSubcontractors.length === 0 && (
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-              Brak ekip podwykonawców — przypisz brygadę do firmy w zakładce Podwykonawcy.
+              {subcontractorsQuery.isLoading
+                ? "Wczytywanie podwykonawców…"
+                : "Brak podwykonawców — dodaj firmę w zakładce Podwykonawcy."}
             </Text>
           )}
         </View>

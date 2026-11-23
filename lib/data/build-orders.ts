@@ -126,6 +126,10 @@ export type ReceiveBuildOrderItemInput = {
   itemId: number;
   receivedQuantity: number;
   receivedUnitPrice?: number;
+  // Magazyn v2 (121): dane trwałej partii — opcjonalne.
+  producerLotNo?: string;
+  expiryDate?: string; // RRRR-MM-DD
+  qualityDocs?: string;
 };
 
 export async function receiveBuildOrder(
@@ -140,6 +144,9 @@ export async function receiveBuildOrder(
       itemId: i.itemId,
       receivedQuantity: i.receivedQuantity,
       receivedUnitPrice: i.receivedUnitPrice ?? null,
+      producerLotNo: i.producerLotNo?.trim() || null,
+      expiryDate: i.expiryDate?.trim() || null,
+      qualityDocs: i.qualityDocs?.trim() || null,
     })),
     p_document_number: documentNumber?.trim() || null,
     p_supplier: supplier?.trim() || null,

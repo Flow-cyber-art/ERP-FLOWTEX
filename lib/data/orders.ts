@@ -89,12 +89,20 @@ export async function deleteOrder(orderId: number): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Dane trwałej partii przy przyjęciu (magazyn v2, 121) — wszystkie opcjonalne. */
+export type BatchMetaInput = {
+  producerLotNo?: string;
+  expiryDate?: string; // RRRR-MM-DD
+  qualityDocs?: string;
+};
+
 export async function receiveOrder(
   orderId: number,
   receivedQuantity: number,
   receivedUnitPrice?: number,
   documentNumber?: string,
   supplier?: string,
+  batch?: BatchMetaInput,
 ): Promise<void> {
   const { error } = await supabase.rpc("receive_material_order", {
     p_order_id: orderId,
@@ -102,6 +110,9 @@ export async function receiveOrder(
     p_received_unit_price: receivedUnitPrice ?? null,
     p_document_number: documentNumber?.trim() || null,
     p_supplier: supplier?.trim() || null,
+    p_producer_lot_no: batch?.producerLotNo?.trim() || null,
+    p_expiry_date: batch?.expiryDate?.trim() || null,
+    p_quality_docs: batch?.qualityDocs?.trim() || null,
   });
   if (error) throw new Error(error.message);
 }

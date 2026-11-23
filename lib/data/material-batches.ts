@@ -24,10 +24,14 @@ export type MaterialBatchRow = {
   source: string;
   documentNumber: string | null;
   supplier: string | null;
+  // Magazyn v2 (121): dane trwałej partii.
+  producerLotNo?: string | null;
+  expiryDate?: string | null;
+  qualityDocs?: string | null;
 };
 
 const BATCH_COLUMNS =
-  "id, materialId, quantity, unitPrice, receivedAt, source, documentNumber, supplier";
+  "id, materialId, quantity, unitPrice, receivedAt, source, documentNumber, supplier, producerLotNo, expiryDate, qualityDocs";
 
 export async function listMaterialBatches(): Promise<MaterialBatchRow[]> {
   const { data, error } = await supabase

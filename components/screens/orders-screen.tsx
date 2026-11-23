@@ -7,6 +7,7 @@ import {
   DetailSection,
   Field,
   IconBadge,
+  notify,
   QuantityStepper,
   ScreenHeader,
   StatusBadge,
@@ -17,6 +18,15 @@ import { useWideLayout } from "@/hooks/use-wide-layout";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
+
+// Cena z pola formularza: pusta = brak ceny (baza poprosi o cenę),
+// "0" to prawidłowa cena zero, przecinek dziesiętny dozwolony.
+const parsePrice = (value: string | undefined): number | undefined => {
+  const trimmed = (value ?? "").trim().replace(",", ".");
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : undefined;
+};
 
 const BUILD_ORDER_STATUS_LABEL: Record<string, string> = {
   robocze: "Robocze",
@@ -154,9 +164,11 @@ export function OrdersScreen() {
     null,
   );
   const [buildOrderReceiveDrafts, setBuildOrderReceiveDrafts] = useState<
-    Record<number, { qty: string; price: string }>
+    Record<number, { qty: string; price: string; lot?: string; expiry?: string }>
   >({});
   const [buildOrderReceiveDocument, setBuildOrderReceiveDocument] = useState("");
+  // Magazyn v2: dokumenty jakościowe (link do atestu/DWU) — wspólne dla dostawy.
+  const [buildOrderReceiveDocs, setBuildOrderReceiveDocs] = useState("");
   const [buildOrderReceiveSupplier, setBuildOrderReceiveSupplier] = useState("");
   const [buildOrderReceiveBusy, setBuildOrderReceiveBusy] = useState(false);
   const [editingBuildOrderItemId, setEditingBuildOrderItemId] = useState<
@@ -212,6 +224,43 @@ export function OrdersScreen() {
   const [receiveSupplierDrafts, setReceiveSupplierDrafts] = useState<
     Record<string, string>
   >({});
+  // Magazyn v2: dane trwałej partii przy przyjęciu na magazyn (opcjonalne).
+  const [receiveBatchDrafts, setReceiveBatchDrafts] = useState<
+    Record<string, { lot?: string; expiry?: string; docs?: string }>
+  >({});
+  const batchFields = (key: string) => {
+    const draft = receiveBatchDrafts[key] ?? {};
+    const set = (patch: { lot?: string; expiry?: string; docs?: string }) =>
+      setReceiveBatchDrafts({ ...receiveBatchDrafts, [key]: { ...draft, ...patch } });
+    return (
+      <>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text className="text-xs text-muted uppercase">Nr partii producenta</Text>
+            <Field style={{ marginTop: 8 }} placeholder="opcjonalnie" value={draft.lot ?? ""} onChangeText={(v: string) => set({ lot: v })} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text className="text-xs text-muted uppercase">Ważna do (RRRR-MM-DD)</Text>
+            <Field style={{ marginTop: 8 }} placeholder="opcjonalnie" value={draft.expiry ?? ""} onChangeText={(v: string) => set({ expiry: v })} />
+          </View>
+        </View>
+        <Text className="text-xs text-muted uppercase" style={{ marginTop: 10 }}>Dokumenty jakościowe (link do atestu / DWU)</Text>
+        <Field style={{ marginTop: 8 }} placeholder="opcjonalnie" value={draft.docs ?? ""} onChangeText={(v: string) => set({ docs: v })} />
+      </>
+    );
+  };
+  const batchMeta = (key: string) => {
+    const d = receiveBatchDrafts[key] ?? {};
+    return { producerLotNo: d.lot, expiryDate: d.expiry, qualityDocs: d.docs };
+  };
+  const badExpiry = (key: string) => {
+    const e = receiveBatchDrafts[key]?.expiry?.trim();
+    if (e && !/^\d{4}-\d{2}-\d{2}$/.test(e)) {
+      notify("Nieprawidłowa data ważności", "Wpisz datę w formacie RRRR-MM-DD albo zostaw pole puste.");
+      return true;
+    }
+    return false;
+  };
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("aktywne");
 
@@ -638,6 +687,7 @@ export function OrdersScreen() {
                         setBuildOrderReceiveDrafts(drafts);
                         setBuildOrderReceiveDocument("");
                         setBuildOrderReceiveSupplier("");
+                        setBuildOrderReceiveDocs("");
                         setBuildOrderReceivingId(order.id);
                       }}
                     />
@@ -681,6 +731,36 @@ export function OrdersScreen() {
                             />
                           </View>
                         </View>
+                        <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: COLORS.muted, fontSize: 10 }}>Nr partii producenta</Text>
+                            <Field
+                              style={{ marginTop: 4 }}
+                              placeholder="opcjonalnie"
+                              value={buildOrderReceiveDrafts[item.id]?.lot ?? ""}
+                              onChangeText={(v: string) =>
+                                setBuildOrderReceiveDrafts({
+                                  ...buildOrderReceiveDrafts,
+                                  [item.id]: { ...buildOrderReceiveDrafts[item.id], lot: v },
+                                })
+                              }
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: COLORS.muted, fontSize: 10 }}>Ważna do (RRRR-MM-DD)</Text>
+                            <Field
+                              style={{ marginTop: 4 }}
+                              placeholder="opcjonalnie"
+                              value={buildOrderReceiveDrafts[item.id]?.expiry ?? ""}
+                              onChangeText={(v: string) =>
+                                setBuildOrderReceiveDrafts({
+                                  ...buildOrderReceiveDrafts,
+                                  [item.id]: { ...buildOrderReceiveDrafts[item.id], expiry: v },
+                                })
+                              }
+                            />
+                          </View>
+                        </View>
                       </View>
                     ))}
                     <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
@@ -705,6 +785,15 @@ export function OrdersScreen() {
                         />
                       </View>
                     </View>
+                    <Text style={{ color: COLORS.muted, fontSize: 10, marginTop: 8 }}>
+                      Dokumenty jakościowe (link do atestu / DWU)
+                    </Text>
+                    <Field
+                      style={{ marginTop: 4 }}
+                      placeholder="opcjonalnie"
+                      value={buildOrderReceiveDocs}
+                      onChangeText={setBuildOrderReceiveDocs}
+                    />
                     <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
                       <View style={{ flex: 1 }}>
                         <Button
@@ -716,24 +805,38 @@ export function OrdersScreen() {
                       </View>
                       <View style={{ flex: 2 }}>
                         <Button
-                          label="Przyjmij na magazyn"
+                          label="Przyjmij na budowę"
                           fullWidth
                           onPress={async () => {
+                            const badDate = order.order_items.find((item) => {
+                              const e = buildOrderReceiveDrafts[item.id]?.expiry?.trim();
+                              return e && !/^\d{4}-\d{2}-\d{2}$/.test(e);
+                            });
+                            if (badDate) {
+                              notify("Nieprawidłowa data ważności", `${badDate.materialName}: wpisz datę w formacie RRRR-MM-DD.`);
+                              return;
+                            }
                             setBuildOrderReceiveBusy(true);
                             try {
-                              await receiveBuildOrder(
+                              const ok = await receiveBuildOrder(
                                 order.id,
                                 order.order_items.map((item) => ({
                                   itemId: item.id,
                                   receivedQuantity:
                                     Number(buildOrderReceiveDrafts[item.id]?.qty) || 0,
-                                  receivedUnitPrice:
-                                    Number(buildOrderReceiveDrafts[item.id]?.price) || undefined,
+                                  // Pusta cena = brak (baza poprosi o cenę); "0" to
+                                  // prawidłowa cena zero, nie brak (dawniej `|| undefined`).
+                                  receivedUnitPrice: parsePrice(buildOrderReceiveDrafts[item.id]?.price),
+                                  producerLotNo: buildOrderReceiveDrafts[item.id]?.lot,
+                                  expiryDate: buildOrderReceiveDrafts[item.id]?.expiry,
+                                  qualityDocs: buildOrderReceiveDocs,
                                 })),
                                 buildOrderReceiveDocument,
                                 buildOrderReceiveSupplier,
                               );
-                              setBuildOrderReceivingId(null);
+                              // Formularz zostaje otwarty po błędzie (np. brak ceny),
+                              // żeby nie tracić wpisanych danych.
+                              if (ok) setBuildOrderReceivingId(null);
                             } finally {
                               setBuildOrderReceiveBusy(false);
                             }
@@ -1301,6 +1404,7 @@ export function OrdersScreen() {
                             />
                           </View>
                         </View>
+                        {batchFields(String(item.id))}
                         <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
                           <View style={{ flex: 1 }}>
                             <Button
@@ -1315,17 +1419,18 @@ export function OrdersScreen() {
                               label="Przyjmij na magazyn"
                               fullWidth
                               onPress={async () => {
-                                const qty = Number(receiveDrafts[item.id]);
+                                const qty = Number(String(receiveDrafts[item.id] ?? "").replace(",", "."));
                                 if (!qty || qty <= 0) return;
-                                const price = Number(receivePriceDrafts[item.id]) || undefined;
-                                await receiveOrder(
+                                if (badExpiry(String(item.id))) return;
+                                const ok = await receiveOrder(
                                   item.id,
                                   qty,
-                                  price,
+                                  parsePrice(receivePriceDrafts[item.id]),
                                   receiveDocumentDrafts[item.id],
                                   receiveSupplierDrafts[item.id],
+                                  batchMeta(String(item.id)),
                                 );
-                                setReceivingId(null);
+                                if (ok) setReceivingId(null);
                               }}
                             />
                           </View>
@@ -1655,6 +1760,7 @@ export function OrdersScreen() {
                     />
                   </View>
                 </View>
+                {batchFields(String(row.orderId))}
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
                   <View style={{ flex: 1 }}>
                     <Button
@@ -1668,18 +1774,19 @@ export function OrdersScreen() {
                     <Button
                       label="Przyjmij na magazyn"
                       fullWidth
-                      onPress={() => {
-                        const qty = Number(receiveDrafts[row.orderId!]);
+                      onPress={async () => {
+                        const qty = Number(String(receiveDrafts[row.orderId!] ?? "").replace(",", "."));
                         if (!qty || qty <= 0) return;
-                        const price = Number(receivePriceDrafts[row.orderId!]);
-                        receiveOrder(
+                        if (badExpiry(String(row.orderId))) return;
+                        const ok = await receiveOrder(
                           row.orderId!,
                           qty,
-                          price > 0 ? price : undefined,
+                          parsePrice(receivePriceDrafts[row.orderId!]),
                           receiveDocumentDrafts[row.orderId!],
                           receiveSupplierDrafts[row.orderId!],
+                          batchMeta(String(row.orderId)),
                         );
-                        setReceivingId(null);
+                        if (ok) setReceivingId(null);
                       }}
                     />
                   </View>

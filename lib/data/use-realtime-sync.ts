@@ -35,6 +35,9 @@ const REALTIME_TABLES: { table: string; queryKey: string }[] = [
   { table: "stock_ledger", queryKey: "buildMaterialReturns" },
   { table: "shortages", queryKey: "buildMaterialLots" },
   { table: "shortages", queryKey: "buildMaterials" },
+  { table: "shortages", queryKey: "shortages" },
+  { table: "material_loss_requests", queryKey: "lossRequests" },
+  { table: "stock_operations", queryKey: "stockReviews" },
   { table: "build_stage_status", queryKey: "buildStageStatuses" },
   // Brakowało tego wpisu od zawsze (moduł Technologia nie miał osobnej
   // migracji realtime) — technologiesQuery w app-data.tsx ma

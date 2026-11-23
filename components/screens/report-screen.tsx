@@ -18,12 +18,14 @@ import {
 } from "@/components/report-ui";
 import { useAppData } from "@/contexts/app-data";
 import { BuildPhotosSection } from "@/components/build-photos-section";
+import { BuildStockSection } from "@/components/build-stock-section";
 import { materialReportKey } from "@/lib/material-report-key";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
 import { TECHNOLOGY_UNIT_LABEL } from "@/lib/data/technologies";
 
 export function ReportScreen() {
+  const [stockOpen, setStockOpen] = useState(false);
   const {
     devRole,
     materials,
@@ -1043,6 +1045,20 @@ export function ReportScreen() {
                 </View>
               )}
             </View>
+
+            {/* Magazyn v2: saldo budowy, niedobory i zgłoszenie straty
+                (rozdarty worek, przeterminowany materiał) — brygadzista nie
+                widzi karty budowy, więc dostęp jest stąd. */}
+            {activeBuild && (
+              <View className="border-t border-border p-4">
+                <Pressable onPress={() => setStockOpen(!stockOpen)}>
+                  <Text className="text-xs text-muted uppercase">
+                    {stockOpen ? "▾" : "▸"} Stan materiałów na budowie · zgłoś stratę
+                  </Text>
+                </Pressable>
+                {stockOpen && <BuildStockSection buildId={activeBuild.id} isClosed={false} />}
+              </View>
+            )}
 
             {!subMode && (
             <>

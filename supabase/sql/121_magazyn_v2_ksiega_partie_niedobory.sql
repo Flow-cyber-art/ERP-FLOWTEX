@@ -229,15 +229,24 @@ begin
     returning id into v_id;
 
   if p_batch is not null and abs(coalesce(p_qty_delta, 0)) > 0 then
-    insert into batch_balances (batch_id, material_id, location_build_id, qty, unit_price)
-      values (p_batch, p_material, p_location, p_qty_delta, coalesce(v_price, 0))
-      on conflict (batch_id, location_build_id) do update
-        set qty = batch_balances.qty + excluded.qty,
-            first_in_at = case when batch_balances.qty <= 0.00001 and excluded.qty > 0 then now()
-                               else batch_balances.first_in_at end
-      returning qty into v_new;
-    if v_new < -0.00001 then
-      raise exception 'Za mało materiału w partii #% w tej lokalizacji (brakuje %).', p_batch, round(-v_new, 3);
+    if p_qty_delta > 0 then
+      -- Przychód: nowy wiersz salda albo dopisanie do istniejącego.
+      insert into batch_balances (batch_id, material_id, location_build_id, qty, unit_price)
+        values (p_batch, p_material, p_location, p_qty_delta, coalesce(v_price, 0))
+        on conflict (batch_id, location_build_id) do update
+          set qty = batch_balances.qty + excluded.qty,
+              first_in_at = case when batch_balances.qty <= 0.00001 then now() else batch_balances.first_in_at end
+        returning qty into v_new;
+    else
+      -- Rozchód: tylko istniejące saldo, nigdy poniżej zera (N4). Uwaga: nie
+      -- przez INSERT ... ON CONFLICT — Postgres sprawdza CHECK (qty >= 0)
+      -- na wstawianym wierszu, zanim rozpozna konflikt (błąd z testu 23.11).
+      update batch_balances set qty = qty + p_qty_delta
+        where batch_id = p_batch and location_build_id is not distinct from p_location
+        returning qty into v_new;
+      if not found or v_new < -0.00001 then
+        raise exception 'Za mało „%” w partii #% w tej lokalizacji.', fn_material_name(p_material), p_batch;
+      end if;
     end if;
     if p_location is null then
       update materials set stock = stock + p_qty_delta, "updatedAt" = now() where id = p_material;

@@ -17,6 +17,7 @@ import {
 import { RADIUS } from "@/constants/radius";
 import { Icon, type IconName } from "@/components/icon";
 import { useWideLayout } from "@/hooks/use-wide-layout";
+import { localISODate } from "@/lib/utils";
 
 // react-native-web's Alert.alert (0.21.x) is a complete no-op — no
 // window.alert/confirm fallback, nothing — so on web every Alert.alert
@@ -334,7 +335,7 @@ const UNIT_OPTIONS = [
   "m²",
 ];
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => localISODate();
 
 const formatPLN = (amount: number) =>
   `${amount.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;

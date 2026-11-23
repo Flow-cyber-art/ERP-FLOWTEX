@@ -4,6 +4,7 @@ import { Button, COLORS, IconBadge, formatPLN, notify, SegmentedControl } from "
 import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
+import { localISODate } from "@/lib/utils";
 
 /**
  * "Rozliczenie" (HR) — połączenie dawnych osobnych "Rozliczenie godzin"
@@ -25,7 +26,7 @@ import { Icon } from "@/components/icon";
 type PeriodMode = "week" | "month" | "year";
 type ViewMode = "list" | "calendar";
 
-const toISO = (d: Date) => d.toISOString().slice(0, 10);
+const toISO = (d: Date) => localISODate(d);
 const parseISO = (iso: string) => new Date(iso + "T00:00:00");
 const addDays = (iso: string, days: number) => {
   const d = parseISO(iso);

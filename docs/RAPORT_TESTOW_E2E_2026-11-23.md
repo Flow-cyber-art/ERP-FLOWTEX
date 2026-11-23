@@ -116,3 +116,18 @@ Migracja `supabase/sql/118_uprawnienia_bezpieczenstwo.sql` **wgrana na produkcj�
 - SEC-3 (P2): funkcja `generate-client-summary` w ścieżce portalu sprawdza token, ale nie PIN — wymaga wdrożenia edge function.
 - Pracownik nadal czyta przez API tabele budów, raportów, magazynu i ofert (bez stawek pracowników). Do zawężenia razem z nowym modelem magazynu.
 - F14 (limit prób PIN) — niezmienione.
+
+## 8. Status poprawek — krok 2: poprawki P1 niezależne od modelu magazynu
+
+Migracje `119_dni_robocze_swieta_urlopy.sql` i `120_koszt_dnia_w_raporcie.sql` **wgrane na produkcję** + zmiany w aplikacji.
+
+| Błąd | Poprawka | Weryfikacja |
+|---|---|---|
+| F28 | brak sieci rozpoznawany poprawnie (także `code: ""` i „Load failed”); kolejka startuje z aplikacją (`app/_layout.tsx`) i ponawia wysyłkę po odzyskaniu sieci, przy powrocie do aplikacji i co minutę; lista raportów odświeża się po wysłaniu; na ekranie „Raporty” baner z raportami czekającymi w telefonie | testy `lib/offline-outbox.test.ts` (5) |
+| F7 | „Dodaj wszystkich” dodaje brygadę budowy (brygady własne z `build_teams` + brygada główna; gdy brak — brygada, której liderem jest zalogowany) | kompilacja; do sprawdzenia w aplikacji po wdrożeniu |
+| F6 | po „Przypisz do budowy” pole zużycia nie jest wypełniane przywiezioną ilością | kompilacja; do sprawdzenia w aplikacji po wdrożeniu |
+| F9 | data raportu, pola wyboru daty i zakresy listy płac liczone w czasie lokalnym (`localISODate`) zamiast UTC — przy okazji naprawione przesuwanie dat o dzień w kalendarzu i na liście płac | testy `lib/utils.test.ts` (3) |
+| F29 | `count_business_days` pomija polskie święta (te same reguły co budowy); podgląd w aplikacji też; istniejące wnioski przeliczone | SQL: 23–28.12.2026 = 2, Wielkanoc 2027 = 2, tydzień z Bożym Ciałem = 4; testy w `lib/workdays.test.ts` |
+| F12 | koszt materiału w raporcie = koszt dnia z rozbicia na partie (`fn_report_day_cost`), a nie różnica ostatniej edycji | scenariusz w wycofanej transakcji: 12 kg → 124 zł, edycja 11 kg → 112 zł (wcześniej −12 zł) |
+
+Nadal otwarte z kroku 2: serwer przyjmuje dowolną datę raportu (rozdzielenie daty wykonania od daty wysłania — w kroku 5).

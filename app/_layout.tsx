@@ -22,6 +22,7 @@ import {
 import { registerServiceWorker } from "@/lib/pwa/registerServiceWorker";
 import { UpdateAvailableBanner } from "@/components/update-available-banner";
 import { useViewportHeight } from "@/lib/_core/use-viewport-height";
+import { initOfflineOutbox } from "@/lib/offline-outbox";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -62,6 +63,10 @@ export default function RootLayout() {
   useEffect(() => {
     registerServiceWorker();
   }, []);
+
+  // Kolejka raportów zapisanych bez zasięgu: wysyłka przy starcie, po
+  // odzyskaniu sieci, przy powrocie do aplikacji i co minutę (F28).
+  useEffect(() => initOfflineOutbox(), []);
 
   // WEB-ONLY: app/+html.tsx ma statyczny <title>ERP FLOWTEX</title>, ale
   // expo-router/react-navigation nadpisuje document.title przy starcie i

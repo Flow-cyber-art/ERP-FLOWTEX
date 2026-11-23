@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { isWorkdayUTC } from "@/lib/workdays";
 import {
   Button,
   COLORS,
@@ -51,17 +52,18 @@ const dateLabelPL = (iso: string) =>
 
 // Podgląd liczby dni roboczych po stronie klienta — tylko do UX
 // (pokazać "5 dni" zanim wniosek zostanie wysłany). Autorytatywne
-// wyliczenie robi server (count_business_days w 049_urlopy.sql), bo
-// klientowi się nie ufa.
+// wyliczenie robi serwer (count_business_days, 119_dni_robocze_swieta_urlopy.sql).
+// Te same reguły co w bazie: bez weekendów i polskich świąt (F29).
 function countBusinessDays(dateFrom: string, dateTo: string): number {
-  if (!dateFrom || !dateTo) return 0;
-  const from = new Date(dateFrom + "T00:00:00");
-  const to = new Date(dateTo + "T00:00:00");
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return 0;
+  const m1 = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateFrom || "");
+  const m2 = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateTo || "");
+  if (!m1 || !m2) return 0;
+  const from = new Date(Date.UTC(+m1[1], +m1[2] - 1, +m1[3]));
+  const to = new Date(Date.UTC(+m2[1], +m2[2] - 1, +m2[3]));
+  if (to < from) return 0;
   let count = 0;
-  for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
-    const day = d.getDay();
-    if (day !== 0 && day !== 6) count += 1;
+  for (const d = new Date(from); d <= to; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (isWorkdayUTC(d)) count += 1;
   }
   return count;
 }

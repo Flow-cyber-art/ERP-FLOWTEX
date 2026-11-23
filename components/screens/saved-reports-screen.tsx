@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import {
@@ -13,6 +13,7 @@ import { useAppData } from "@/contexts/app-data";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
 import { useWideLayout } from "@/hooks/use-wide-layout";
+import { getPendingReports, onOutboxFlushed, type PendingReportSubmission } from "@/lib/offline-outbox";
 
 type StatusFilter = "all" | "pending" | "approved";
 
@@ -33,6 +34,25 @@ export function SavedReportsScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
+
+  // Raporty zapisane w telefonie, które jeszcze nie dotarły na serwer
+  // (brak zasięgu). Bez tego znikały z listy do czasu wysłania (F28).
+  const [pendingReports, setPendingReports] = useState<PendingReportSubmission[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const refresh = () =>
+      getPendingReports()
+        .then((items) => alive && setPendingReports(items))
+        .catch(() => undefined);
+    refresh();
+    const interval = setInterval(refresh, 15_000);
+    const off = onOutboxFlushed(refresh);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+      off();
+    };
+  }, []);
 
   const visibleBuilds = useMemo(
     () =>
@@ -130,6 +150,29 @@ export function SavedReportsScreen() {
           </Pressable>
         }
       />
+      {pendingReports.length > 0 && (
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: COLORS.warning,
+            borderRadius: RADIUS.control,
+            padding: 12,
+            marginBottom: 12,
+          }}
+        >
+          <Text style={{ color: COLORS.warning, fontWeight: "800", fontSize: 13 }}>
+            {pendingReports.length === 1
+              ? "1 raport czeka w telefonie na wysłanie"
+              : `${pendingReports.length} raporty czekają w telefonie na wysłanie`}
+          </Text>
+          {pendingReports.map((r) => (
+            <Text key={`${r.buildId}:${r.date}:${r.teamId ?? ""}`} style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
+              {(builds.find((b) => b.id === String(r.buildId))?.name ?? `Budowa #${r.buildId}`) + " · " + r.date}
+              {r.isNetworkError === false && r.lastError ? ` — serwer odrzucił: ${r.lastError}` : " — wyśle się sam, gdy będzie internet"}
+            </Text>
+          ))}
+        </View>
+      )}
 
       {builds.length > 0 && (
         <>

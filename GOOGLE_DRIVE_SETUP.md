@@ -85,7 +85,8 @@ web).
 ## Gotowe — jak to działa dalej
 
 - **Admin** → karta budowy → **"Stwórz katalog na zdjęcia"** — tworzy
-  folder `{numer} - {nazwa}` na Shared Drive i zapisuje jego ID/link w
+  folder `{numer} - {nazwa}` wewnątrz folderu **„01_Budowy”** (albo
+  „Budowy”) na Shared Drive i zapisuje jego ID/link w
   budowie. Świadomy, ręczny krok — nie dzieje się automatycznie przy
   zakładaniu budowy.
 - **Brygadzista** → raport dzienny → **"Zrób zdjęcie" / "Dołącz z
@@ -94,6 +95,25 @@ web).
   katalog — inaczej apka pokaże czytelny komunikat.
 - Każde przesłane zdjęcie zostaje też zapisane (link, kto, kiedy) w
   tabeli `build_photos` — do ewentualnej galerii w apce w przyszłości.
+
+## Folder „01_Budowy” (rodzic folderów budów)
+
+Foldery budów powstają w folderze „01_Budowy” / „Budowy”. Funkcja szuka go
+najpierw bezpośrednio w `GOOGLE_DRIVE_ROOT_ID`, potem wszędzie, gdzie konto
+serwisowe ma dostęp; gdy go nie znajdzie — tworzy „01_Budowy” w root.
+
+- Folder **musi leżeć na Shared Drive**, do którego należy konto serwisowe.
+  Na „Moim dysku” zwykłego konta foldery dałoby się zakładać, ale upload
+  zdjęć kończy się błędem `storageQuotaExceeded` (konto serwisowe ma 0 GB).
+- Inna nazwa lub kilka folderów o tej nazwie → ustaw sekret
+  `GOOGLE_DRIVE_BUILDS_FOLDER_ID` (ID z adresu folderu) albo
+  `GOOGLE_DRIVE_BUILDS_FOLDER_NAME`.
+- Sprawdzenie bez tworzenia czegokolwiek (Admin):
+  `checkDriveSetup()` z `lib/data/drive-photos.ts` (akcja `checkSetup`) —
+  zwraca konto serwisowe, root i znaleziony folder budów.
+- Budowy, które już mają folder, zostają tam, gdzie są (folder się nie
+  przenosi automatycznie — można go przeciągnąć ręcznie w Drive, link
+  w apce dalej działa, bo ID się nie zmienia).
 
 ## Rozwiązywanie problemów
 

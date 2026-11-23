@@ -54,6 +54,7 @@ import {
   listOrders,
   markOrderOrdered as markOrderOrderedRemote,
   receiveOrder as receiveOrderRemote,
+  type BatchMetaInput,
 } from "@/lib/data/orders";
 import { listTimeEntries } from "@/lib/data/time-entries";
 import {
@@ -1205,6 +1206,7 @@ function useAppDataState(
       receivedUnitPrice?: number;
       documentNumber?: string;
       supplier?: string;
+      batch?: BatchMetaInput;
     }) =>
       receiveOrderRemote(
         vars.orderId,
@@ -1212,6 +1214,7 @@ function useAppDataState(
         vars.receivedUnitPrice,
         vars.documentNumber,
         vars.supplier,
+        vars.batch,
       ),
   });
   const generateOrderFromPlanMutation = useMutation({
@@ -2050,7 +2053,7 @@ function useAppDataState(
     supplier?: string,
   ) => {
     const valid = items.filter((i) => i.receivedQuantity > 0);
-    if (valid.length === 0) return;
+    if (valid.length === 0) return false;
     try {
       await receiveBuildOrderMutation.mutateAsync({
         orderId,
@@ -2065,8 +2068,10 @@ function useAppDataState(
         invalidate("buildMaterials"),
         invalidate("buildMaterialLots"),
       ]);
+      return true;
     } catch (error) {
       reportMutationError(error, "Nie udało się przyjąć dostawy.");
+      return false;
     }
   }, [invalidate, receiveBuildOrderMutation]);
   const saveWorkdayHours = useCallback(() => {
@@ -2794,9 +2799,10 @@ function useAppDataState(
     receivedUnitPrice?: number,
     documentNumber?: string,
     supplier?: string,
+    batch?: BatchMetaInput,
   ) => {
     const numericId = Number(orderId);
-    if (Number.isNaN(numericId) || receivedQuantity <= 0) return;
+    if (Number.isNaN(numericId) || receivedQuantity <= 0) return false;
     try {
       await receiveOrderMutation.mutateAsync({
         orderId: numericId,
@@ -2804,14 +2810,17 @@ function useAppDataState(
         receivedUnitPrice,
         documentNumber,
         supplier,
+        batch,
       });
       await Promise.all([
         invalidate("orders"),
         invalidate("materials"),
         invalidate("warehouseBatches"),
       ]);
+      return true;
     } catch (error) {
       reportMutationError(error, "Nie udało się przyjąć dostawy.");
+      return false;
     }
   }, [invalidate, receiveOrderMutation]);
   const addPersonToDraft = useCallback(() => {

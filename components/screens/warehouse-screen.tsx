@@ -25,6 +25,7 @@ import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-m
 import { RADIUS } from "@/constants/radius";
 import { listMaterialCorrections } from "@/lib/data/materials";
 import { Icon } from "@/components/icon";
+import { StockControlSection } from "@/components/stock-control-section";
 
 const EMPTY_NEW_MATERIAL: NewMaterialInput = {
   name: "",
@@ -158,6 +159,7 @@ export function WarehouseScreen() {
       title="Materiały"
       action={<Button label="+ Dodaj" onPress={() => setShowMaterial(!showMaterial)} />}
     />
+    <StockControlSection />
     {showMaterial && (
       <View className="bg-surface border border-border rounded-card p-4 mb-4">
         <Field
@@ -808,9 +810,21 @@ export function WarehouseScreen() {
                               </Text>
                             </View>
                           </View>
-                          {(b.documentNumber || b.supplier) && (
+                          {(b.documentNumber || b.supplier || b.producerLotNo || b.expiryDate) && (
                             <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
-                              {[b.documentNumber, b.supplier].filter(Boolean).join(" · ")}
+                              {[
+                                b.documentNumber,
+                                b.supplier,
+                                b.producerLotNo ? `partia ${b.producerLotNo}` : null,
+                                b.expiryDate ? `ważna do ${b.expiryDate}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </Text>
+                          )}
+                          {!!b.qualityDocs && (
+                            <Text style={{ color: COLORS.primary, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                              Dokumenty: {b.qualityDocs}
                             </Text>
                           )}
                         </View>

@@ -31,6 +31,7 @@ import { BuildPortalSection } from "@/components/build-portal-section";
 import { TechnologyPicker } from "@/components/technology-picker";
 import { BuildTeamsSection } from "@/components/build-teams-section";
 import { BuildSubcontractsSection } from "@/components/build-subcontracts-section";
+import { BuildStockSection } from "@/components/build-stock-section";
 import { todayISO } from "@/components/report-ui";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
@@ -2360,24 +2361,28 @@ export function BuildsScreen() {
                             </View>
                             <View style={{ flex: 2 }}>
                               <Button
-                                label="Przyjmij na magazyn"
+                                label="Przyjmij na budowę"
                                 fullWidth
                                 onPress={async () => {
                                   setOrderReceiveBusy(true);
                                   try {
-                                    await receiveBuildOrder(
+                                    const priceOf = (v?: string) => {
+                                      const t = (v ?? "").trim().replace(",", ".");
+                                      return t && Number.isFinite(Number(t)) ? Number(t) : undefined;
+                                    };
+                                    const ok = await receiveBuildOrder(
                                       order.id,
                                       order.order_items.map((item) => ({
                                         itemId: item.id,
                                         receivedQuantity:
-                                          Number(orderReceiveDrafts[item.id]?.qty) || 0,
-                                        receivedUnitPrice:
-                                          Number(orderReceiveDrafts[item.id]?.price) || undefined,
+                                          Number(String(orderReceiveDrafts[item.id]?.qty ?? "").replace(",", ".")) || 0,
+                                        // Pusta cena = brak (baza poprosi o cenę); "0" = cena zero.
+                                        receivedUnitPrice: priceOf(orderReceiveDrafts[item.id]?.price),
                                       })),
                                       orderReceiveDocument,
                                       orderReceiveSupplier,
                                     );
-                                    setOrderReceivingId(null);
+                                    if (ok) setOrderReceivingId(null);
                                   } finally {
                                     setOrderReceiveBusy(false);
                                   }
@@ -2451,6 +2456,9 @@ export function BuildsScreen() {
               własna sekcja od razu pod Zamówieniami, budowa ustawiana
               automatycznie na tę, w której jesteśmy (setSelectedBuildId
               przy otwarciu), zanim dojdzie do Zdjęć i Kosztów. */}
+          {/* Magazyn v2: saldo na budowie, zwrot/strata w trakcie prac,
+              niedobory do wyjaśnienia (components/build-stock-section.tsx). */}
+          {detailTab === "materials" && <BuildStockSection buildId={b.id} isClosed={isClosed} />}
           {detailTab === "materials" && !isClosed &&
             (() => {
               const buildAssignments = assignments.filter(

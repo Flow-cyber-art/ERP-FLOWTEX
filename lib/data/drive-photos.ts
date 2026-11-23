@@ -21,6 +21,15 @@ export async function createBuildDriveFolder(
   return invoke({ action: "createBuildFolder", buildId });
 }
 
+/** Diagnostyka (Admin): czy klucz działa i gdzie powstaną foldery budów. Niczego nie tworzy. */
+export async function checkDriveSetup(): Promise<{
+  serviceAccount: string;
+  root: { id?: string; name?: string; error?: string };
+  buildsFolder: { id: string; name: string; source: string; webViewLink?: string } | string;
+}> {
+  return invoke({ action: "checkSetup" });
+}
+
 export async function uploadBuildPhoto(
   buildId: number,
   fileName: string,

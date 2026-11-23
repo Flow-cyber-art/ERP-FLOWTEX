@@ -16,6 +16,12 @@
 //     własnego miejsca na dysku (0 GB kwoty), więc upload zawsze zwróci
 //     błąd "storageQuotaExceeded".
 //
+//   GOOGLE_DRIVE_BUILDS_FOLDER_ID (opcjonalnie) — ID folderu „Budowy”, w
+//     którym mają powstawać foldery budów. Bez tego sekretu funkcja sama
+//     szuka folderu o nazwie GOOGLE_DRIVE_BUILDS_FOLDER_NAME (domyślnie
+//     „01_Budowy” albo „Budowy”): najpierw bezpośrednio w GOOGLE_DRIVE_ROOT_ID, potem na
+//     całym dostępnym dysku; gdy go nie ma — tworzy go w GOOGLE_DRIVE_ROOT_ID.
+//
 // Deploy: Supabase Dashboard -> Edge Functions -> Deploy new function ->
 // nazwa "drive-photos" -> wklej ten plik -> Deploy. Patrz
 // GOOGLE_DRIVE_SETUP.md po pełną instrukcję konfiguracji Google.
@@ -143,6 +149,44 @@ async function findOrCreateFolder(
   return created;
 }
 
+// Folder „Budowy” — rodzic wszystkich folderów budów. Kolejność:
+// 1) sekret GOOGLE_DRIVE_BUILDS_FOLDER_ID, 2) folder o tej nazwie wprost w
+// root, 3) jedyny/pierwszy taki folder dostępny dla konta serwisowego,
+// 4) utworzenie go w root. `create = false` — tylko sprawdzenie (diagnostyka).
+async function resolveBuildsFolder(
+  accessToken: string,
+  rootFolderId: string,
+  create: boolean,
+): Promise<{ id: string; name: string; source: string; webViewLink?: string } | null> {
+  const explicitId = Deno.env.get("GOOGLE_DRIVE_BUILDS_FOLDER_ID");
+  const names = Deno.env.get("GOOGLE_DRIVE_BUILDS_FOLDER_NAME")
+    ? [Deno.env.get("GOOGLE_DRIVE_BUILDS_FOLDER_NAME")!]
+    : ["01_Budowy", "Budowy"];
+  const name = names[0];
+  if (explicitId) {
+    const f = await driveFetch(
+      accessToken,
+      `/drive/v3/files/${explicitId}?supportsAllDrives=true&fields=id,name,webViewLink`,
+    );
+    return { id: f.id, name: f.name, source: "sekret GOOGLE_DRIVE_BUILDS_FOLDER_ID", webViewLink: f.webViewLink };
+  }
+  const base = `(${names.map((n) => `name = '${n.replace(/'/g, "\\'")}'`).join(" or ")}) and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const search = async (q: string) =>
+    (await driveFetch(
+      accessToken,
+      `/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink,parents)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`,
+    )).files ?? [];
+  const inRoot = await search(`${base} and '${rootFolderId}' in parents`);
+  if (inRoot.length > 0) return { ...inRoot[0], source: "folder w katalogu głównym" };
+  const anywhere = await search(base);
+  if (anywhere.length > 0) {
+    return { ...anywhere[0], source: anywhere.length > 1 ? `pierwszy z ${anywhere.length} folderów o tej nazwie` : "folder na dysku" };
+  }
+  if (!create) return null;
+  const created = await findOrCreateFolder(accessToken, name, rootFolderId);
+  return { id: created.id, name, source: "utworzony w katalogu głównym", webViewLink: created.webViewLink };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -189,8 +233,9 @@ Deno.serve(async (req) => {
   const action = body.action;
 
   // ------------------------------------------------------------
-  // createBuildFolder — tylko Admin. Tworzy folder budowy wprost pod
-  // rootFolderId (Shared Drive) i zapisuje jego id + link w builds.
+  // createBuildFolder — tylko Admin. Tworzy folder budowy
+  // „{numer} - {nazwa}” wewnątrz folderu „Budowy” (resolveBuildsFolder)
+  // i zapisuje jego id + link w builds.
   // ------------------------------------------------------------
   if (action === "createBuildFolder") {
     if (callerProfile.role !== "Admin") {
@@ -211,16 +256,40 @@ Deno.serve(async (req) => {
 
     try {
       const accessToken = await getAccessToken(serviceAccount);
+      const buildsFolder = await resolveBuildsFolder(accessToken, rootFolderId, true);
       const folder = await findOrCreateFolder(
         accessToken,
-        `${build.number} - ${build.name}`,
-        rootFolderId,
+        `${build.number} - ${build.name}`.replace(/[\\/]/g, "-"),
+        buildsFolder!.id,
       );
       await admin
         .from("builds")
         .update({ drive_folder_id: folder.id, photosUrl: folder.webViewLink })
         .eq("id", buildId);
       return json({ folderId: folder.id, url: folder.webViewLink });
+    } catch (err) {
+      return json({ error: err instanceof Error ? err.message : String(err) }, 502);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // checkSetup — tylko Admin. Diagnostyka: czy klucz działa i gdzie
+  // powstaną foldery budów. NICZEGO nie tworzy.
+  // ------------------------------------------------------------
+  if (action === "checkSetup") {
+    if (callerProfile.role !== "Admin") return json({ error: "Wymagana rola Admin." }, 403);
+    try {
+      const accessToken = await getAccessToken(serviceAccount);
+      const root = await driveFetch(
+        accessToken,
+        `/drive/v3/files/${rootFolderId}?supportsAllDrives=true&fields=id,name`,
+      ).catch((e) => ({ error: String(e) }));
+      const buildsFolder = await resolveBuildsFolder(accessToken, rootFolderId, false);
+      return json({
+        serviceAccount: serviceAccount.client_email,
+        root,
+        buildsFolder: buildsFolder ?? "nie znaleziono — zostanie utworzony w katalogu głównym przy pierwszym folderze budowy",
+      });
     } catch (err) {
       return json({ error: err instanceof Error ? err.message : String(err) }, 502);
     }
@@ -273,7 +342,8 @@ Deno.serve(async (req) => {
     if (typeof displayName === "string" && displayName.trim()) {
       uploaderName = displayName.trim();
     }
-    const today = new Date().toISOString().slice(0, 10);
+    // Data w czasie polskim (nie UTC) — zdjęcie z 00:30 trafia do właściwego dnia.
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Warsaw" }).format(new Date());
     const subfolderName = `${today}_${uploaderName}`.replace(/[\\/]/g, "-");
 
     try {

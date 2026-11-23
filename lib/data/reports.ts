@@ -175,6 +175,8 @@ export type ReportRow = {
   status: ReportStatus;
   adminComment: string | null;
   updatedAt: string;
+  /** Kiedy raport wysłano (ostatnie wysłanie) — `date` to dzień wykonania prac. */
+  submittedAt: string | null;
   km: string | null;
   kmRateApplied: string | null;
   kmCost: string | null;
@@ -205,6 +207,7 @@ export type ReportRow = {
 const REPORT_SELECT = `
   id, buildId, date, status, adminComment, updatedAt, km, kmRateApplied, kmCost,
   submittedByProfileId, note,
+  submittedAt:submitted_at,
   clientNote:client_note,
   teamId:team_id,
   report_stage_progress ( stageName:stage_name, quantity, unit ),
@@ -230,3 +233,41 @@ export async function listReports(): Promise<ReportRow[]> {
   if (error) throw new Error(error.message);
   return (data ?? []) as unknown as ReportRow[];
 }
+
+/**
+ * Zatwierdzenie albo odesłanie do poprawy (124: review_report). Przy
+ * odesłaniu komentarz jest wymagany; każde zdarzenie trafia do historii
+ * (report_review_log).
+ */
+export async function reviewReport(reportId: number, approve: boolean, comment?: string): Promise<void> {
+  const { error } = await supabase.rpc("review_report", {
+    p_report_id: reportId,
+    p_approve: approve,
+    p_comment: comment?.trim() || null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export type ReportReviewEvent = {
+  id: number;
+  action: "wyslany" | "poprawiony" | "zatwierdzony" | "do_poprawy";
+  comment: string | null;
+  createdAt: string;
+};
+
+export async function listReportReviewLog(reportId: number): Promise<ReportReviewEvent[]> {
+  const { data, error } = await supabase
+    .from("report_review_log")
+    .select("id, action, comment, createdAt:created_at")
+    .eq("report_id", reportId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ReportReviewEvent[];
+}
+
+export const REVIEW_ACTION_LABELS: Record<ReportReviewEvent["action"], string> = {
+  wyslany: "Wysłany",
+  poprawiony: "Poprawiony i wysłany ponownie",
+  zatwierdzony: "Zatwierdzony",
+  do_poprawy: "Odesłany do poprawy",
+};

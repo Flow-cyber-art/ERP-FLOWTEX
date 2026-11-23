@@ -18,6 +18,8 @@ import { RADIUS } from "@/constants/radius";
 import { Icon, type IconName } from "@/components/icon";
 import { useWideLayout } from "@/hooks/use-wide-layout";
 import { localISODate } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { listReportReviewLog, REVIEW_ACTION_LABELS } from "@/lib/data/reports";
 
 // react-native-web's Alert.alert (0.21.x) is a complete no-op — no
 // window.alert/confirm fallback, nothing — so on web every Alert.alert
@@ -1289,7 +1291,11 @@ export type ReportCardData = {
   reasons: Record<string, string>;
   people: { employeeId: string; start: string; end: string }[];
   extraCosts: ExtraCost[];
-  status: "submitted" | "approved";
+  status: "submitted" | "approved" | "do_poprawy";
+  /** Komentarz Admina przy odesłaniu do poprawy. */
+  adminComment?: string | null;
+  /** Kiedy raport wysłano (ISO); `date` to dzień wykonania prac. */
+  submittedAt?: string | null;
   // Notatka brygadzisty do tego raportu (Decyzja B) — jedna, dowolna,
   // czysto informacyjna.
   note?: string;
@@ -1503,6 +1509,37 @@ const ReportListHeader = ({ showBuildInfo = true }: { showBuildInfo?: boolean })
   );
 };
 
+/** „23.11.2026 14:05” w czasie lokalnym. */
+export function formatDateTimePL(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Historia raportu: wysłania, odesłania do poprawy (z komentarzem), zatwierdzenie. */
+export function ReportReviewHistory({ reportId }: { reportId: number }) {
+  const { data } = useQuery({
+    queryKey: ["reportReviewLog", reportId],
+    queryFn: () => listReportReviewLog(reportId),
+    staleTime: 30000,
+  });
+  if (!data || data.length === 0) return null;
+  return (
+    <View style={{ marginTop: 14 }}>
+      <Text style={{ color: COLORS.muted, fontSize: 11, fontWeight: "800", letterSpacing: 0.6 }}>HISTORIA</Text>
+      {data.map((e) => (
+        <Text key={e.id} style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
+          {formatDateTimePL(e.createdAt)} — {REVIEW_ACTION_LABELS[e.action] ?? e.action}
+          {e.comment ? (
+            <Text style={{ color: e.action === "do_poprawy" ? COLORS.danger : COLORS.foreground }}>: „{e.comment}”</Text>
+          ) : null}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 const ReportCard = ({
   report,
   build,
@@ -1514,6 +1551,7 @@ const ReportCard = ({
   expanded,
   onToggle,
   onApprove,
+  onSendBack,
   showBuildInfo = true,
   showClientNoteStatus = false,
   subcontractorTeamName = null,
@@ -1539,6 +1577,8 @@ const ReportCard = ({
   expanded: boolean;
   onToggle: () => void;
   onApprove: () => void;
+  /** Odesłanie do poprawy z komentarzem (wymagany). Zwraca true po zapisie. */
+  onSendBack?: (comment: string) => Promise<boolean>;
   showBuildInfo?: boolean;
   // Pokazuje status notatki dla klienta (generowanej automatycznie przy
   // zatwierdzeniu raportu, patrz approveReport w contexts/app-data.tsx) —
@@ -1560,6 +1600,16 @@ const ReportCard = ({
   const [progressDraft, setProgressDraft] = useState<Record<string, string>>({});
   const [progressBusy, setProgressBusy] = useState(false);
   const approved = report.status === "approved";
+  const needsFix = report.status === "do_poprawy";
+  const [sendBackOpen, setSendBackOpen] = useState(false);
+  const [sendBackComment, setSendBackComment] = useState("");
+  const [sendBackBusy, setSendBackBusy] = useState(false);
+  const statusBadge = (
+    <StatusBadge
+      status={approved ? "ok" : needsFix ? "danger" : "warning"}
+      label={approved ? "Zatwierdzony" : needsFix ? "Do poprawy" : "Do sprawdzenia"}
+    />
+  );
   const canEditProgress = !!onSaveStageProgress && !approved && progress.length > 0;
   const whoLabel = subcontractorTeamName
     ? `Podwykonawca: ${subcontractorTeamName}`
@@ -1608,10 +1658,7 @@ const ReportCard = ({
             {pluralPL(Object.keys(report.materialValues).length, "materiał", "materiały", "materiałów")}
           </Text>
           <View style={{ width: 150, alignItems: "flex-start" }}>
-            <StatusBadge
-              status={approved ? "ok" : "warning"}
-              label={approved ? "Zatwierdzony" : "Do sprawdzenia"}
-            />
+            {statusBadge}
           </View>
           <View style={{ width: 36, alignItems: "flex-end" }}>
             <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
@@ -1653,10 +1700,7 @@ const ReportCard = ({
                 "materiałów",
               )}
             </Text>
-            <StatusBadge
-              status={approved ? "ok" : "warning"}
-              label={approved ? "Zatwierdzony" : "Do sprawdzenia"}
-            />
+            {statusBadge}
           </View>
         </View>
         <Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={COLORS.muted} />
@@ -1672,6 +1716,28 @@ const ReportCard = ({
               Kierownik: {build.manager}
             </Text>
           )}
+          <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+            Prace wykonane: {report.date}
+            {report.submittedAt ? ` · wysłano ${formatDateTimePL(report.submittedAt)}` : ""}
+          </Text>
+          {needsFix && report.adminComment ? (
+            <View
+              style={{
+                marginTop: 10,
+                borderWidth: 1,
+                borderColor: COLORS.danger,
+                borderRadius: RADIUS.card,
+                padding: 10,
+              }}
+            >
+              <Text style={{ color: COLORS.danger, fontWeight: "800", fontSize: 12 }}>
+                Odesłany do poprawy — czeka na brygadzistę
+              </Text>
+              <Text style={{ color: COLORS.foreground, fontSize: 13, marginTop: 4 }}>
+                {report.adminComment}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Sekcje rozdzielone dużym odstępem pionowym (zasada Gestalt:
               bliskość = przynależność) zamiast jednakowo ciasnych bloków —
@@ -2193,9 +2259,64 @@ const ReportCard = ({
 <Icon name="check" size={16} color={COLORS.success} />
 <Text style={{ color: COLORS.success, fontWeight: "700" }}>Raport zatwierdzony</Text>
 </View>
+            ) : sendBackOpen ? (
+              <View>
+                <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 4 }}>
+                  Co trzeba poprawić? Brygadzista zobaczy ten komentarz przy raporcie.
+                </Text>
+                <Field
+                  value={sendBackComment}
+                  onChangeText={setSendBackComment}
+                  placeholder="np. brakuje godzin Kowalskiego, popraw m² na gruntowaniu"
+                  multiline
+                />
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label="Anuluj"
+                      secondary
+                      fullWidth
+                      disabled={sendBackBusy}
+                      onPress={() => setSendBackOpen(false)}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label={sendBackBusy ? "Wysyłanie…" : "Odeślij"}
+                      fullWidth
+                      disabled={sendBackBusy || !sendBackComment.trim()}
+                      onPress={async () => {
+                        if (!onSendBack) return;
+                        setSendBackBusy(true);
+                        const ok = await onSendBack(sendBackComment.trim());
+                        setSendBackBusy(false);
+                        if (ok) {
+                          setSendBackOpen(false);
+                          setSendBackComment("");
+                        }
+                      }}
+                    />
+                  </View>
+                </View>
+              </View>
             ) : (
-              <Button label="Zatwierdź raport" onPress={onApprove} />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {onSendBack && !needsFix && (
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label="Odeślij do poprawy"
+                      secondary
+                      fullWidth
+                      onPress={() => setSendBackOpen(true)}
+                    />
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Button label="Zatwierdź raport" fullWidth onPress={onApprove} />
+                </View>
+              </View>
             )}
+            {/^\d+$/.test(report.id) && <ReportReviewHistory reportId={Number(report.id)} />}
           </View>
         </View>
       )}

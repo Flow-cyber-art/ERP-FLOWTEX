@@ -25,6 +25,7 @@ import {
 import { useAppData, type NewBuildInput } from "@/contexts/app-data";
 import { useQuery } from "@tanstack/react-query";
 import { listSubcontractors } from "@/lib/data/subcontractors";
+import { getBuildCosts } from "@/lib/data/build-costs";
 import { createBuildDriveFolder } from "@/lib/data/drive-photos";
 import { BuildPhotosSection } from "@/components/build-photos-section";
 import { BuildPortalSection } from "@/components/build-portal-section";
@@ -96,7 +97,6 @@ export function BuildsScreen() {
     teamSubcontractorMap,
     teamMembers,
     timeEntries,
-    buildMaterialActualCost,
     buildOrders,
     generateOrderFromPlan,
     updateOrderItemQuantity,
@@ -123,6 +123,7 @@ export function BuildsScreen() {
     updateBuildBasicInfo,
     updateBuildLaborPlan,
     approveReport,
+    sendBackReport,
     closeBuild,
     reopenBuild,
     updateBuildPhotosUrl,
@@ -130,11 +131,21 @@ export function BuildsScreen() {
     setBuildsView,
     closeBuildPin,
     setReportStageProgress,
+    devRole,
   } = useAppData();
   // Kreator: brygady własne (Brygada) i brygady podwykonawców
   // (Podwykonawcy) w osobnych listach.
   const ownTeams = teams.filter((t) => t.active && teamSubcontractorMap.get(t.id) == null);
   const subcontractorsQuery = useQuery({ queryKey: ["subcontractors", "list"], queryFn: listSubcontractors });
+  const buildCostsQuery = useQuery({
+    queryKey: ["buildCosts", "list"],
+    queryFn: () => getBuildCosts(),
+    enabled: devRole === "Admin",
+  });
+  const buildCostsById = useMemo(
+    () => new Map((buildCostsQuery.data ?? []).map((c) => [c.buildId, c] as const)),
+    [buildCostsQuery.data],
+  );
   const activeSubcontractors = (subcontractorsQuery.data ?? []).filter((sub) => sub.active);
 
   const [showBuild, setShowBuild] = useState(false);
@@ -3027,28 +3038,7 @@ export function BuildsScreen() {
                 (sum, a) => sum + a.planned * a.unitPrice,
                 0,
               );
-              const materialsCostActual = buildAssignmentsList.reduce(
-                (sum, a) => {
-                  const actual = buildMaterialActualCost[`${b.id}:${a.materialId}`];
-                  return sum + (actual !== undefined ? actual : a.used * a.unitPrice);
-                },
-                0,
-              );
-              const buildTimeEntries = timeEntries.filter(
-                (t) => t.buildId === b.id,
-              );
-              // Stawka ZAMROŻONA na wpisie (t.costRate), nie aktualna —
-              // patrz supabase/sql/055_stawka_zamrozona_w_godzinach.sql.
-              // Koszt budowy liczymy ze stawki KOSZTOWEJ (koszt pracodawcy),
-              // nie ze stawki godzinowej (ta jest tylko do wypłaty).
-              const laborCostActual = buildTimeEntries.reduce((sum, t) => {
-                const employee = employees.find((e) => e.id === t.employeeId);
-                const rate = t.costRate ?? employee?.costRate ?? 0;
-                return sum + t.hours * rate;
-              }, 0);
-              // Planowany koszt robocizny — patrz settlement-screen.tsx
-              // (ten sam wzorzec, ta sama logika, tu tylko podgląd na
-              // liście budów zamiast pełnego ekranu Rozliczenia).
+              // Planowany koszt robocizny — patrz settlement-screen.tsx.
               const laborCostPlanned = b.teamId
                 ? teamMembers
                     .filter((m) => m.teamId === Number(b.teamId))
@@ -3061,67 +3051,40 @@ export function BuildsScreen() {
                   (b.plannedHoursPerDay || 0) *
                   (b.durationDays || 0)
                 : 0;
-              const buildExtraCosts = buildReports.flatMap(
-                (r) => r.extraCosts || [],
+              // Koszt rzeczywisty — JEDNA kalkulacja w bazie (124:
+              // fn_build_cost), ta sama co w Rozliczeniu i przy zamknięciu.
+              const cost = buildCostsById.get(Number(b.id));
+              if (!cost || cost.total === 0) return null;
+              const row = (label: string, value: number) => (
+                <View
+                  key={label}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    paddingVertical: 3,
+                  }}
+                >
+                  <Text className="text-xs text-muted">{label}</Text>
+                  <Text className="text-xs font-bold text-foreground">
+                    {formatPLN(value)}
+                  </Text>
+                </View>
               );
-              const totalExtraCosts = buildExtraCosts.reduce(
-                (sum, c) => sum + c.amount,
-                0,
-              );
-              const totalCostSoFar =
-                materialsCostActual + laborCostActual + totalExtraCosts;
-              if (
-                buildAssignmentsList.length === 0 &&
-                buildTimeEntries.length === 0 &&
-                buildExtraCosts.length === 0
-              )
-                return null;
               return (
                 <DetailSection label="Koszty na bieżąco">
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      paddingVertical: 3,
-                    }}
-                  >
-                    <Text className="text-xs text-muted">
-                      Materiały (plan {formatPLN(materialsCostPlanned)})
+                  {row(`Materiały (plan ${formatPLN(materialsCostPlanned)})`, cost.materials)}
+                  {cost.losses > 0 && row("Straty materiałowe", cost.losses)}
+                  {row(
+                    `Robocizna (${cost.hours} h${laborCostPlanned > 0 ? `, plan ${formatPLN(laborCostPlanned)}` : ""})`,
+                    cost.labor,
+                  )}
+                  {cost.km > 0 && row("Kilometrówka", cost.km)}
+                  {cost.extra > 0 && row("Koszty dodatkowe", cost.extra)}
+                  {cost.subcontract > 0 && row("Podwykonawcy (protokoły)", cost.subcontract)}
+                  {cost.hoursWithoutCostRate > 0 && (
+                    <Text style={{ color: COLORS.warning, fontSize: 11, marginTop: 2 }}>
+                      {cost.hoursWithoutCostRate} h bez stawki kosztowej — policzone stawką godzinową.
                     </Text>
-                    <Text className="text-xs font-bold text-foreground">
-                      {formatPLN(materialsCostActual)}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      paddingVertical: 3,
-                    }}
-                  >
-                    <Text className="text-xs text-muted">
-                      Robocizna
-                      {laborCostPlanned > 0 && ` (plan ${formatPLN(laborCostPlanned)})`}
-                    </Text>
-                    <Text className="text-xs font-bold text-foreground">
-                      {formatPLN(laborCostActual)}
-                    </Text>
-                  </View>
-                  {buildExtraCosts.length > 0 && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        paddingVertical: 3,
-                      }}
-                    >
-                      <Text className="text-xs text-muted">
-                        Koszty dodatkowe ({buildExtraCosts.length})
-                      </Text>
-                      <Text className="text-xs font-bold text-foreground">
-                        {formatPLN(totalExtraCosts)}
-                      </Text>
-                    </View>
                   )}
                   <View
                     style={{
@@ -3149,7 +3112,7 @@ export function BuildsScreen() {
                         fontSize: 13,
                       }}
                     >
-                      {formatPLN(totalCostSoFar)}
+                      {formatPLN(cost.total)}
                     </Text>
                   </View>
                 </DetailSection>
@@ -3307,7 +3270,7 @@ export function BuildsScreen() {
                   <ReportCard
                     key={report.id}
                     subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
-                  onSaveStageProgress={report.teamId ? (items) => setReportStageProgress(report.id, items) : undefined}
+                  onSaveStageProgress={(items) => setReportStageProgress(report.id, items)}
                     report={report}
                     build={b}
                     materials={materials}
@@ -3322,6 +3285,7 @@ export function BuildsScreen() {
                       )
                     }
                     onApprove={() => approveReport(report.id)}
+                  onSendBack={(comment) => sendBackReport(report.id, comment)}
                     showBuildInfo={false}
                     showClientNoteStatus
                   />

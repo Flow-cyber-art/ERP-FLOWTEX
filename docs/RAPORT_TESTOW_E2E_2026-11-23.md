@@ -131,3 +131,20 @@ Migracje `119_dni_robocze_swieta_urlopy.sql` i `120_koszt_dnia_w_raporcie.sql` *
 | F12 | koszt materiału w raporcie = koszt dnia z rozbicia na partie (`fn_report_day_cost`), a nie różnica ostatniej edycji | scenariusz w wycofanej transakcji: 12 kg → 124 zł, edycja 11 kg → 112 zł (wcześniej −12 zł) |
 
 Nadal otwarte z kroku 2: serwer przyjmuje dowolną datę raportu (rozdzielenie daty wykonania od daty wysłania — w kroku 5).
+
+## 9. Status poprawek — krok 5: koszty, data prac, poprawki raportu, postęp w portalu
+
+Migracja `supabase/sql/124_krok5_koszty_daty_poprawki_postep.sql` **wgrana na produkcję** + zmiany w aplikacji. Sprawdzone scenariuszem SQL (wycofana transakcja) i w przeglądarce na kontach qa-admin / qa-bryg (budowa QA-5).
+
+| Błąd / wymaganie | Poprawka | Weryfikacja |
+|---|---|---|
+| F17 / F18 | jedna kalkulacja kosztu w bazie `fn_build_cost` (materiał z księgi ruchów, straty, robocizna stawką kosztową zamrożoną na wpisie, kilometrówka, koszty dodatkowe, protokoły podwykonawców); karta budowy i ekran Rozliczenie czytają ją przez `get_build_costs` (tylko Admin) | QA-5: karta = Rozliczenie = baza = 400,00 zł (8 h × 50 zł) |
+| F20 / F21 | `close_build` zapisuje `build_settlements` z tej samej funkcji | scenariusz SQL |
+| F9 (cd.) | data raportu = dzień wykonania prac; wysłanie stempluje `reports.submitted_at`; Brygadzista: dziś i do N dni wstecz (`settings.report_backdate_days`, domyślnie 3), nigdy przyszłość; raport odesłany do poprawy można poprawić bez względu na wiek; Admin — dowolny dzień | „Wczoraj” w formularzu → raport z 22.11, wysłany 23.11; −10 dni i jutro odrzucone przez bazę |
+| Zamknięte okresy | `period_locks` + `set_period_lock` (Admin → Ustawienia): zamknięty miesiąc blokuje wysłanie, poprawę i zatwierdzenie raportów — także Adminowi | scenariusz SQL; zamknięcie/otwarcie miesiąca w UI |
+| Odeślij do poprawy | `review_report` (komentarz wymagany) + historia `report_review_log` (wysłany / odesłany do poprawy / poprawiony / zatwierdzony); brygadzista widzi status „Do poprawy” i komentarz na liście i w formularzu | pełny cykl w przeglądarce, historia 4 zdarzeń na karcie raportu |
+| Postęp w portalu | etap = zatwierdzone m² / ilość budowy; bez m² — jak dotąd z materiałów; etap zakończony = 100%; pole m² na etap także w raporcie brygady własnej | QA-5: 8 m² z 20 m² → Gruntowanie 40% w portalu |
+
+Uwagi:
+- Raport z kolejki offline wysłany później niż N dni po dacie prac zostanie odrzucony przez bazę (komunikat w banerze „czeka w telefonie”) — wtedy wpisuje go Admin.
+- Nadal otwarte z kroku 2: `submit_daily_report` kasuje godziny dnia tylko, gdy raport ma osoby (usunięcie wszystkich osób przy edycji zostawia stare godziny).

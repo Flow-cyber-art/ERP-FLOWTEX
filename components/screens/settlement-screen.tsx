@@ -7,6 +7,7 @@ import { useAppData } from "@/contexts/app-data";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import { listMaterialIssuesForBuild, type StockMovementRow } from "@/lib/data/stock-movements";
 import { listSubcontractAcceptances } from "@/lib/data/subcontracts";
+import { getBuildCosts } from "@/lib/data/build-costs";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
 import { TECHNOLOGY_QUANTITY_NOUN, TECHNOLOGY_UNIT_LABEL, type TechnologyUnit } from "@/lib/data/technologies";
@@ -239,8 +240,17 @@ export function SettlementScreen() {
     (sum, a) => sum + materialCostFor(a.materialId),
     0,
   );
-  const kmCost = buildReports.reduce((sum, r) => sum + (r.kmCost ?? 0), 0);
-  const extraCostsTotal = buildReports.reduce(
+  // Sumy kosztów z JEDNEJ kalkulacji w bazie (124: fn_build_cost) — te same
+  // liczby co na karcie budowy i w rozliczeniu końcowym. Wartości liczone
+  // lokalnie zostają tylko jako zapas, gdy zapytanie jeszcze się ładuje.
+  const buildCostQuery = useQuery({
+    queryKey: ["buildCosts", "one", build?.id],
+    queryFn: () => getBuildCosts([Number(build!.id)]),
+    enabled: !!build,
+  });
+  const serverCost = buildCostQuery.data?.[0];
+  const kmCost = serverCost?.km ?? buildReports.reduce((sum, r) => sum + (r.kmCost ?? 0), 0);
+  const extraCostsTotal = serverCost?.extra ?? buildReports.reduce(
     (sum, r) => sum + r.extraCosts.reduce((s, c) => s + c.amount, 0),
     0,
   );
@@ -250,7 +260,7 @@ export function SettlementScreen() {
   // aktualną stawkę tylko dla wpisów sprzed tej migracji. Koszt budowy
   // liczymy ze stawki KOSZTOWEJ (koszt pracodawcy) — stawka godzinowa
   // służy wyłącznie do wypłaty (patrz payroll-screen.tsx).
-  const laborCost = buildTimeEntries.reduce((sum, t) => {
+  const laborCost = serverCost?.labor ?? buildTimeEntries.reduce((sum, t) => {
     const employee = employees.find((e) => e.id === t.employeeId);
     const rate = t.costRate ?? employee?.costRate ?? 0;
     return sum + t.hours * rate;
@@ -277,7 +287,9 @@ export function SettlementScreen() {
   // przed zamknięciem budowy (decyzja zapada dopiero wtedy), a po
   // zamknięciu zostaje na stałe (kolejne zamknięcie po wznowieniu
   // dopisze nowe wiersze, nie nadpisze starych).
-  const wasteCost = build
+  const wasteCost = serverCost
+    ? serverCost.losses
+    : build
     ? buildMaterialReturns
         .filter((r) => r.buildId === Number(build.id) && r.decision === "wyrzucenie")
         .reduce((sum, r) => sum + Number(r.quantity) * Number(r.unitPrice), 0)
@@ -290,7 +302,9 @@ export function SettlementScreen() {
     queryKey: ["subcontractAcceptances", "list"],
     queryFn: listSubcontractAcceptances,
   });
-  const subcontractCost = build
+  const subcontractCost = serverCost
+    ? serverCost.subcontract
+    : build
     ? (acceptancesQuery.data ?? [])
         .filter((a) => a.buildId === Number(build.id))
         .reduce((sum, a) => sum + a.total, 0)
@@ -298,6 +312,8 @@ export function SettlementScreen() {
 
   const totalCost = frozen
     ? frozen.totalCost
+    : serverCost
+    ? serverCost.total
     : materialsCostTech + materialsCostAux + kmCost + laborCost + extraCostsTotal + wasteCost + subcontractCost;
   const contractValue = Number(build?.contractValue) || 0;
   const profit = contractValue - totalCost;

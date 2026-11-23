@@ -300,6 +300,13 @@ export function SavedReportsScreen() {
         {isWide && <ReportListHeader showBuildInfo />}
         {sorted.map((report) => {
           const approved = report.status === "approved";
+          const needsFix = report.status === "do_poprawy";
+          const badge = (
+            <StatusBadge
+              status={approved ? "ok" : needsFix ? "danger" : "warning"}
+              label={approved ? "Zatwierdzony" : needsFix ? "Do poprawy" : "Do edycji"}
+            />
+          );
           const materialsCount = Object.keys(report.materialValues).length;
           const peopleCount = report.people.length;
           return (
@@ -309,7 +316,7 @@ export function SavedReportsScreen() {
               style={({ pressed }) => ({
                 backgroundColor: COLORS.surface,
                 borderWidth: 1,
-                borderColor: approved ? COLORS.success : COLORS.border,
+                borderColor: approved ? COLORS.success : needsFix ? COLORS.danger : COLORS.border,
                 borderRadius: RADIUS.card,
                 padding: isWide ? 12 : 14,
                 paddingHorizontal: isWide ? 16 : 14,
@@ -333,10 +340,7 @@ export function SavedReportsScreen() {
                     {pluralPL(materialsCount, "materiał", "materiały", "materiałów")}
                   </Text>
                   <View style={{ width: 150, alignItems: "flex-start" }}>
-                    <StatusBadge
-                      status={approved ? "ok" : "warning"}
-                      label={approved ? "Zatwierdzony" : "Do edycji"}
-                    />
+                    {badge}
                   </View>
                   <View style={{ width: 36, alignItems: "flex-end" }}>
                     <Icon name="chevron-right" size={18} color={COLORS.muted} />
@@ -371,13 +375,15 @@ export function SavedReportsScreen() {
                   {materialsCount}{" "}
                   {pluralPL(materialsCount, "materiał", "materiały", "materiałów")}
                 </Text>
-                <StatusBadge
-                  status={approved ? "ok" : "warning"}
-                  label={approved ? "Zatwierdzony" : "Do edycji"}
-                />
+                {badge}
               </View>
                 </>
               )}
+              {needsFix && report.adminComment ? (
+                <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 8 }}>
+                  Do poprawy: „{report.adminComment}” — otwórz raport, popraw i wyślij ponownie.
+                </Text>
+              ) : null}
             </Pressable>
           );
         })}

@@ -56,6 +56,13 @@ const REALTIME_TABLES: { table: string; queryKey: string }[] = [
   // razu było widoczne u pracownika (i odwrotnie: nowy wniosek u tych,
   // którzy go zatwierdzają), patrz supabase/sql/049_urlopy.sql.
   { table: "leave_requests", queryKey: "leaveRequests" },
+  // Krok 5 (124): koszt budowy liczony w bazie z księgi, godzin i raportów;
+  // historia przeglądu raportu zmienia się razem ze statusem raportu.
+  { table: "stock_ledger", queryKey: "buildCosts" },
+  { table: "time_entries", queryKey: "buildCosts" },
+  { table: "reports", queryKey: "buildCosts" },
+  { table: "report_extra_costs", queryKey: "buildCosts" },
+  { table: "reports", queryKey: "reportReviewLog" },
 ];
 
 export function useRealtimeSync(queryClient: QueryClient) {

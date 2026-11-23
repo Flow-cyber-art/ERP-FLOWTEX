@@ -327,323 +327,48 @@ export function OrdersScreen() {
   // przyjęcie dostawy z zamówienia wygenerowanego z technologii nie
   // ruszało licznika "Dostarczone". Zamówienia zarchiwizowanych
   // (zamkniętych) budów są pominięte — patrz activeBuildOrders wyżej.
+  // Jeden filtr statusów dla licznika i listy. Zamówienie budowy "robocze"
+  // nie zostało jeszcze złożone u dostawcy — nie jest "w drodze".
+  const orderInTransit = (status: string) =>
+    status === "do realizacji" || status === "zamówione";
+  const buildOrderMatchesFilter = (status: string, f: Filter) => {
+    if (f === "wdrodze") return status === "zamówione";
+    if (f === "dostarczone") return status === "przyjęte";
+    if (f === "braki") return false;
+    return true; // "aktywne" — wszystkie zamówienia aktywnych budów
+  };
+  const visibleBuildOrders = activeBuildOrders.filter((o) =>
+    buildOrderMatchesFilter(o.status, filter),
+  );
+  const visibleBatchGroups =
+    filter === "aktywne" || filter === "wdrodze" ? batchGroups : [];
   const wDrodzeCount =
-    orders.filter((o) => o.status === "do realizacji" || o.status === "zamówione").length +
-    activeBuildOrders.filter((o) => o.status === "robocze" || o.status === "zamówione").length;
+    orders.filter((o) => orderInTransit(o.status)).length +
+    activeBuildOrders.filter((o) => buildOrderMatchesFilter(o.status, "wdrodze")).length;
   const dostarczoneCount =
     orders.filter((o) => o.status === "dostarczone").length +
-    activeBuildOrders.filter((o) => o.status === "przyjęte").length;
+    activeBuildOrders.filter((o) => buildOrderMatchesFilter(o.status, "dostarczone")).length;
 
   const visibleRows = rows.filter((r) => {
     if (filter === "braki") return r.status === "brak";
-    if (filter === "wdrodze")
-      return r.status === "do realizacji" || r.status === "zamówione";
+    if (filter === "wdrodze") return orderInTransit(r.status);
     if (filter === "dostarczone") return r.status === "dostarczone";
     return r.status !== "dostarczone"; // "aktywne" — historia domyślnie ukryta
   });
 
-  const kpi = (
-    label: string,
-    count: number,
-    color: string,
-    value: Filter,
-  ) => {
-    const active = filter === value;
-    return (
-      <Pressable
-        onPress={() => setFilter(active ? "aktywne" : value)}
-        style={({ pressed }) => ({
-          flex: 1,
-          padding: 16,
-          backgroundColor: active ? COLORS.background : "transparent",
-          opacity: pressed ? 0.75 : 1,
-        })}
-      >
-        <Text className="text-xs text-muted uppercase">{label}</Text>
-        <Text
-          style={{ color: count ? color : COLORS.foreground }}
-          className="text-3xl font-bold mt-1"
-        >
-          {count}
-        </Text>
-      </Pressable>
-    );
-  };
-
-  return (
+  // Sekcja zamówień z planu budów — w widoku "aktywne" nad licznikami (jak
+  // dotąd), a po kliknięciu licznika POD nim, przefiltrowana tym samym
+  // filtrem co licznik (z testów: "W drodze: 1", a lista pusta).
+  const renderBuildOrdersSection = () => (
     <>
-      <ScreenHeader
-        title="Zamówienia"
-        description="Braki materiałowe, zamówienia w drodze i przyjęcia na magazyn."
-        action={
-          <Pressable
-            onPress={() => setManualFormOpen(!manualFormOpen)}
-            style={({ pressed }) => ({
-              backgroundColor: COLORS.primary,
-              borderRadius: RADIUS.control,
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-              opacity: pressed ? 0.75 : 1,
-            })}
-          >
-            <Text style={{ color: COLORS.background, fontWeight: "800", fontSize: 13 }}>
-              {manualFormOpen ? "Zwiń" : "+ Nowe zamówienie"}
-            </Text>
-          </Pressable>
-        }
-      />
-
-      {/* Zamówienie ręczne, spoza listy braków — zwinięte domyślnie,
-          otwierane przyciskiem w nagłówku, tuż pod nim (nie na dole
-          strony), żeby nie trzeba było szukać, gdzie się otworzyło. */}
-      {manualFormOpen && (
-        <View className="bg-surface border border-border rounded-card p-4 mb-5">
-          <Text className="text-sm font-bold text-foreground">
-            Zamów materiał spoza listy
-          </Text>
-          <Text className="text-xs text-muted mt-1">
-            Coś, czego nie ma jeszcze w magazynie ani w planach budów.
-          </Text>
-          <Field
-            placeholder="Nazwa materiału"
-            value={orderMaterialName}
-            onChangeText={(v: string) => setOrderMaterialName(capitalizeFirst(v))}
-            onFocus={() => setNameFieldFocused(true)}
-            onBlur={() => {
-              // Małe opóźnienie, żeby tapnięcie w podpowiedź zdążyło się
-              // zarejestrować zanim lista zniknie (onBlur odpala się
-              // przed onPress na liście, gdyby zniknęła natychmiast).
-              setTimeout(() => setNameFieldFocused(false), 150);
-            }}
-          />
-          {showSuggestions && materialSuggestions.length > 0 && (
-            <View
-              style={{
-                backgroundColor: COLORS.background,
-                borderRadius: RADIUS.control,
-                marginTop: 6,
-                overflow: "hidden",
-              }}
-            >
-              {materialSuggestions.map((m) => (
-                <Pressable
-                  key={m.id}
-                  onPress={() => {
-                    setOrderMaterialName(m.name);
-                    setNameFieldFocused(false);
-                  }}
-                  style={{
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    borderBottomWidth: 1,
-                    borderBottomColor: COLORS.border,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: COLORS.foreground,
-                      fontSize: 13,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {m.name}
-                  </Text>
-                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                    {m.index} · na magazynie: {m.stock ?? 0} {m.unit}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-          {exactMaterialMatch && (
-            <Text
-              style={{ color: COLORS.success, fontSize: 11, marginTop: 4 }}
-            >
-              Materiał już jest w magazynie ({exactMaterialMatch.index}) —
-              zamówienie zostanie do niego dopięte.
-            </Text>
-          )}
-          {/* Nazwa bez jednoznacznego dopasowania w magazynie (literówka
-              albo faktycznie nowy materiał) — wymagamy jawnego
-              potwierdzenia zamiast po cichu tworzyć pozycję niepowiązaną
-              z żadnym wierszem magazynowym (patrz
-              docs/PROCES_ZARZADZANIE_MATERIALEM.md, Ryzyko 6). */}
-          {!exactMaterialMatch && orderMaterialName.trim().length > 0 && (
-            orderConfirmedNewMaterial ? (
-              <Text style={{ color: COLORS.success, fontSize: 11, marginTop: 4 }}>
-                Potwierdzone — „{orderMaterialName.trim()}" trafi do magazynu
-                jako nowy materiał przy przyjęciu dostawy.
-              </Text>
-            ) : (
-              <>
-                <Text style={{ color: COLORS.warning, fontSize: 11, marginTop: 4 }}>
-                  Nie ma takiego materiału w magazynie. Sprawdź podpowiedzi
-                  wyżej — jeśli to literówka, wybierz istniejący materiał,
-                  albo potwierdź, że to naprawdę nowy.
-                </Text>
-                <Pressable onPress={confirmOrderNewMaterial} style={{ marginTop: 6 }}>
-                  <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
-                    To nowy materiał — dodaj do zamówienia
-                  </Text>
-                </Pressable>
-              </>
-            )
-          )}
-          {!exactMaterialMatch && orderMaterialName.trim().length > 0 && (
-            <View style={{ marginTop: 10 }}>
-              <Text className="text-xs text-muted uppercase mb-2">Jednostka</Text>
-              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-                {UNIT_OPTIONS.map((unit) => (
-                  <Pressable
-                    key={unit}
-                    onPress={() => setOrderUnit(unit)}
-                    style={{
-                      backgroundColor:
-                        orderUnit === unit ? COLORS.primary : COLORS.background,
-                      borderRadius: RADIUS.control,
-                      paddingHorizontal: 10,
-                      paddingVertical: 8,
-                      borderWidth: 1,
-                      borderColor: orderUnit === unit ? COLORS.primary : COLORS.border,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: orderUnit === unit ? COLORS.background : COLORS.foreground,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {unit}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Field
-                placeholder="albo wpisz własną jednostkę"
-                value={orderUnit}
-                onChangeText={setOrderUnit}
-                style={{ marginTop: 8 }}
-              />
-            </View>
-          )}
-          {!exactMaterialMatch && orderConfirmedNewMaterial && (
-            <View style={{ marginTop: 10 }}>
-              <Text className="text-xs text-muted uppercase mb-2">
-                Indeks materiałowy (opcjonalnie)
-              </Text>
-              <Field
-                placeholder="np. kod z cennika dostawcy — bez tego indeks nada się automatycznie"
-                value={orderMaterialIndex}
-                onChangeText={setOrderMaterialIndex}
-              />
-            </View>
-          )}
-          {!exactMaterialMatch && orderConfirmedNewMaterial && (
-            <View style={{ marginTop: 10 }}>
-              <Text className="text-xs text-muted uppercase mb-2">
-                Stan minimalny ({orderUnit || "szt."})
-              </Text>
-              <Field
-                placeholder="np. 5 — poniżej tego stanu pojawi się alert braku"
-                value={orderMinStock}
-                onChangeText={setOrderMinStock}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          )}
-          <Text
-            style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}
-            className="uppercase"
-          >
-            Ilość do zamówienia
-          </Text>
-          <QuantityStepper
-            style={{ marginTop: 8 }}
-            value={orderQuantity}
-            onChangeText={setOrderQuantity}
-          />
-          <View style={{ marginTop: 12 }}>
-            <Button
-              label="+ Dodaj do koszyka"
-              onPress={addToOrderCart}
-              disabled={
-                !exactMaterialMatch &&
-                !orderConfirmedNewMaterial &&
-                orderMaterialName.trim().length > 0
-              }
-            />
-          </View>
-
-          {orderCart.length > 0 && (
-            <View style={{ marginTop: 16 }}>
-              <Text
-                style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}
-                className="uppercase"
-              >
-                Koszyk ({orderCart.length})
-              </Text>
-              {orderCart.map((item) => (
-                <View
-                  key={item.id}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    backgroundColor: COLORS.background,
-                    borderRadius: RADIUS.control,
-                    paddingHorizontal: 12,
-                    paddingVertical: 10,
-                    marginBottom: 6,
-                  }}
-                >
-                  <Text
-                    style={{ color: COLORS.foreground, fontSize: 13, flex: 1 }}
-                    numberOfLines={1}
-                  >
-                    {item.materialName}{" "}
-                    <Text style={{ color: COLORS.muted }}>
-                      · {item.quantity} {item.unit}
-                    </Text>
-                  </Text>
-                  <Pressable onPress={() => removeFromOrderCart(item.id)} style={{ marginLeft: 10 }}>
-                    <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
-                      Usuń
-                    </Text>
-                  </Pressable>
-                </View>
-              ))}
-              <View style={{ marginTop: 6 }}>
-                <Button
-                  label="Utwórz zamówienie"
-                  onPress={async () => {
-                    const ok = await submitOrderCart(orderCart);
-                    if (ok) {
-                      setOrderCart([]);
-                      setOrderSaved(true);
-                    }
-                  }}
-                />
-              </View>
-            </View>
-          )}
-          {orderSaved && (
-            <Text
-              style={{ color: COLORS.success, fontWeight: "700", marginTop: 10 }}
-            >
-              Zamówienie zapisane.
-            </Text>
-          )}
-        </View>
-      )}
-
       {/* Zamówienia z planu materiałowego budowy (Faza 3) — generowane z
           karty budowy przyciskiem "+ Z planu", ale statusy i przyjęcie
           dostawy obsługujemy tu, w jednym miejscu ze wszystkimi
           zamówieniami, zamiast rozproszone po poszczególnych budowach. */}
-      {activeBuildOrders.length > 0 && (
+      {visibleBuildOrders.length > 0 && (
         <View className="bg-surface border border-border rounded-card p-4 mb-5">
-          <DetailSection label="Zamówienia z planu budów" count={activeBuildOrders.length} style={{ marginTop: 0 }}>
-          {activeBuildOrders.map((order) => {
+          <DetailSection label="Zamówienia z planu budów" count={visibleBuildOrders.length} style={{ marginTop: 0 }}>
+          {visibleBuildOrders.map((order) => {
             const build = builds.find((b) => b.id === String(order.buildId));
             const isReceiving = buildOrderReceivingId === order.id;
             return (
@@ -1047,6 +772,304 @@ export function OrdersScreen() {
           </DetailSection>
         </View>
       )}
+    </>
+  );
+
+  const kpi = (
+    label: string,
+    count: number,
+    color: string,
+    value: Filter,
+  ) => {
+    const active = filter === value;
+    return (
+      <Pressable
+        onPress={() => setFilter(active ? "aktywne" : value)}
+        style={({ pressed }) => ({
+          flex: 1,
+          padding: 16,
+          backgroundColor: active ? COLORS.background : "transparent",
+          opacity: pressed ? 0.75 : 1,
+        })}
+      >
+        <Text className="text-xs text-muted uppercase">{label}</Text>
+        <Text
+          style={{ color: count ? color : COLORS.foreground }}
+          className="text-3xl font-bold mt-1"
+        >
+          {count}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  return (
+    <>
+      <ScreenHeader
+        title="Zamówienia"
+        description="Braki materiałowe, zamówienia w drodze i przyjęcia na magazyn."
+        action={
+          <Pressable
+            onPress={() => setManualFormOpen(!manualFormOpen)}
+            style={({ pressed }) => ({
+              backgroundColor: COLORS.primary,
+              borderRadius: RADIUS.control,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <Text style={{ color: COLORS.background, fontWeight: "800", fontSize: 13 }}>
+              {manualFormOpen ? "Zwiń" : "+ Nowe zamówienie"}
+            </Text>
+          </Pressable>
+        }
+      />
+
+      {/* Zamówienie ręczne, spoza listy braków — zwinięte domyślnie,
+          otwierane przyciskiem w nagłówku, tuż pod nim (nie na dole
+          strony), żeby nie trzeba było szukać, gdzie się otworzyło. */}
+      {manualFormOpen && (
+        <View className="bg-surface border border-border rounded-card p-4 mb-5">
+          <Text className="text-sm font-bold text-foreground">
+            Zamów materiał spoza listy
+          </Text>
+          <Text className="text-xs text-muted mt-1">
+            Coś, czego nie ma jeszcze w magazynie ani w planach budów.
+          </Text>
+          <Field
+            placeholder="Nazwa materiału"
+            value={orderMaterialName}
+            onChangeText={(v: string) => setOrderMaterialName(capitalizeFirst(v))}
+            onFocus={() => setNameFieldFocused(true)}
+            onBlur={() => {
+              // Małe opóźnienie, żeby tapnięcie w podpowiedź zdążyło się
+              // zarejestrować zanim lista zniknie (onBlur odpala się
+              // przed onPress na liście, gdyby zniknęła natychmiast).
+              setTimeout(() => setNameFieldFocused(false), 150);
+            }}
+          />
+          {showSuggestions && materialSuggestions.length > 0 && (
+            <View
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: RADIUS.control,
+                marginTop: 6,
+                overflow: "hidden",
+              }}
+            >
+              {materialSuggestions.map((m) => (
+                <Pressable
+                  key={m.id}
+                  onPress={() => {
+                    setOrderMaterialName(m.name);
+                    setNameFieldFocused(false);
+                  }}
+                  style={{
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: COLORS.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: COLORS.foreground,
+                      fontSize: 13,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {m.name}
+                  </Text>
+                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                    {m.index} · na magazynie: {m.stock ?? 0} {m.unit}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {exactMaterialMatch && (
+            <Text
+              style={{ color: COLORS.success, fontSize: 11, marginTop: 4 }}
+            >
+              Materiał już jest w magazynie ({exactMaterialMatch.index}) —
+              zamówienie zostanie do niego dopięte.
+            </Text>
+          )}
+          {/* Nazwa bez jednoznacznego dopasowania w magazynie (literówka
+              albo faktycznie nowy materiał) — wymagamy jawnego
+              potwierdzenia zamiast po cichu tworzyć pozycję niepowiązaną
+              z żadnym wierszem magazynowym (patrz
+              docs/PROCES_ZARZADZANIE_MATERIALEM.md, Ryzyko 6). */}
+          {!exactMaterialMatch && orderMaterialName.trim().length > 0 && (
+            orderConfirmedNewMaterial ? (
+              <Text style={{ color: COLORS.success, fontSize: 11, marginTop: 4 }}>
+                Potwierdzone — „{orderMaterialName.trim()}" trafi do magazynu
+                jako nowy materiał przy przyjęciu dostawy.
+              </Text>
+            ) : (
+              <>
+                <Text style={{ color: COLORS.warning, fontSize: 11, marginTop: 4 }}>
+                  Nie ma takiego materiału w magazynie. Sprawdź podpowiedzi
+                  wyżej — jeśli to literówka, wybierz istniejący materiał,
+                  albo potwierdź, że to naprawdę nowy.
+                </Text>
+                <Pressable onPress={confirmOrderNewMaterial} style={{ marginTop: 6 }}>
+                  <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700" }}>
+                    To nowy materiał — dodaj do zamówienia
+                  </Text>
+                </Pressable>
+              </>
+            )
+          )}
+          {!exactMaterialMatch && orderMaterialName.trim().length > 0 && (
+            <View style={{ marginTop: 10 }}>
+              <Text className="text-xs text-muted uppercase mb-2">Jednostka</Text>
+              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                {UNIT_OPTIONS.map((unit) => (
+                  <Pressable
+                    key={unit}
+                    onPress={() => setOrderUnit(unit)}
+                    style={{
+                      backgroundColor:
+                        orderUnit === unit ? COLORS.primary : COLORS.background,
+                      borderRadius: RADIUS.control,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      borderWidth: 1,
+                      borderColor: orderUnit === unit ? COLORS.primary : COLORS.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: orderUnit === unit ? COLORS.background : COLORS.foreground,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {unit}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Field
+                placeholder="albo wpisz własną jednostkę"
+                value={orderUnit}
+                onChangeText={setOrderUnit}
+                style={{ marginTop: 8 }}
+              />
+            </View>
+          )}
+          {!exactMaterialMatch && orderConfirmedNewMaterial && (
+            <View style={{ marginTop: 10 }}>
+              <Text className="text-xs text-muted uppercase mb-2">
+                Indeks materiałowy (opcjonalnie)
+              </Text>
+              <Field
+                placeholder="np. kod z cennika dostawcy — bez tego indeks nada się automatycznie"
+                value={orderMaterialIndex}
+                onChangeText={setOrderMaterialIndex}
+              />
+            </View>
+          )}
+          {!exactMaterialMatch && orderConfirmedNewMaterial && (
+            <View style={{ marginTop: 10 }}>
+              <Text className="text-xs text-muted uppercase mb-2">
+                Stan minimalny ({orderUnit || "szt."})
+              </Text>
+              <Field
+                placeholder="np. 5 — poniżej tego stanu pojawi się alert braku"
+                value={orderMinStock}
+                onChangeText={setOrderMinStock}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          )}
+          <Text
+            style={{ color: COLORS.muted, fontSize: 11, marginTop: 10 }}
+            className="uppercase"
+          >
+            Ilość do zamówienia
+          </Text>
+          <QuantityStepper
+            style={{ marginTop: 8 }}
+            value={orderQuantity}
+            onChangeText={setOrderQuantity}
+          />
+          <View style={{ marginTop: 12 }}>
+            <Button
+              label="+ Dodaj do koszyka"
+              onPress={addToOrderCart}
+              disabled={
+                !exactMaterialMatch &&
+                !orderConfirmedNewMaterial &&
+                orderMaterialName.trim().length > 0
+              }
+            />
+          </View>
+
+          {orderCart.length > 0 && (
+            <View style={{ marginTop: 16 }}>
+              <Text
+                style={{ color: COLORS.muted, fontSize: 11, marginBottom: 8 }}
+                className="uppercase"
+              >
+                Koszyk ({orderCart.length})
+              </Text>
+              {orderCart.map((item) => (
+                <View
+                  key={item.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: COLORS.background,
+                    borderRadius: RADIUS.control,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={{ color: COLORS.foreground, fontSize: 13, flex: 1 }}
+                    numberOfLines={1}
+                  >
+                    {item.materialName}{" "}
+                    <Text style={{ color: COLORS.muted }}>
+                      · {item.quantity} {item.unit}
+                    </Text>
+                  </Text>
+                  <Pressable onPress={() => removeFromOrderCart(item.id)} style={{ marginLeft: 10 }}>
+                    <Text style={{ color: COLORS.danger, fontWeight: "700", fontSize: 12 }}>
+                      Usuń
+                    </Text>
+                  </Pressable>
+                </View>
+              ))}
+              <View style={{ marginTop: 6 }}>
+                <Button
+                  label="Utwórz zamówienie"
+                  onPress={async () => {
+                    const ok = await submitOrderCart(orderCart);
+                    if (ok) {
+                      setOrderCart([]);
+                      setOrderSaved(true);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+          )}
+          {orderSaved && (
+            <Text
+              style={{ color: COLORS.success, fontWeight: "700", marginTop: 10 }}
+            >
+              Zamówienie zapisane.
+            </Text>
+          )}
+        </View>
+      )}
+
+      {filter === "aktywne" && renderBuildOrdersSection()}
 
       {/* KPI = jednocześnie filtry. Tap przełącza widok listy poniżej. */}
       <View
@@ -1075,8 +1098,9 @@ export function OrdersScreen() {
           group.allPending, jedna para przycisków działa na całość. Po
           złożeniu u dostawcy karta zostaje, ale przyjęcie dostawy jest już
           per pozycja (inna ilość/cena per materiał) — patrz batchGroups. */}
-      {(filter === "aktywne" || filter === "wdrodze") &&
-        batchGroups.map((group) => (
+      {filter !== "aktywne" && renderBuildOrdersSection()}
+
+      {visibleBatchGroups.map((group) => (
           <View
             key={group.batchId}
             className="bg-surface border border-border rounded-card px-4 py-3 mb-2"
@@ -1315,7 +1339,9 @@ export function OrdersScreen() {
           </View>
         ))}
 
-      {visibleRows.length === 0 && batchGroups.length === 0 && (
+      {visibleRows.length === 0 &&
+        visibleBatchGroups.length === 0 &&
+        (filter === "aktywne" || visibleBuildOrders.length === 0) && (
         <View className="bg-surface border border-border rounded-card p-5 items-center">
           <IconBadge name="truck" />
           <Text className="text-sm text-muted mt-3 text-center">

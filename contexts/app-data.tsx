@@ -25,12 +25,11 @@ import {
   type CloseBuildReturnItem,
 } from "@/lib/data/builds";
 import {
-  adjustMaterialStock as adjustMaterialStockRemote,
+  correctMaterial as correctMaterialRemote,
   createMaterial,
   listMaterials,
   setMaterialActive as setMaterialActiveRemote,
   updateMaterialIndex as updateMaterialIndexRemote,
-  updateMaterialPrice as updateMaterialPriceRemote,
 } from "@/lib/data/materials";
 import {
   createEmployee,
@@ -1061,17 +1060,10 @@ function useAppDataState(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
   const createMaterialMutation = useMutation({ mutationFn: createMaterial });
-  const updateMaterialPriceMutation = useMutation({
-    mutationFn: (vars: { materialId: number; unitPrice: number }) =>
-      updateMaterialPriceRemote(vars.materialId, vars.unitPrice),
-  });
+  const correctMaterialMutation = useMutation({ mutationFn: correctMaterialRemote });
   const updateMaterialIndexMutation = useMutation({
     mutationFn: (vars: { materialId: number; index: string }) =>
       updateMaterialIndexRemote(vars.materialId, vars.index),
-  });
-  const adjustMaterialStockMutation = useMutation({
-    mutationFn: (vars: { materialId: number; newStock: number }) =>
-      adjustMaterialStockRemote(vars.materialId, vars.newStock),
   });
   const setMaterialActiveMutation = useMutation({
     mutationFn: (vars: { materialId: number; active: boolean }) =>
@@ -2643,24 +2635,6 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać PIN-u.");
     }
   }, [queryClient, updateCloseBuildPinMutation]);
-  // Edycja ceny jednostkowej materiału w magazynie. Nie wpływa wstecz na
-  // już przypisane do budów ilości — te mają cenę zamrożoną na Assignment.
-  // Ręczna zmiana ceny to korekta pomyłki (np. źle wpisana cena), nie nowy
-  // zakup — nadpisuje średnią ważoną wprost, nie tworzy nowej partii.
-  // Historia partii (i ich realne ceny) zostaje nienaruszona.
-  const updateMaterialPrice = useCallback(async (materialId: string, price: number) => {
-    const numericId = Number(materialId);
-    if (Number.isNaN(numericId)) return;
-    try {
-      await updateMaterialPriceMutation.mutateAsync({
-        materialId: numericId,
-        unitPrice: price,
-      });
-      await invalidate("materials");
-    } catch (error) {
-      reportMutationError(error, "Nie udało się zapisać ceny.");
-    }
-  }, [invalidate, updateMaterialPriceMutation]);
   // Edycja indeksu materiałowego — np. korekta literówki albo dopisanie
   // kodu z cennika dostawcy, który przy zakładaniu materiału pominięto.
   const updateMaterialIndex = useCallback(async (materialId: string, index: string) => {
@@ -2676,22 +2650,26 @@ function useAppDataState(
       reportMutationError(error, "Nie udało się zapisać indeksu.");
     }
   }, [invalidate, updateMaterialIndexMutation]);
-  // Korekta stanu magazynowego materiału — np. pomyłka przy dodawaniu lub
-  // ręczna inwentaryzacja. W górę: dopisuje partię "korekta" po aktualnej
-  // średniej cenie. W dół: zdejmuje FIFO tak jak realne zużycie.
-  const updateMaterialStock = useCallback(async (materialId: string, stock: number) => {
+  // Korekta stanu i/lub ceny materiału (pomyłka, inwentaryzacja) — zawsze z
+  // powodem i wpisem do księgi ruchów (supabase/sql/116_...). Stan w górę:
+  // partia "korekta"; w dół: zdjęcie FIFO. Cena: przestawia partie w
+  // magazynie głównym, żeby przeliczenie średniej jej nie cofnęło.
+  // Zwraca true przy sukcesie, żeby formularz mógł się zamknąć.
+  const correctMaterial = useCallback(async (
+    materialId: string,
+    input: { newStock: number | null; newPrice: number | null; reason: string },
+  ): Promise<boolean> => {
     const numericId = Number(materialId);
-    if (Number.isNaN(numericId)) return;
+    if (Number.isNaN(numericId)) return false;
     try {
-      await adjustMaterialStockMutation.mutateAsync({
-        materialId: numericId,
-        newStock: stock,
-      });
-      await invalidate("materials");
+      await correctMaterialMutation.mutateAsync({ materialId: numericId, ...input });
+      await Promise.all([invalidate("materials"), invalidate("warehouseBatches")]);
+      return true;
     } catch (error) {
-      reportMutationError(error, "Nie udało się skorygować stanu magazynowego.");
+      reportMutationError(error, "Nie udało się zapisać korekty.");
+      return false;
     }
-  }, [adjustMaterialStockMutation, invalidate]);
+  }, [correctMaterialMutation, invalidate]);
   // Archiwizacja zamiast usuwania (patrz
   // supabase/sql/038_archiwizacja_materialow.sql) — materiał zostaje w
   // bazie (historia go referencjuje po ID), tylko znika z domyślnej listy
@@ -3247,8 +3225,7 @@ function useAppDataState(
     decideLeaveRequest,
     updateKmRate,
     updateCloseBuildPin: updateCloseBuildPinValue,
-    updateMaterialPrice,
-    updateMaterialStock,
+    correctMaterial,
     updateMaterialIndex,
     setMaterialActive,
     submitOrderCart,
@@ -3389,9 +3366,8 @@ function useAppDataState(
     updateEmployeeRate,
     updateKmRate,
     updateLeaveRequest,
+    correctMaterial,
     updateMaterialIndex,
-    updateMaterialPrice,
-    updateMaterialStock,
     updateOrderItemQuantity,
     warehouseBatches,
     warehouseView,

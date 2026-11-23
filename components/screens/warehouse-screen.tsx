@@ -4,6 +4,7 @@ import {
   View,
 } from "react-native";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Button,
   COLORS,
@@ -22,6 +23,7 @@ import { useAppData, type NewMaterialInput } from "@/contexts/app-data";
 import { useWideLayout } from "@/hooks/use-wide-layout";
 import { matchMaterialNames, normalizeMaterialName } from "@/lib/material-name-match";
 import { RADIUS } from "@/constants/radius";
+import { listMaterialCorrections } from "@/lib/data/materials";
 import { Icon } from "@/components/icon";
 
 const EMPTY_NEW_MATERIAL: NewMaterialInput = {
@@ -41,8 +43,7 @@ export function WarehouseScreen() {
     warehouseBatches,
     buildMaterialLots,
     saveMaterial,
-    updateMaterialPrice,
-    updateMaterialStock,
+    correctMaterial,
     updateMaterialIndex,
     setMaterialActive,
     transferMaterialBetweenBuilds,
@@ -121,6 +122,17 @@ export function WarehouseScreen() {
   const [priceInput, setPriceInput] = useState("");
   const [stockInput, setStockInput] = useState("");
   const [indexInput, setIndexInput] = useState("");
+  const [reasonInput, setReasonInput] = useState("");
+  const [reasonError, setReasonError] = useState(false);
+  const [correctionSaving, setCorrectionSaving] = useState(false);
+  // Historia korekt rozwiniętego materiału (kto, kiedy, było → jest) —
+  // tylko dla Admina, bo tylko on może korygować i widzieć ceny.
+  const editingMaterialId = editingId ? Number(editingId) : null;
+  const { data: corrections = [], refetch: refetchCorrections } = useQuery({
+    queryKey: ["materialCorrections", editingMaterialId],
+    queryFn: () => listMaterialCorrections(editingMaterialId as number),
+    enabled: editingMaterialId !== null && realRole === "Admin",
+  });
   // Podpowiedzi przy dodawaniu NOWEGO materiału — ten sam mechanizm co w
   // Zamówieniach (orders-screen.tsx), żeby nie powstał cichy duplikat pod
   // nieco inną nazwą/literówką tego, co już jest w magazynie.
@@ -438,6 +450,9 @@ export function WarehouseScreen() {
           0,
         );
         const siteAveragePrice = displayedQuantity > 0 ? siteValue / displayedQuantity : 0;
+        // Materiał bez ceny zaniża koszty budów — wyraźnie oznaczony na liście.
+        const missingPrice =
+          assignmentFilter === "assigned" ? displayedQuantity > 0 && siteAveragePrice <= 0 : (m.unitPrice || 0) <= 0;
         return (
         <View
           key={m.id}
@@ -452,6 +467,8 @@ export function WarehouseScreen() {
                 setPriceInput(String(m.unitPrice || ""));
                 setStockInput(String(m.stock ?? ""));
                 setIndexInput(m.index || "");
+                setReasonInput("");
+                setReasonError(false);
               }
             }}
             className="flex-row items-center justify-between px-4 py-3"
@@ -474,8 +491,18 @@ export function WarehouseScreen() {
                     ? `${siteRows.length} ${siteRows.length === 1 ? "budowa" : "budowy"}`
                     : `${m.min} ${m.unit}`}
                 </Text>
-                <Text style={{ width: 110, textAlign: "right", color: COLORS.foreground, fontSize: 13 }}>
-                  {formatPLN(assignmentFilter === "assigned" ? siteAveragePrice : m.unitPrice || 0)}/{m.unit}
+                <Text
+                  style={{
+                    width: 110,
+                    textAlign: "right",
+                    color: missingPrice ? COLORS.warning : COLORS.foreground,
+                    fontSize: 13,
+                    fontWeight: missingPrice ? "700" : "400",
+                  }}
+                >
+                  {missingPrice
+                    ? "brak ceny"
+                    : `${formatPLN(assignmentFilter === "assigned" ? siteAveragePrice : m.unitPrice || 0)}/${m.unit}`}
                 </Text>
                 {/* Kolor ostrzeżenia = konkretny sygnał "stan na/poniżej
                     minimum", nie dekoracja; złoto zostaje dla akcji. */}
@@ -519,8 +546,16 @@ export function WarehouseScreen() {
                   ? `${siteRows.length} ${siteRows.length === 1 ? "budowa" : "budowy"}`
                   : `min ${m.min} ${m.unit}`}
               </Text>
-              <Text className="text-xs text-muted mt-0.5">
-                {formatPLN(assignmentFilter === "assigned" ? siteAveragePrice : m.unitPrice || 0)}/{m.unit}
+              <Text
+                className="text-xs mt-0.5"
+                style={{
+                  color: missingPrice ? COLORS.warning : COLORS.muted,
+                  fontWeight: missingPrice ? "700" : "400",
+                }}
+              >
+                {missingPrice
+                  ? "brak ceny"
+                  : `${formatPLN(assignmentFilter === "assigned" ? siteAveragePrice : m.unitPrice || 0)}/${m.unit}`}
               </Text>
             </View>
             <View className="items-end" style={{ minWidth: 44 }}>
@@ -785,7 +820,7 @@ export function WarehouseScreen() {
                 );
               })()}
               <Text className="text-xs text-muted uppercase mb-2">
-                Popraw indeks, stan i cenę (np. w razie pomyłki)
+                Korekta indeksu, stanu i ceny
               </Text>
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <View style={{ flex: 1 }}>
@@ -807,27 +842,120 @@ export function WarehouseScreen() {
                   <QuantityStepper value={priceInput} onChangeText={setPriceInput} />
                 </View>
               </View>
-              <View style={{ marginTop: 12 }}>
-                <Button
-                  label="Zapisz zmiany"
-                  onPress={async () => {
-                    // Sekwencyjnie, nie równolegle: korekta stanu w górę
-                    // dopisuje partię i przelicza materials.unitPrice jako
-                    // średnią ważoną partii (fn_recalc_material) — gdyby
-                    // updateMaterialPrice leciał w tym samym czasie,
-                    // wynik wyścigu dwóch zapisów do tej samej kolumny był
-                    // nieprzewidywalny. Cena wpisana ręcznie ma być
-                    // ostateczna, więc idzie DRUGA, po zakończeniu korekty
-                    // stanu.
-                    if (indexInput.trim() && indexInput.trim() !== m.index) {
-                      await updateMaterialIndex(m.id, indexInput.trim());
-                    }
-                    await updateMaterialStock(m.id, Number(stockInput) || 0);
-                    await updateMaterialPrice(m.id, Number(priceInput) || 0);
-                    setEditingId(null);
-                  }}
-                />
-              </View>
+              {(() => {
+                const newStock = Number(stockInput);
+                const newPrice = Number(priceInput);
+                const stockChanged =
+                  stockInput.trim() !== "" && Math.abs(newStock - (m.stock ?? 0)) >= 0.0001;
+                const priceChanged =
+                  priceInput.trim() !== "" && Math.abs(newPrice - (m.unitPrice || 0)) >= 0.005;
+                const indexChanged = !!indexInput.trim() && indexInput.trim() !== m.index;
+                const needsReason = stockChanged || priceChanged;
+                const numbersInvalid =
+                  (stockInput.trim() !== "" && (Number.isNaN(newStock) || newStock < 0)) ||
+                  (priceInput.trim() !== "" && (Number.isNaN(newPrice) || newPrice < 0));
+                return (
+                  <>
+                    {needsReason && (
+                      <View style={{ marginTop: 10 }}>
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                          Powód korekty (wymagany, trafi do historii ruchów)
+                        </Text>
+                        <Field
+                          value={reasonInput}
+                          onChangeText={(v: string) => {
+                            setReasonInput(v);
+                            if (v.trim().length >= 3) setReasonError(false);
+                          }}
+                          placeholder="Np. inwentaryzacja 23.11, pomyłka przy przyjęciu"
+                          style={reasonError ? { borderWidth: 1, borderColor: COLORS.danger } : null}
+                        />
+                        {reasonError && (
+                          <Text style={{ color: COLORS.danger, fontSize: 11, marginTop: 4 }}>
+                            Podaj powód korekty (min. 3 znaki).
+                          </Text>
+                        )}
+                        {stockChanged && (
+                          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 4 }}>
+                            Stan: {m.stock ?? 0} → {newStock} {m.unit}
+                            {newStock > (m.stock ?? 0)
+                              ? " (nowa partia „korekta”)"
+                              : " (zdjęcie z najstarszych partii)"}
+                          </Text>
+                        )}
+                        {priceChanged && (
+                          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                            Cena: {formatPLN(m.unitPrice || 0)} → {formatPLN(newPrice)} (dla wszystkich
+                            partii w magazynie głównym; partie na budowach bez zmian)
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                    {numbersInvalid && (
+                      <Text style={{ color: COLORS.danger, fontSize: 11, marginTop: 8 }}>
+                        Stan i cena muszą być liczbami nieujemnymi.
+                      </Text>
+                    )}
+                    <View style={{ marginTop: 12 }}>
+                      <Button
+                        label={correctionSaving ? "Zapisywanie..." : "Zapisz korektę"}
+                        disabled={
+                          correctionSaving || numbersInvalid || (!needsReason && !indexChanged)
+                        }
+                        onPress={async () => {
+                          if (needsReason && reasonInput.trim().length < 3) {
+                            setReasonError(true);
+                            return;
+                          }
+                          setCorrectionSaving(true);
+                          try {
+                            if (indexChanged) {
+                              await updateMaterialIndex(m.id, indexInput.trim());
+                            }
+                            if (needsReason) {
+                              const ok = await correctMaterial(m.id, {
+                                newStock: stockChanged ? newStock : null,
+                                newPrice: priceChanged ? newPrice : null,
+                                reason: reasonInput.trim(),
+                              });
+                              if (!ok) return;
+                              await refetchCorrections();
+                            }
+                            setReasonInput("");
+                            setReasonError(false);
+                            setEditingId(null);
+                          } finally {
+                            setCorrectionSaving(false);
+                          }
+                        }}
+                      />
+                    </View>
+                  </>
+                );
+              })()}
+              {corrections.length > 0 && (
+                <DetailSection
+                  label="Ostatnie korekty"
+                  count={corrections.length}
+                  style={{ marginTop: 14 }}
+                >
+                  {corrections.map((c) => (
+                    <View
+                      key={c.id}
+                      style={{
+                        paddingVertical: 6,
+                        borderBottomWidth: 1,
+                        borderBottomColor: COLORS.border,
+                      }}
+                    >
+                      <Text style={{ color: COLORS.foreground, fontSize: 12 }}>{c.note}</Text>
+                      <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+                        {c.createdByName} · {new Date(c.createdAt).toLocaleString("pl-PL")}
+                      </Text>
+                    </View>
+                  ))}
+                </DetailSection>
+              )}
               {/* Archiwizacja zamiast usuwania — materiał zostaje w bazie
                   (historia go referencjuje), tylko znika z domyślnej listy;
                   wciąż podpowiadany przy dopasowaniu nazwy przy zamawianiu/

@@ -216,6 +216,24 @@ export function SettlementScreen() {
   const isClosed = build?.status === "zamknięta";
   const frozen = isClosed ? build?.settlement : undefined;
 
+  // Materiały bez ceny (0 zł) — zaniżają koszt budowy (z testów:
+  // "Deckshield Finish 0,00 zł/kg"). Liczy się: cena 0 w magazynie albo
+  // zużycie > 0 przy zerowym koszcie (partia wydana na budowę po 0 zł).
+  const zeroPriceMaterialNames = useMemo(() => {
+    if (!build) return [];
+    const names = new Set<string>();
+    const check = (materialId: string | null, used: number, cost: number) => {
+      if (!materialId) return;
+      const material = materials.find((m) => m.id === materialId);
+      if (!material) return;
+      if ((material.unitPrice || 0) <= 0 || (used > 0 && cost <= 0)) names.add(material.name);
+    };
+    stages.forEach((st) => st.items.forEach((i) => check(i.materialId, i.zuzyto, i.koszt)));
+    auxAssignments.forEach((a) => check(a.materialId, a.used ?? 0, materialCostFor(a.materialId)));
+    return [...names].sort((a, b) => a.localeCompare(b, "pl"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [build, stages, auxAssignments, materials, assignments]);
+
   const materialsCostTech = stages.reduce((sum, s) => sum + s.koszt, 0);
   const materialsCostAux = auxAssignments.reduce(
     (sum, a) => sum + materialCostFor(a.materialId),
@@ -576,6 +594,26 @@ export function SettlementScreen() {
                 ? "Podsumowanie dla właściciela / zarządu na podstawie zamrożonego rozliczenia."
                 : "Podgląd na żywo — ostateczne liczby po zamknięciu budowy."}
             </Text>
+
+            {zeroPriceMaterialNames.length > 0 && (
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderColor: COLORS.warning,
+                  borderRadius: RADIUS.control,
+                  padding: 10,
+                  marginBottom: 16,
+                }}
+              >
+                <Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 13 }}>
+                  Koszt materiałów może być zaniżony
+                </Text>
+                <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
+                  Bez ceny (0 zł): {zeroPriceMaterialNames.join(", ")}. Uzupełnij cenę w
+                  Magazynie (korekta z powodem).
+                </Text>
+              </View>
+            )}
 
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
               <KpiTile label="Kontrakt" value={formatPLN(contractValue)} />

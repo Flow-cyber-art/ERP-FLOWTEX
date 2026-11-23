@@ -4,6 +4,7 @@ import { DateField } from "@/components/date-field";
 import {
   COLORS,
   addDaysISO,
+  firstWorkdayISO,
   Button,
   confirmAction,
   DetailSection,
@@ -54,7 +55,8 @@ const createEmptyNewBuild = (): NewBuildInput => ({
   name: "",
   manager: "",
   startDate: todayISO(),
-  durationDays: "",
+  // Domyślnie 1 dzień — puste pole blokowało "Zapisz i dalej" (z testów).
+  durationDays: "1",
   teamId: "",
   subcontractorTeamIds: [],
   plannedHoursPerDay: "8",
@@ -62,6 +64,13 @@ const createEmptyNewBuild = (): NewBuildInput => ({
   address: "",
   contractValue: "",
 });
+
+type WizardField = "name" | "number" | "manager" | "startDate" | "durationDays";
+const ERROR_BORDER = { borderWidth: 1, borderColor: COLORS.danger };
+const FieldError = ({ show, text }: { show: boolean; text: string }) =>
+  show ? (
+    <Text style={{ color: COLORS.danger, fontSize: 11, marginTop: 4 }}>{text}</Text>
+  ) : null;
 
 // dd.mm.rrrr z ISO (RRRR-MM-DD); pusty string, gdy brak/niepoprawna data.
 const formatDatePL = (iso: string) => {
@@ -140,6 +149,54 @@ export function BuildsScreen() {
   // budowa, jeśli już powstała (krok 1 zaliczony), zostaje zapisana,
   // resztę da się dokończyć później ze zwykłej karty budowy.
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
+  // Walidacja kroku 1 kreatora i "Dodaj do listy" — komunikat w miejscu
+  // + czerwona ramka zamiast samego okienka alert (na webie bywa blokowane
+  // / niewidoczne, z testów: "przycisk nic nie robi").
+  const [wizardErrors, setWizardErrors] = useState<Set<WizardField>>(new Set());
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const clearWizardError = (field: WizardField) =>
+    setWizardErrors((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  const validateNewBuild = (): boolean => {
+    const errors = new Set<WizardField>();
+    if (!newBuild.name.trim()) errors.add("name");
+    if (!newBuild.number.trim()) errors.add("number");
+    if (!newBuild.manager) errors.add("manager");
+    if (!newBuild.startDate) errors.add("startDate");
+    const duration = Number(newBuild.durationDays);
+    if (!Number.isFinite(duration) || duration <= 0) errors.add("durationDays");
+    setWizardErrors(errors);
+    return errors.size === 0;
+  };
+  const handleAddToDraft = () => {
+    const batch = warehouseBatches.find((wb) => String(wb.id) === selectedBatchId);
+    const amount = Number(plannedAmount);
+    if (!batch) {
+      setDraftError("Wybierz materiał / partię.");
+      return;
+    }
+    if (!plannedAmount.trim() || !Number.isFinite(amount) || amount <= 0) {
+      setDraftError("Podaj ilość większą od zera.");
+      return;
+    }
+    const alreadyInDraft = draftAssignments
+      .filter((a) => a.batchId === selectedBatchId)
+      .reduce((sum, a) => sum + a.quantity, 0);
+    if (amount + alreadyInDraft > Number(batch.quantity) + 0.0001) {
+      setDraftError(
+        `W tej partii jest tylko ${batch.quantity}` +
+          (alreadyInDraft > 0 ? ` (na liście już ${alreadyInDraft})` : "") +
+          ".",
+      );
+      return;
+    }
+    setDraftError(null);
+    addToDraft();
+  };
   const [wizardBuildId, setWizardBuildId] = useState<string | null>(null);
   const [wizardTechId, setWizardTechId] = useState<number | null>(null);
   const [wizardAreaInput, setWizardAreaInput] = useState("");
@@ -158,6 +215,8 @@ export function BuildsScreen() {
     { n: 6, label: "Portal" },
   ];
   const closeWizard = () => {
+    setWizardErrors(new Set());
+    setDraftError(null);
     setShowBuild(false);
     setNewBuild(createEmptyNewBuild());
     setWizardStep(1);
@@ -426,22 +485,28 @@ export function BuildsScreen() {
         <Field
           placeholder="Nazwa budowy"
           value={newBuild.name}
-          onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, name: v })
-          }
+          onChangeText={(v: string) => {
+            setNewBuild({ ...newBuild, name: v });
+            clearWizardError("name");
+          }}
+          style={wizardErrors.has("name") ? ERROR_BORDER : null}
         />
+        <FieldError show={wizardErrors.has("name")} text="Podaj nazwę budowy." />
         <Field
           placeholder="Numer budowy"
           value={newBuild.number}
-          onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, number: v })
-          }
-          style={{ marginTop: 10 }}
+          onChangeText={(v: string) => {
+            setNewBuild({ ...newBuild, number: v });
+            clearWizardError("number");
+          }}
+          style={[{ marginTop: 10 }, wizardErrors.has("number") ? ERROR_BORDER : null]}
         />
+        <FieldError show={wizardErrors.has("number")} text="Podaj numer budowy." />
         <Pressable
           onPress={() => setWizardManagerPickerOpen(true)}
           className="bg-surface border border-border rounded-card"
           style={{
+            ...(wizardErrors.has("manager") ? ERROR_BORDER : null),
             marginTop: 10,
             paddingHorizontal: 14,
             paddingVertical: 12,
@@ -460,6 +525,7 @@ export function BuildsScreen() {
           </Text>
           <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 12 }}>Wybierz</Text>
         </Pressable>
+        <FieldError show={wizardErrors.has("manager")} text="Wybierz osobę odpowiedzialną." />
         <SearchablePicker
           visible={wizardManagerPickerOpen}
           onClose={() => setWizardManagerPickerOpen(false)}
@@ -469,6 +535,7 @@ export function BuildsScreen() {
           selectedKey={newBuild.manager}
           onSelect={(key) => {
             setNewBuild({ ...newBuild, manager: key });
+            clearWizardError("manager");
             setWizardManagerPickerOpen(false);
           }}
           emptyLabel="Brak pracowników pasujących do wyszukiwania."
@@ -511,18 +578,27 @@ export function BuildsScreen() {
         </Text>
         <DateField
           value={newBuild.startDate}
-          onChange={(v: string) => setNewBuild({ ...newBuild, startDate: v })}
+          onChange={(v: string) => {
+            setNewBuild({ ...newBuild, startDate: v });
+            clearWizardError("startDate");
+          }}
         />
+        <FieldError show={wizardErrors.has("startDate")} text="Podaj datę rozpoczęcia." />
         <Text className="text-xs text-muted uppercase mt-4">
           Czas trwania — dni robocze
         </Text>
         <QuantityStepper
-          style={{ marginTop: 8 }}
+          style={{ marginTop: 8, ...(wizardErrors.has("durationDays") ? ERROR_BORDER : null) }}
           min={1}
           value={newBuild.durationDays}
-          onChangeText={(v: string) =>
-            setNewBuild({ ...newBuild, durationDays: v })
-          }
+          onChangeText={(v: string) => {
+            setNewBuild({ ...newBuild, durationDays: v });
+            clearWizardError("durationDays");
+          }}
+        />
+        <FieldError
+          show={wizardErrors.has("durationDays")}
+          text="Podaj czas trwania — co najmniej 1 dzień roboczy."
         />
         {Number(newBuild.durationDays) > 0 && (
           <Text
@@ -532,10 +608,13 @@ export function BuildsScreen() {
               marginTop: 8,
             }}
           >
-            Planowane zakończenie:{" "}
-            {addDaysISO(
-              newBuild.startDate,
-              Number(newBuild.durationDays),
+            {firstWorkdayISO(newBuild.startDate) &&
+            firstWorkdayISO(newBuild.startDate) !== newBuild.startDate
+              ? `Start wypada w dzień wolny, więc prace liczę od ${formatDatePL(firstWorkdayISO(newBuild.startDate))}. `
+              : ""}
+            Planowane zakończenie (bez weekendów i świąt):{" "}
+            {formatDatePL(
+              addDaysISO(newBuild.startDate, Number(newBuild.durationDays)),
             ) || "—"}{" "}
             · łącznie ok.{" "}
             {Number(newBuild.durationDays) * workdayHours} h przy
@@ -663,6 +742,11 @@ export function BuildsScreen() {
             </Text>
           </Text>
         )}
+        {wizardErrors.size > 0 && (
+          <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 12 }}>
+            Uzupełnij pola zaznaczone na czerwono.
+          </Text>
+        )}
         <View style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
           <View style={{ flex: 1 }}>
             <Button label="Anuluj" secondary onPress={closeWizard} />
@@ -671,9 +755,11 @@ export function BuildsScreen() {
             <Button
               label="Zapisz i dalej"
               onPress={() =>
+                validateNewBuild() &&
                 saveBuild(
                   { ...newBuild, plannedHoursPerDay: String(workdayHours) },
                   (createdId) => {
+                    setWizardErrors(new Set());
                     setNewBuild(createEmptyNewBuild());
                     setWizardBuildId(createdId);
                     setWizardStep(2);
@@ -857,6 +943,7 @@ export function BuildsScreen() {
                               key={batch.id}
                               onPress={() => {
                                 setSelectedBatchId(String(batch.id));
+                                setDraftError(null);
                                 setPicker(null);
                               }}
                               style={{
@@ -886,11 +973,28 @@ export function BuildsScreen() {
                   <Text className="text-xs text-muted uppercase mt-4">Ilość z tej partii</Text>
                   <QuantityStepper
                     style={{ marginTop: 8 }}
+                    step={0.5}
                     value={plannedAmount}
-                    onChangeText={setPlannedAmount}
+                    onChangeText={(v: string) => {
+                      setPlannedAmount(v);
+                      setDraftError(null);
+                    }}
                   />
+                  {(() => {
+                    const batch = warehouseBatches.find((wb) => String(wb.id) === selectedBatchId);
+                    return batch && Number(batch.unitPrice) <= 0 ? (
+                      <Text style={{ color: COLORS.warning, fontSize: 12, marginTop: 6 }}>
+                        Ta partia ma cenę 0 zł — koszt budowy będzie zaniżony. Uzupełnij cenę w Magazynie.
+                      </Text>
+                    ) : null;
+                  })()}
+                  {draftError && (
+                    <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 6 }}>
+                      {draftError}
+                    </Text>
+                  )}
                   <View style={{ marginTop: 12 }}>
-                    <Button label="+ Dodaj do listy" onPress={addToDraft} />
+                    <Button label="+ Dodaj do listy" onPress={handleAddToDraft} />
                   </View>
                   {draftAssignments.length > 0 && (
                     <View
@@ -2548,6 +2652,7 @@ export function BuildsScreen() {
                                   key={batch.id}
                                   onPress={() => {
                                     setSelectedBatchId(String(batch.id));
+                                    setDraftError(null);
                                     setPicker(null);
                                   }}
                                   style={{
@@ -2581,11 +2686,28 @@ export function BuildsScreen() {
                       </Text>
                       <QuantityStepper
                         style={{ marginTop: 8 }}
+                        step={0.5}
                         value={plannedAmount}
-                        onChangeText={setPlannedAmount}
+                        onChangeText={(v: string) => {
+                          setPlannedAmount(v);
+                          setDraftError(null);
+                        }}
                       />
+                      {(() => {
+                        const batch = warehouseBatches.find((wb) => String(wb.id) === selectedBatchId);
+                        return batch && Number(batch.unitPrice) <= 0 ? (
+                          <Text style={{ color: COLORS.warning, fontSize: 12, marginTop: 6 }}>
+                            Ta partia ma cenę 0 zł — koszt budowy będzie zaniżony. Uzupełnij cenę w Magazynie.
+                          </Text>
+                        ) : null;
+                      })()}
+                      {draftError && (
+                        <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: 6 }}>
+                          {draftError}
+                        </Text>
+                      )}
                       <View style={{ marginTop: 12 }}>
-                        <Button label="+ Dodaj do listy" onPress={addToDraft} />
+                        <Button label="+ Dodaj do listy" onPress={handleAddToDraft} />
                       </View>
                       {draftAssignments.length > 0 && (
                         <View

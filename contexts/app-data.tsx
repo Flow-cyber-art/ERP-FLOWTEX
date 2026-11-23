@@ -11,7 +11,7 @@ import {
 import { AppState } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { enqueueReport } from "@/lib/offline-outbox";
+import { enqueueReport, onOutboxFlushed } from "@/lib/offline-outbox";
 import { normalizeMaterialName } from "@/lib/material-name-match";
 import { materialReportKey, parseMaterialReportKey } from "@/lib/material-report-key";
 import {
@@ -497,6 +497,17 @@ function useAppDataState(
     });
     return () => subscription.remove();
   }, [queryClient]);
+  // Raporty wysłane w tle z kolejki offline (lib/offline-outbox.ts) —
+  // odśwież od razu listę raportów, godziny i stany budów (F28).
+  useEffect(
+    () =>
+      onOutboxFlushed(() => {
+        for (const key of ["reports", "timeEntries", "buildMaterials", "buildMaterialLots"]) {
+          queryClient.invalidateQueries({ queryKey: [key] });
+        }
+      }),
+    [queryClient],
+  );
   // Eager — potrzebne od razu niezależnie od zakładki: liczniki w pasku
   // nawigacji (belowMinimumMaterials, pendingOrdersCount,
   // reportsPendingApprovalCount/reportsNeedingFixCount), ekran startowy,
@@ -1590,34 +1601,18 @@ function useAppDataState(
         invalidate("warehouseBatches"),
         invalidate("buildMaterialLots"),
       ]);
-      // Materiał, który brygadzista dopiero co przypisał do budowy z tego
-      // raportu, ma od razu widnieć na liście "Materiały pomocnicze" Z
-      // wpisaną dziś zużytą ilością — bez tego pozycja pojawiała się na
-      // liście, ale ze steperem wyzerowanym, jakby ilość nigdy nie została
-      // podana (a była, tylko w innym polu — ilości przydziału z magazynu,
-      // nie dziennego zużycia).
-      const committedByMaterial = new Map<string, number>();
-      for (const d of draftAssignments) {
-        if (d.quantity <= 0) continue;
-        committedByMaterial.set(
-          d.materialId,
-          (committedByMaterial.get(d.materialId) || 0) + d.quantity,
-        );
-      }
-      if (committedByMaterial.size) {
-        const nextReportValues = { ...reportValues };
-        for (const [materialId, delta] of committedByMaterial) {
-          const current = Number(nextReportValues[materialId] || 0);
-          nextReportValues[materialId] = String(Math.round((current + delta) * 1000) / 1000);
-        }
-        setReportValues(nextReportValues);
-      }
+      // Przypisanie ≠ zużycie (instrukcja brygadzisty, rozdz. 5.3e): po
+      // przypisaniu materiał pojawia się w "Materiałach pomocniczych", ale
+      // pole dziennego zużycia NIE jest wypełniane ilością przywiezioną —
+      // brygadzista wpisuje, ile faktycznie dziś wbudowano. Wcześniejsze
+      // wstępne wypełnienie prowadziło do zaraportowania zużycia całej
+      // przywiezionej ilości (F6).
       setDraftAssignments([]);
       setShowAssignment(false);
     } catch (error) {
       reportMutationError(error, "Nie udało się przypisać materiałów do budowy.");
     }
-  }, [activeBuild?.id, assignBatchesMutation, builds, draftAssignments, invalidate, reportValues, selectedBuildId]);
+  }, [activeBuild?.id, assignBatchesMutation, builds, draftAssignments, invalidate, selectedBuildId]);
   // Cofnięcie pomyłkowo dodanego materiału pomocniczego (odwrotność
   // commitAssignments powyżej) — zwraca ilość do partii źródłowej po
   // stronie bazy (unassign_material_from_build, 026), zablokowane tam,
@@ -2866,7 +2861,7 @@ function useAppDataState(
     // wymagać nowego, świadomego wyboru.
     setSelectedEmployeeId("");
   }, [draftPeople, personEnd, personStart, selectedEmployeeId]);
-  // Dodaje od razu WSZYSTKICH pracowników (spoza już dodanych) z aktualnie
+  // Dodaje od razu całą BRYGADĘ budowy (spoza już dodanych) z aktualnie
   // ustawionymi godzinami OD/DO — żeby przy całej brygadzie pracującej te
   // same godziny nie trzeba było dodawać każdej osoby osobno.
   const addAllEmployeesToDraft = useCallback(() => {
@@ -2886,12 +2881,44 @@ function useAppDataState(
       );
       return;
     }
+    // Tylko BRYGADA tej budowy (F7) — wcześniej dodawało wszystkich
+    // pracowników firmy, w tym ludzi z innych budów. Brygady własne budowy
+    // (build_teams bez brygad podwykonawców + główna brygada budowy), a gdy
+    // budowa nie ma brygady — brygada, której liderem jest zalogowany.
+    const buildIdNum = Number(activeBuild?.id);
+    const teamIds = new Set<number>(
+      buildTeams
+        .filter((bt) => bt.buildId === buildIdNum && !teamSubcontractorMap.has(bt.teamId))
+        .map((bt) => bt.teamId),
+    );
+    if (activeBuild?.teamId && !teamSubcontractorMap.has(Number(activeBuild.teamId))) {
+      teamIds.add(Number(activeBuild.teamId));
+    }
+    if (teamIds.size === 0 && myEmployeeId) {
+      for (const t of teams) {
+        if (t.active && t.leadEmployeeId === Number(myEmployeeId)) teamIds.add(t.id);
+      }
+    }
+    if (teamIds.size === 0) {
+      notify(
+        "Brak brygady",
+        "Ta budowa nie ma przypisanej brygady — dodaj osoby pojedynczo.",
+      );
+      return;
+    }
+    const crewIds = new Set<string>();
+    for (const m of teamMembers) if (teamIds.has(m.teamId)) crewIds.add(String(m.employeeId));
+    for (const t of teams) {
+      if (teamIds.has(t.id) && t.leadEmployeeId != null) crewIds.add(String(t.leadEmployeeId));
+    }
     const alreadyAdded = new Set(draftPeople.map((person) => person.employeeId));
-    const toAdd = employees.filter((employee) => !alreadyAdded.has(employee.id));
+    const toAdd = employees.filter(
+      (employee) => crewIds.has(employee.id) && !alreadyAdded.has(employee.id),
+    );
     if (toAdd.length === 0) {
       notify(
         "Brak osób do dodania",
-        "Wszyscy pracownicy są już w koszyku raportu.",
+        "Cała brygada tej budowy jest już w raporcie.",
       );
       return;
     }
@@ -2908,7 +2935,7 @@ function useAppDataState(
       JSON.stringify({ start: personStart, end: personEnd }),
     );
     setSelectedEmployeeId("");
-  }, [draftPeople, employees, personEnd, personStart]);
+  }, [activeBuild?.id, activeBuild?.teamId, buildTeams, draftPeople, employees, myEmployeeId, personEnd, personStart, teamMembers, teamSubcontractorMap, teams]);
   // Usunięcie pomyłkowo dodanej osoby z koszyka raportu (np. zły
   // pracownik albo złe godziny) — analogiczne "✕" jak przy materiałach
   // pomocniczych (removeFromDraft).

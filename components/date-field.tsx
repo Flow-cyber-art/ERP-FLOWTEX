@@ -3,6 +3,7 @@ import { Platform, Pressable, Text } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { COLORS } from "@/components/report-ui";
 import { RADIUS } from "@/constants/radius";
+import { localISODate } from "@/lib/utils";
 
 /**
  * Pole daty (format "YYYY-MM-DD") — na webie natywny `<input type="date">`
@@ -82,7 +83,7 @@ export function DateField({
             // stąd zostawiamy `true`, żeby dało się poprawiać wybór.
             setShowPicker(Platform.OS === "ios");
             if (selectedDate) {
-              onChange(selectedDate.toISOString().slice(0, 10));
+              onChange(localISODate(selectedDate));
             }
           }}
         />

@@ -75,12 +75,21 @@ export type PendingReportSubmission = {
   isNetworkError?: boolean;
 };
 
-function describeError(error: unknown): { message: string; isNetworkError: boolean } {
+// Komunikaty, jakie przeglądarki / React Native zwracają, gdy żądanie w
+// ogóle nie dotarło do serwera (Chrome, Firefox, Safari, RN).
+const NETWORK_ERROR_PATTERN =
+  /failed to fetch|networkerror|load failed|network request failed|fetch failed|network error|timeout/i;
+
+export function describeError(error: unknown): { message: string; isNetworkError: boolean } {
   if (error instanceof SupabaseRpcError) {
-    // `code` obecny = Postgres/RPC faktycznie odpowiedział i odrzucił
-    // zapis — to NIE jest brak sieci, retry bez poprawy przyczyny nigdy
-    // się nie powiedzie.
-    return { message: error.message, isNetworkError: error.code === undefined };
+    // Niepusty `code` = Postgres/RPC faktycznie odpowiedział i odrzucił
+    // zapis — to NIE jest brak sieci. supabase-js przy braku sieci zwraca
+    // błąd z `code === ""` i treścią "TypeError: Failed to fetch" — wcześniej
+    // sprawdzaliśmy tylko `undefined`, przez co brak zasięgu był pokazywany
+    // brygadziście jako "serwer odrzucił raport" (F28).
+    const hasServerCode = typeof error.code === "string" && error.code.length > 0;
+    const looksLikeNetwork = NETWORK_ERROR_PATTERN.test(error.message);
+    return { message: error.message, isNetworkError: !hasServerCode || looksLikeNetwork };
   }
   if (error instanceof Error) {
     return { message: error.message, isNetworkError: true };
@@ -141,6 +150,7 @@ export async function enqueueReport(
   await writeQueue([...withoutDuplicate, entry]);
 
   const result = await flushOutbox();
+  if (result.succeededKeys.length > 0) emitFlushed(result.succeededKeys);
   const key = reportKey(submission);
   const failed = result.failed.find((item) => reportKey(item) === key);
   return failed
@@ -225,13 +235,52 @@ export async function flushOutbox(): Promise<{
  * `online`. Wołaj raz, np. w `app/_layout.tsx`.
  */
 export function initOfflineOutbox(): () => void {
-  flushOutbox();
+  // Flush tylko gdy kolejka coś zawiera — bez zbędnych zapytań co minutę.
+  const flushIfPending = async () => {
+    if ((await getPendingCount()) === 0) return;
+    const result = await flushOutbox();
+    if (result.succeededKeys.length > 0) emitFlushed(result.succeededKeys);
+  };
+
+  flushIfPending();
+  // Ponawianie w tle: event `online` nie zawsze przychodzi (np. telefon
+  // "ma sieć", ale bez internetu), więc dodatkowo co minutę i przy
+  // powrocie do aplikacji (zmiana karty / wybudzenie PWA).
+  const interval = setInterval(flushIfPending, 60_000);
 
   if (Platform.OS === "web" && typeof window !== "undefined") {
-    const handler = () => flushOutbox();
-    window.addEventListener("online", handler);
-    return () => window.removeEventListener("online", handler);
+    const onOnline = () => flushIfPending();
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") flushIfPending();
+    };
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }
 
-  return () => {};
+  return () => clearInterval(interval);
+}
+
+// Powiadamianie UI (np. odświeżenie listy raportów) po wysłaniu zaległych
+// raportów z kolejki w tle.
+type FlushListener = (sentKeys: string[]) => void;
+const flushListeners = new Set<FlushListener>();
+
+export function onOutboxFlushed(listener: FlushListener): () => void {
+  flushListeners.add(listener);
+  return () => flushListeners.delete(listener);
+}
+
+function emitFlushed(keys: string[]) {
+  flushListeners.forEach((listener) => {
+    try {
+      listener(keys);
+    } catch {
+      // listener UI nie może przerwać wysyłki
+    }
+  });
 }

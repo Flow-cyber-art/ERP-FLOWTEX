@@ -16,16 +16,15 @@ import { useWideLayout } from "@/hooks/use-wide-layout";
 
 export function WorkerScreen() {
   const isWide = useWideLayout();
-  const { builds, employees, timeEntries } = useAppData();
+  const { builds, employees, timeEntries, myEmployeeId } = useAppData();
 
   const [workerPeriod, setWorkerPeriod] = useState<
     "Dzień" | "Tydzień" | "Miesiąc" | "Rok"
   >("Dzień");
-  const [workerEmployeeId] = useState(
-    () =>
-      employees.find((employee) => employee.role === "Pracownik")?.id ||
-      employees[0].id,
-  );
+  // Zawsze pracownik powiązany z ZALOGOWANYM kontem (profiles.employeeId).
+  // Wcześniej brany był pierwszy pracownik z rolą "Pracownik" — każdy
+  // pracownik widział wtedy godziny tej samej, cudzej osoby (F8).
+  const workerEmployeeId = myEmployeeId ?? null;
   const workerEntries = useMemo(() => {
     const today = new Date();
     return timeEntries.filter((entry) => {
@@ -91,10 +90,9 @@ export function WorkerScreen() {
         godz.
       </Text>
       <Text className="text-sm text-muted mt-1">
-        {employees.find(
-          (employee) => employee.id === workerEmployeeId,
-        )?.name || "Pracownik"}{" "}
-        · okres: {workerPeriod.toLowerCase()}
+        {workerEmployeeId
+          ? `${employees.find((employee) => employee.id === workerEmployeeId)?.name || "Pracownik"} · okres: ${workerPeriod.toLowerCase()}`
+          : "Konto nie jest powiązane z pracownikiem — poproś Admina o powiązanie."}
       </Text>
       <Text className="text-base font-bold text-primary mt-3">
         {new Set(workerEntries.map((entry) => entry.date)).size} dni

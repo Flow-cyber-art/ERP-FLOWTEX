@@ -91,6 +91,7 @@ import {
   listBuildTeams,
   removeBuildTeam as removeBuildTeamRemote,
   saveBuildTeam as saveBuildTeamRemote,
+  addSubcontractorToBuild as addSubcontractorToBuildRemote,
   subcontractorTeamIdsLedBy,
   type BuildTeamRow,
 } from "@/lib/data/build-teams";
@@ -167,9 +168,10 @@ export type NewBuildInput = {
   startDate: string;
   durationDays: string;
   teamId: string;
-  // Brygady podwykonawców wybrane w kreatorze — dopinane do build_teams
-  // (wszystkie etapy) zaraz po utworzeniu budowy.
-  subcontractorTeamIds?: string[];
+  // Podwykonawcy (firmy) wybrani w kreatorze — dopinani do budowy
+  // (wszystkie etapy) zaraz po jej utworzeniu; brygadę firmy baza bierze
+  // albo zakłada sama (117).
+  subcontractorIds?: string[];
   plannedHoursPerDay: string;
   clientName: string;
   address: string;
@@ -1693,6 +1695,25 @@ function useAppDataState(
       return false;
     }
   }, [invalidate]);
+  // Podwykonawca (firma) wprost na budowę — bez ręcznego zakładania brygady.
+  const addSubcontractorToBuild = useCallback(
+    async (buildId: number, subcontractorId: number, stageNames: string[] | null) => {
+      try {
+        await addSubcontractorToBuildRemote(buildId, subcontractorId, stageNames);
+        await Promise.all([
+          invalidate("buildTeams"),
+          queryClient.invalidateQueries({ queryKey: ["teams", "list"] }),
+          queryClient.invalidateQueries({ queryKey: ["teamSubcontractors", "list"] }),
+        ]);
+        return true;
+      } catch (error) {
+        reportMutationError(error, "Nie udało się dodać podwykonawcy do budowy.");
+        return false;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [invalidate],
+  );
   // Korekta szacunkowych m² w raporcie podwykonawcy przed zatwierdzeniem (115).
   const setReportStageProgress = useCallback(
     async (reportId: string, items: SubmitReportStageProgress[]) => {
@@ -1836,9 +1857,9 @@ function useAppDataState(
       });
       // Podwykonawcy wybrani w kreatorze — na wszystkie etapy; zakres
       // można potem zawęzić na karcie budowy (Brygady na budowie).
-      for (const teamId of newBuild.subcontractorTeamIds ?? []) {
+      for (const subcontractorId of newBuild.subcontractorIds ?? []) {
         try {
-          await saveBuildTeamRemote({ buildId: build.id, teamId: Number(teamId), stageNames: null });
+          await addSubcontractorToBuildRemote(build.id, Number(subcontractorId), null);
         } catch (error) {
           reportMutationError(
             error,
@@ -1849,6 +1870,10 @@ function useAppDataState(
       await queryClient.invalidateQueries({ queryKey: ["builds", "list"] });
       // builds."teamId" -> build_teams (trigger w 112).
       await queryClient.invalidateQueries({ queryKey: ["buildTeams", "list"] });
+      if ((newBuild.subcontractorIds ?? []).length > 0) {
+        await queryClient.invalidateQueries({ queryKey: ["teams", "list"] });
+        await queryClient.invalidateQueries({ queryKey: ["teamSubcontractors", "list"] });
+      }
       onSaved(String(build.id));
       // Katalog na zdjęcia (Google Drive) NIE jest tworzony tu automatycznie
       // — Admin robi to świadomie przyciskiem "Stwórz katalog na zdjęcia"
@@ -3088,6 +3113,7 @@ function useAppDataState(
     subcontractorLeadEmployeeIds,
     mySubcontractorBuildTeam,
     saveBuildTeam,
+    addSubcontractorToBuild,
     removeBuildTeam,
     draftStageProgress,
     setDraftStageProgress,
@@ -3271,6 +3297,7 @@ function useAppDataState(
     subcontractorLeadEmployeeIds,
     mySubcontractorBuildTeam,
     saveBuildTeam,
+    addSubcontractorToBuild,
     removeBuildTeam,
     draftStageProgress,
     builds,

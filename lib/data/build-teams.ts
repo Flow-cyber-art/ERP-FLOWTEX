@@ -35,6 +35,25 @@ export async function saveBuildTeam(row: BuildTeamRow): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Dopina PODWYKONAWCĘ (firmę) do budowy — baza bierze jego brygadę albo
+ * zakłada ją sama, gdy firma żadnej nie ma (supabase/sql/117_...).
+ * Zwraca id brygady. stageNames null = wszystkie etapy.
+ */
+export async function addSubcontractorToBuild(
+  buildId: number,
+  subcontractorId: number,
+  stageNames: string[] | null,
+): Promise<number> {
+  const { data, error } = await supabase.rpc("add_subcontractor_to_build", {
+    p_build_id: buildId,
+    p_subcontractor_id: subcontractorId,
+    p_stage_names: stageNames && stageNames.length ? stageNames : null,
+  });
+  if (error) throw new Error(error.message);
+  return Number(data);
+}
+
 export async function removeBuildTeam(buildId: number, teamId: number): Promise<void> {
   const { error } = await supabase
     .from("build_teams")

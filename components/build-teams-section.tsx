@@ -66,6 +66,7 @@ export function BuildTeamsSection({
     buildTechnologySnapshots,
     buildMaterialPlans,
     saveBuildTeam,
+    addSubcontractorToBuild,
     removeBuildTeam,
   } = useAppData();
   const subsQuery = useQuery({ queryKey: ["subcontractors", "list"], queryFn: listSubcontractors });
@@ -95,12 +96,16 @@ export function BuildTeamsSection({
   // null = formularz zamknięty; "new" = dodawanie; liczba = edycja zakresu.
   const [editing, setEditing] = useState<"new" | number | null>(null);
   const [draftTeamId, setDraftTeamId] = useState<number | null>(null);
+  // Podwykonawca (firma) bez własnej brygady — przy zapisie baza zakłada
+  // mu brygadę i dopina ją do budowy (117).
+  const [draftSubId, setDraftSubId] = useState<number | null>(null);
   const [draftStages, setDraftStages] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
 
   const openNew = () => {
     setEditing(editing === "new" ? null : "new");
     setDraftTeamId(null);
+    setDraftSubId(null);
     setDraftStages(null);
   };
   const openEdit = (row: BuildTeamRow) => {
@@ -118,6 +123,13 @@ export function BuildTeamsSection({
   };
 
   const save = async () => {
+    if (draftSubId != null) {
+      setBusy(true);
+      const ok = await addSubcontractorToBuild(numericBuildId, draftSubId, draftStages);
+      setBusy(false);
+      if (ok) setEditing(null);
+      return;
+    }
     if (draftTeamId == null) return;
     const row: BuildTeamRow = { buildId: numericBuildId, teamId: draftTeamId, stageNames: draftStages };
     // Ten sam etap u dwóch podwykonawców = niejasne, komu zapłacić za
@@ -153,6 +165,13 @@ export function BuildTeamsSection({
   const availableTeams = teams.filter(
     (t) => t.active && !rows.some((r) => r.teamId === t.id),
   );
+  // Firmy, które nie mają jeszcze żadnej aktywnej brygady — inaczej nie
+  // dałoby się ich wybrać bez wcześniejszego zakładania brygady.
+  const availableFirms = (subsQuery.data ?? []).filter(
+    (sub) =>
+      sub.active &&
+      !teams.some((t) => t.active && teamSubcontractorMap.get(t.id) === sub.id),
+  );
 
   const stagePicker = (
     <>
@@ -181,7 +200,7 @@ export function BuildTeamsSection({
         <View style={{ flex: 1 }}>
           <Button
             label={busy ? "Zapisywanie…" : "Zapisz"}
-            disabled={busy || draftTeamId == null}
+            disabled={busy || (draftTeamId == null && draftSubId == null)}
             onPress={save}
           />
         </View>
@@ -207,7 +226,7 @@ export function BuildTeamsSection({
         {!readOnly && (
           <Pressable onPress={openNew}>
             <Text style={{ color: COLORS.primary, fontWeight: "700", fontSize: 13 }}>
-              {editing === "new" ? "Anuluj" : "+ Dodaj brygadę"}
+              {editing === "new" ? "Anuluj" : "+ Dodaj brygadę / podwykonawcę"}
             </Text>
           </Pressable>
         )}
@@ -274,10 +293,10 @@ export function BuildTeamsSection({
 
       {editing === "new" && (
         <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: COLORS.border }}>
-          <Text className="text-xs text-muted uppercase mb-2">Brygada</Text>
-          {availableTeams.length === 0 ? (
+          <Text className="text-xs text-muted uppercase mb-2">Brygada / podwykonawca</Text>
+          {availableTeams.length === 0 && availableFirms.length === 0 ? (
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-              Wszystkie aktywne brygady są już na tej budowie.
+              Wszystkie aktywne brygady i podwykonawcy są już na tej budowie.
             </Text>
           ) : (
             <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
@@ -288,10 +307,24 @@ export function BuildTeamsSection({
                     key={t.id}
                     label={sub ? `${t.name} (${sub})` : t.name}
                     selected={draftTeamId === t.id}
-                    onPress={() => setDraftTeamId(draftTeamId === t.id ? null : t.id)}
+                    onPress={() => {
+                      setDraftSubId(null);
+                      setDraftTeamId(draftTeamId === t.id ? null : t.id);
+                    }}
                   />
                 );
               })}
+              {availableFirms.map((sub) => (
+                <Chip
+                  key={`sub-${sub.id}`}
+                  label={`${sub.name} (podwykonawca)`}
+                  selected={draftSubId === sub.id}
+                  onPress={() => {
+                    setDraftTeamId(null);
+                    setDraftSubId(draftSubId === sub.id ? null : sub.id);
+                  }}
+                />
+              ))}
             </View>
           )}
           {stagePicker}

@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { parseMaterialReportKey } from "@/lib/material-report-key";
 import { normalizeMaterialName } from "@/lib/material-name-match";
+import { addWorkdaysISO, firstWorkdayISO } from "@/lib/workdays";
 import type { BuildMaterialPlanRow } from "@/lib/data/build-technology";
 import type { BuildStageStatusRow } from "@/lib/data/build-stages";
 import {
@@ -349,13 +350,8 @@ const pluralPL = (n: number, one: string, few: string, many: string) => {
   return many;
 };
 
-const addDaysISO = (dateStr: string, days: number) => {
-  if (!dateStr || !Number.isFinite(days)) return "";
-  const d = new Date(dateStr + "T00:00:00");
-  if (Number.isNaN(d.getTime())) return "";
-  d.setDate(d.getDate() + Math.max(0, Math.round(days) - 1));
-  return d.toISOString().slice(0, 10);
-};
+// Daty zakończenia budowy w dniach roboczych — patrz lib/workdays.ts.
+const addDaysISO = addWorkdaysISO;
 
 const todayLabelPL = () =>
   new Date().toLocaleDateString("pl-PL", {
@@ -2226,6 +2222,7 @@ export {
   UNIT_OPTIONS,
   todayISO,
   addDaysISO,
+  firstWorkdayISO,
   todayLabelPL,
   formatPLN,
   pluralPL,

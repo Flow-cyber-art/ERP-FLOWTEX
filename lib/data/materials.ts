@@ -54,14 +54,6 @@ export async function createMaterial(input: CreateMaterialInput): Promise<void> 
   if (error) throw new Error(error.message);
 }
 
-export async function updateMaterialPrice(materialId: number, unitPrice: number): Promise<void> {
-  const { error } = await supabase
-    .from("materials")
-    .update({ unitPrice, updatedAt: new Date().toISOString() })
-    .eq("id", materialId);
-  if (error) throw new Error(error.message);
-}
-
 export async function updateMaterialIndex(materialId: number, index: string): Promise<void> {
   const { error } = await supabase
     .from("materials")
@@ -70,17 +62,46 @@ export async function updateMaterialIndex(materialId: number, index: string): Pr
   if (error) throw new Error(error.message);
 }
 
-export async function adjustMaterialStock(materialId: number, newStock: number): Promise<void> {
-  const { error } = await supabase.rpc("adjust_material_stock", {
-    p_material_id: materialId,
-    p_new_stock: newStock,
+// Korekta stanu i/lub ceny z wymaganym powodem — jedna transakcja w bazie,
+// każda zmiana zostawia wpis "korekta" w stock_movements (kto, kiedy,
+// było → jest). Patrz supabase/sql/116_korekta_magazynu_z_powodem_i_cena_przy_zerowym_stanie.sql.
+// null = bez zmian w danym polu.
+export async function correctMaterial(input: {
+  materialId: number;
+  newStock: number | null;
+  newPrice: number | null;
+  reason: string;
+}): Promise<void> {
+  const { error } = await supabase.rpc("correct_material", {
+    p_material_id: input.materialId,
+    p_new_stock: input.newStock,
+    p_new_price: input.newPrice,
+    p_reason: input.reason,
   });
   if (error) throw new Error(error.message);
 }
 
+export type MaterialCorrection = {
+  id: number;
+  createdAt: string;
+  quantity: string;
+  unitPrice: string;
+  note: string | null;
+  createdByName: string;
+};
+
+export async function listMaterialCorrections(materialId: number, limit = 10): Promise<MaterialCorrection[]> {
+  const { data, error } = await supabase.rpc("list_material_corrections", {
+    p_material_id: materialId,
+    p_limit: limit,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as MaterialCorrection[];
+}
+
 // Archiwizacja zamiast usuwania — patrz supabase/sql/038_archiwizacja_materialow.sql
 // i 039_archiwizacja_tylko_zero_stanu.sql. RPC (nie zapis bezpośredni jak
-// updateMaterialPrice), bo archiwizacja waliduje stan magazynowy (tylko
+// correctMaterial), bo archiwizacja waliduje stan magazynowy (tylko
 // zero) po stronie bazy — nie coś, co dałoby się bezpiecznie sprawdzić
 // samą polityką RLS.
 export async function setMaterialActive(materialId: number, active: boolean): Promise<void> {

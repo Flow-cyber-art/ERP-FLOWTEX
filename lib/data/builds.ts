@@ -206,10 +206,12 @@ export async function updateBuildBasicInfo(
 }
 
 export async function updateBuildPhotosUrl(buildId: number, photosUrl: string): Promise<void> {
-  const { error } = await supabase
-    .from("builds")
-    .update({ photosUrl: photosUrl.length ? photosUrl : null, updatedAt: new Date().toISOString() })
-    .eq("id", buildId);
+  // RPC zamiast bezpośredniego UPDATE: Brygadzista nie ma już prawa zapisu do
+  // tabeli builds (118_uprawnienia_bezpieczenstwo.sql) — może zmienić tylko link.
+  const { error } = await supabase.rpc("set_build_photos_url", {
+    p_build_id: buildId,
+    p_photos_url: photosUrl,
+  });
   if (error) throw new Error(error.message);
 }
 

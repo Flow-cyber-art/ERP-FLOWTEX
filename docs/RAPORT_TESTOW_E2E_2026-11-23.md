@@ -96,3 +96,23 @@ Dodatkowo przetestowano bezpieczeństwo przez API (SEC) — **F1-SEC, F8, F15, F
 ## 6. Pozostałości w produkcyjnej bazie (do posprzątania)
 
 Konta `qa-admin`, `qa-bryg`, `qa-prac` (+ możliwy wpis `qa-admin` w `superadmins`), pracownicy `QA_*`, brygady `QA_Brygada`, `QA_BrygadaPW`, podwykonawca `QA_Podwykonawca`, materiały `QA_Klej`, `QA_Grunt`, `QA_Tasma`, technologia `QA_Technologia`, budowy `QA_Budowa1-3` (+ raporty, godziny, ruchy, partie, zamówienia, rozliczenie), urlopy QA, oferta `QA-OF-1`. Raporty QA mogły wysłać push do prawdziwych adminów.
+
+---
+
+## 7. Status poprawek — krok 1: uprawnienia (23.11.2026)
+
+Migracja `supabase/sql/118_uprawnienia_bezpieczenstwo.sql` **wgrana na produkcję** + zmiany w aplikacji. Zweryfikowane przez API kontami każdej roli i w przeglądarce.
+
+| Błąd | Poprawka | Weryfikacja |
+|---|---|---|
+| SEC | `anon` bez prawa wykonania funkcji (poza portalem i funkcjami RLS); domyślnie nowe funkcje też bez `anon` | `anon` → `get_employees` / `get_time_entries`: permission denied; portal działa |
+| SEC-2 (nowy) | stawki `hourlyRate`/`costRate` nieczytelne wprost z tabel `employees` i `time_entries`; tylko przez funkcje (maskowane dla nie-Admina) | Pracownik/Brygadzista: permission denied; Admin widzi stawki w HR |
+| F8 | `get_employees`/`get_time_entries` zwracają Pracownikowi tylko jego dane; ekran „Mój czas” bierze pracownika zalogowanego konta (`worker-screen.tsx`) | Pracownik widzi „QA_Pracownik” i tylko swoje godziny |
+| F15 | zapis do `builds` tylko Admin; link do zdjęć przez RPC `set_build_photos_url` (`lib/data/builds.ts`) | Brygadzista: UPDATE zmienia 0 wierszy; link do zdjęć działa |
+| F16 | `decide_leave_request` blokuje decyzję o własnym wniosku; lista do zatwierdzenia nie pokazuje własnych wniosków | „Nie możesz rozpatrzyć własnego wniosku urlopowego.” |
+| Oferty | INSERT `offers` i zapis `offer_items` tylko Admin | Pracownik: odmowa RLS |
+
+**Pozostaje (osobne kroki):**
+- SEC-3 (P2): funkcja `generate-client-summary` w ścieżce portalu sprawdza token, ale nie PIN — wymaga wdrożenia edge function.
+- Pracownik nadal czyta przez API tabele budów, raportów, magazynu i ofert (bez stawek pracowników). Do zawężenia razem z nowym modelem magazynu.
+- F14 (limit prób PIN) — niezmienione.

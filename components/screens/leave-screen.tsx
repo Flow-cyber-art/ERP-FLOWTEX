@@ -298,13 +298,16 @@ export function LeaveScreen() {
 // wnioski, nie tylko "swojego" zespołu (patrz 049_urlopy.sql).
 export function LeavePendingApprovals() {
   const isWide = useWideLayout();
-  const { employees, leaveRequests, decideLeaveRequest } = useAppData();
+  const { employees, leaveRequests, decideLeaveRequest, myEmployeeId } = useAppData();
+  // Własnego wniosku nie rozpatruje się samemu — baza też to blokuje
+  // (decide_leave_request, 118_uprawnienia_bezpieczenstwo.sql).
   const pending = useMemo(
     () =>
       leaveRequests
         .filter((r) => r.status === "oczekujący")
+        .filter((r) => !myEmployeeId || r.employeeId !== myEmployeeId)
         .sort((a, b) => a.dateFrom.localeCompare(b.dateFrom)),
-    [leaveRequests],
+    [leaveRequests, myEmployeeId],
   );
 
   if (pending.length === 0) return null;

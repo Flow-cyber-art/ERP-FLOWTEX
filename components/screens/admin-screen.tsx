@@ -22,6 +22,7 @@ import {
 } from "@/components/screens/leave-screen";
 import { AccountSettingsSection } from "@/components/account-settings-section";
 import { WebPushSettingsSection } from "@/components/web-push-settings-section";
+import { ReportPeriodsSection } from "@/components/report-periods-section";
 import type { AppRole } from "@/lib/data/auth";
 import { signOut } from "@/lib/data/auth";
 import {
@@ -297,6 +298,7 @@ function AdminSettingsSection() {
             </View>
           )}
         </View>
+        <ReportPeriodsSection />
       </View>
 
       {/* "Widok Brygadzisty" — Admin bywa na budowie i chce od razu

@@ -41,6 +41,7 @@ export function ManagerScreen() {
     buildStageStatuses,
     savedReports,
     approveReport,
+    sendBackReport,
     employees,
     materials,
     teams,
@@ -156,7 +157,7 @@ export function ManagerScreen() {
                 <ReportCard
                   key={report.id}
                   subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
-                  onSaveStageProgress={report.teamId ? (items) => setReportStageProgress(report.id, items) : undefined}
+                  onSaveStageProgress={(items) => setReportStageProgress(report.id, items)}
                   report={report}
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}
@@ -171,6 +172,7 @@ export function ManagerScreen() {
                     )
                   }
                   onApprove={() => approveReport(report.id)}
+                  onSendBack={(comment) => sendBackReport(report.id, comment)}
                   showBuildInfo={selectedBuildId === "all"}
                 />
               ))}
@@ -190,7 +192,7 @@ export function ManagerScreen() {
                 <ReportCard
                   key={report.id}
                   subcontractorTeamName={report.teamId ? teams.find((t) => t.id === report.teamId)?.name ?? "Podwykonawca" : null}
-                  onSaveStageProgress={report.teamId ? (items) => setReportStageProgress(report.id, items) : undefined}
+                  onSaveStageProgress={(items) => setReportStageProgress(report.id, items)}
                   report={report}
                   build={builds.find((b) => b.id === report.buildId)}
                   materials={materials}
@@ -205,6 +207,7 @@ export function ManagerScreen() {
                     )
                   }
                   onApprove={() => approveReport(report.id)}
+                  onSendBack={(comment) => sendBackReport(report.id, comment)}
                   showBuildInfo={selectedBuildId === "all"}
                 />
               ))}

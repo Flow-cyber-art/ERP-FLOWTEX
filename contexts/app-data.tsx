@@ -84,7 +84,7 @@ import { useRegisterWebPush } from "@/lib/notifications/use-register-web-push";
 import {
   listReports,
   setReportStageProgress as setReportStageProgressRemote,
-  updateReportStatus,
+  reviewReport,
   type ReportRow,
   type SubmitReportStageProgress,
 } from "@/lib/data/reports";
@@ -151,7 +151,7 @@ import {
   confirmAction,
   notify,
 } from "@/components/report-ui";
-export type SavedReportStatus = "submitted" | "approved";
+export type SavedReportStatus = "submitted" | "approved" | "do_poprawy";
 
 export type NewMaterialInput = {
   name: string;
@@ -224,6 +224,10 @@ export type SavedReport = {
   extraCosts: ExtraCost[];
   status: SavedReportStatus;
   updatedAt: string;
+  /** Komentarz Admina (przy odesłaniu do poprawy). */
+  adminComment?: string | null;
+  /** Kiedy raport wysłano; `date` to dzień wykonania prac. */
+  submittedAt?: string | null;
   // Kilometrówka (Faza 7) — km wpisane przez brygadzistę i stawka/koszt
   // zamrożone PRZEZ BAZĘ w momencie wysyłki (patrz submit_daily_report).
   km?: number;
@@ -294,8 +298,10 @@ function mapReportRowToSavedReport(row: ReportRow): SavedReport {
       note: c.note ?? undefined,
       category: c.category ?? undefined,
     })),
-    status: row.status === "approved" ? "approved" : "submitted",
+    status: row.status === "approved" ? "approved" : row.status === "do_poprawy" ? "do_poprawy" : "submitted",
     updatedAt: row.updatedAt,
+    adminComment: row.adminComment,
+    submittedAt: row.submittedAt,
     km: row.km != null ? Number(row.km) : undefined,
     kmRateApplied: row.kmRateApplied != null ? Number(row.kmRateApplied) : undefined,
     kmCost: row.kmCost != null ? Number(row.kmCost) : undefined,
@@ -798,6 +804,7 @@ function useAppDataState(
   });
   const kmRate = Number(settingsQuery.data?.kmRate ?? 0);
   const closeBuildPin = settingsQuery.data?.closeBuildPin ?? null;
+  const reportBackdateDays = Number(settingsQuery.data?.reportBackdateDays ?? 3);
 
   useEffect(() => {
     // `.data === undefined` = zapytanie jeszcze się nie wykonało (nie
@@ -1245,13 +1252,11 @@ function useAppDataState(
     }) =>
       receiveBuildOrderRemote(vars.orderId, vars.items, vars.documentNumber, vars.supplier),
   });
+  // Zatwierdzenie / odesłanie do poprawy przez RPC review_report (124) —
+  // po id raportu, z historią w report_review_log.
   const approveReportMutation = useMutation({
-    mutationFn: (vars: {
-      buildId: number;
-      date: string;
-      status: "approved" | "do_poprawy";
-      teamId?: number | null;
-    }) => updateReportStatus(vars.buildId, vars.date, vars.status, undefined, vars.teamId ?? null),
+    mutationFn: (vars: { reportId: number; approve: boolean; comment?: string }) =>
+      reviewReport(vars.reportId, vars.approve, vars.comment),
   });
 
   function reportMutationError(error: unknown, fallback: string) {
@@ -1305,6 +1310,10 @@ function useAppDataState(
   // Raport brygadzisty podwykonawcy (112): wykonana dziś ilość per etap
   // (nazwa etapu -> ilość jako tekst z pola, jednostka budowy).
   const [draftStageProgress, setDraftStageProgress] = useState<Record<string, string>>({});
+  // Dzień WYKONANIA prac (124) — domyślnie dziś; brygadzista może wybrać do
+  // settings.report_backdate_days dni wstecz (pilnuje tego też baza).
+  // Moment wysłania zapisuje baza osobno (reports.submitted_at).
+  const [draftReportDate, setDraftReportDate] = useState<string>(() => todayISO());
   // Admin raportuje W IMIENIU podwykonawcy bez konta (115): id jego
   // brygady albo null = raport brygady własnej.
   const [draftReportTeamId, setDraftReportTeamId] = useState<number | null>(null);
@@ -2115,7 +2124,9 @@ function useAppDataState(
     const effectiveKm = reportTeamId ? undefined : Number(draftKm.replace(",", ".")) || undefined;
     const buildUnit =
       buildTechnologySnapshots.find((s) => String(s.buildId) === String(buildId))?.unit ?? "m2";
-    const stageProgress = reportTeamId
+    // m² per etap: podwykonawca (podstawa rozliczenia) i — od 124 — także
+    // brygada własna (postęp w portalu klienta).
+    const stageProgress = true
       ? Object.entries(draftStageProgress)
           .map(([stageName, raw]) => ({
             stageName,
@@ -2129,7 +2140,14 @@ function useAppDataState(
               (!subBuildTeam?.stageNames || subBuildTeam.stageNames.includes(sp.stageName)),
           )
       : [];
-    const date = todayISO();
+    const editedReport = editingReportId
+      ? savedReports.find((report) => report.id === editingReportId)
+      : undefined;
+    const date = editedReport?.date ?? (draftReportDate || todayISO());
+    if (date > todayISO()) {
+      notify("Data z przyszłości", "Data wykonania prac nie może być późniejsza niż dziś.");
+      return;
+    }
     const existingReport = savedReports.find(
       (report) =>
         report.id === editingReportId ||
@@ -2421,6 +2439,7 @@ function useAppDataState(
     draftNote,
     draftPeople,
     draftStageProgress,
+    draftReportDate,
     draftReportTeamId,
     isAdminAccount,
     buildTeams,
@@ -2982,6 +3001,7 @@ function useAppDataState(
       ),
     );
     setDraftReportTeamId(report.teamId ?? null);
+    setDraftReportDate(report.date);
     setReportSaved(false);
     setReportStep(1);
     setTab("report");
@@ -3020,6 +3040,7 @@ function useAppDataState(
     setDraftNote("");
     setDraftStageProgress({});
     setDraftReportTeamId(null);
+    setDraftReportDate(todayISO());
     setReportStep(1);
     setReportSaved(false);
     setHrSaved(false);
@@ -3040,10 +3061,10 @@ function useAppDataState(
     // Best-effort: jeśli offline, lokalny status i tak już jest ustawiony
     // powyżej — admin pracuje zwykle online, więc rzadki brak sieci tutaj
     // nie uzasadnia osobnej kolejki jak przy raportach brygadzisty.
-    const numericBuildId = report ? Number(report.buildId) : NaN;
-    if (!report || Number.isNaN(numericBuildId)) return;
+    const numericReportId = Number(reportId);
+    if (!report || !Number.isInteger(numericReportId)) return;
     approveReportMutation.mutate(
-      { buildId: numericBuildId, date: report.date, status: "approved", teamId: report.teamId ?? null },
+      { reportId: numericReportId, approve: true },
       {
         onError: (error) =>
           reportMutationError(
@@ -3069,6 +3090,29 @@ function useAppDataState(
       },
     );
   }, [approveReportMutation, queryClient, savedReports]);
+  // Odesłanie do poprawy z komentarzem (wymagany) — brygadzista widzi
+  // komentarz przy raporcie i może go poprawić także po oknie dni wstecz.
+  const sendBackReport = useCallback(
+    async (reportId: string, comment: string): Promise<boolean> => {
+      const numericReportId = Number(reportId);
+      if (!Number.isInteger(numericReportId)) return false;
+      try {
+        await approveReportMutation.mutateAsync({ reportId: numericReportId, approve: false, comment });
+        setSavedReports((previous) =>
+          previous.map((r) =>
+            r.id === reportId ? { ...r, status: "do_poprawy", adminComment: comment } : r,
+          ),
+        );
+        await queryClient.invalidateQueries({ queryKey: ["reports", "list"] });
+        await queryClient.invalidateQueries({ queryKey: ["reportReviewLog", numericReportId] });
+        return true;
+      } catch (error) {
+        reportMutationError(error, "Nie udało się odesłać raportu do poprawy.");
+        return false;
+      }
+    },
+    [approveReportMutation, queryClient],
+  );
   // Zamyka budowę i zapisuje snapshot finalnego rozliczenia (godziny,
   // materiały plan/zużycie, koszty dodatkowe). Wymaga, żeby wszystkie
   // raporty tej budowy były już zatwierdzone — inaczej rozliczenie
@@ -3153,6 +3197,9 @@ function useAppDataState(
     removeBuildTeam,
     draftStageProgress,
     setDraftStageProgress,
+    draftReportDate,
+    setDraftReportDate,
+    reportBackdateDays,
     buildMaterialPlans,
     assignBuildTechnology,
     buildOrders: (buildOrdersQuery.data ?? []) as BuildOrderRow[],
@@ -3237,6 +3284,7 @@ function useAppDataState(
     startNewReport,
     getReportDefaults,
     approveReport,
+    sendBackReport,
     closeBuild,
     reopenBuild,
     updateBuildPhotosUrl,
@@ -3312,6 +3360,7 @@ function useAppDataState(
     adminComment,
     applyOrderItemFreeStock,
     approveReport,
+    sendBackReport,
     assignBuildTechnology,
     assignments,
     belowMinimumMaterials,
@@ -3336,6 +3385,8 @@ function useAppDataState(
     addSubcontractorToBuild,
     removeBuildTeam,
     draftStageProgress,
+    draftReportDate,
+    reportBackdateDays,
     builds,
     buildsView,
     cancelBuildOrder,

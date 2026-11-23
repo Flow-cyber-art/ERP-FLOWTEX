@@ -23,6 +23,8 @@ import { materialReportKey } from "@/lib/material-report-key";
 import { RADIUS } from "@/constants/radius";
 import { Icon } from "@/components/icon";
 import { TECHNOLOGY_UNIT_LABEL } from "@/lib/data/technologies";
+import { DateField } from "@/components/date-field";
+import { localISODate } from "@/lib/utils";
 
 export function ReportScreen() {
   const [stockOpen, setStockOpen] = useState(false);
@@ -97,6 +99,9 @@ export function ReportScreen() {
     buildTeams,
     teams,
     teamSubcontractorMap,
+    draftReportDate,
+    setDraftReportDate,
+    reportBackdateDays,
   } = useAppData();
 
   // Tryb podwykonawcy (supabase/sql/112_podwykonawcy_raport_i_brygady_
@@ -487,6 +492,75 @@ export function ReportScreen() {
         </View>
       )}
 
+      {!reportApproved && (
+        <View
+          style={{
+            backgroundColor: COLORS.surface,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            borderRadius: RADIUS.card,
+            padding: 12,
+            marginBottom: 12,
+          }}
+        >
+          <Text className="text-xs text-muted uppercase mb-2">Data wykonania prac</Text>
+          {editingReportId ? (
+            <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
+              {draftReportDate}
+              <Text style={{ color: COLORS.muted, fontWeight: "400", fontSize: 12 }}>
+                {"  "}(przy poprawce raportu dzień się nie zmienia)
+              </Text>
+            </Text>
+          ) : (
+            <>
+              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                {Array.from({ length: Math.min(reportBackdateDays, 7) + 1 }, (_, i) => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - i);
+                  const iso = localISODate(d);
+                  const label = i === 0 ? "Dziś" : i === 1 ? "Wczoraj" : `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+                  const selected = draftReportDate === iso;
+                  return (
+                    <Pressable
+                      key={iso}
+                      onPress={() => setDraftReportDate(iso)}
+                      style={{
+                        backgroundColor: selected ? COLORS.primary : COLORS.background,
+                        borderRadius: RADIUS.control,
+                        paddingHorizontal: 10,
+                        paddingVertical: 7,
+                        borderWidth: 1,
+                        borderColor: selected ? COLORS.primary : COLORS.border,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: selected ? COLORS.background : COLORS.foreground,
+                          fontWeight: "700",
+                          fontSize: 12,
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {isAdminAccount && (
+                <View style={{ marginTop: 8 }}>
+                  <DateField value={draftReportDate} onChange={setDraftReportDate} />
+                </View>
+              )}
+              <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: 6 }}>
+                {isAdminAccount
+                  ? "Admin może wpisać raport z dowolnego dnia (poza zamkniętym okresem)."
+                  : `Raport można dodać za dziś i do ${reportBackdateDays} ${reportBackdateDays === 1 ? "dnia" : "dni"} wstecz. Starsze — tylko Admin.`}
+              </Text>
+            </>
+          )}
+        </View>
+      )}
+
       {isSubcontractorLead && !subBuildTeam && (
         <View
           style={{
@@ -520,6 +594,27 @@ export function ReportScreen() {
           >
             <Text style={{ color: COLORS.foreground, fontWeight: "700" }}>
               Raport zatwierdzony przez administratora — edycja zablokowana.
+            </Text>
+          </View>
+        )}
+
+        {editingReport?.status === "do_poprawy" && (
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: COLORS.danger,
+              borderRadius: RADIUS.card,
+              padding: 13,
+              margin: 16,
+              marginBottom: 0,
+            }}
+          >
+            <Text style={{ color: COLORS.danger, fontWeight: "800" }}>Admin odesłał raport do poprawy</Text>
+            {editingReport.adminComment ? (
+              <Text style={{ color: COLORS.foreground, marginTop: 4 }}>„{editingReport.adminComment}”</Text>
+            ) : null}
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
+              Popraw raport i wyślij go ponownie — trafi znowu do sprawdzenia.
             </Text>
           </View>
         )}
@@ -1147,6 +1242,34 @@ export function ReportScreen() {
           </View>
         )}
 
+        {reportStep === 2 && !subMode && progressStages.length > 0 && (
+          <View className="p-4" style={{ borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+            <Text className="text-xs text-muted uppercase mb-1">
+              Wykonane — szacunkowo ({buildUnitLabel})
+            </Text>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: 6 }}>
+              Ile zrobiliście tego dnia na etapach (nieobowiązkowe). Po zatwierdzeniu raportu
+              klient widzi z tego postęp w portalu.
+            </Text>
+            {progressStages.map((stageName, i) => (
+              <View
+                key={stageName}
+                className={`flex-row items-center py-2 ${i > 0 ? "border-t border-border" : ""}`}
+                style={{ gap: 10 }}
+              >
+                <Text className="text-sm text-foreground" numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
+                  {stageName}
+                </Text>
+                <QuantityStepper
+                  value={draftStageProgress[stageName] ?? ""}
+                  onChangeText={(v) => setDraftStageProgress({ ...draftStageProgress, [stageName]: v })}
+                  unit={buildUnitLabel}
+                />
+              </View>
+            ))}
+          </View>
+        )}
+
         {reportStep === 2 && !subMode && (
           <View className="p-4">
             <View className="flex-row items-center justify-between">
@@ -1542,10 +1665,10 @@ export function ReportScreen() {
               </>
             )}
 
-            {subMode && (
+            {(subMode || progressRows.length > 0) && (
               <>
                 <Text className="text-xs text-muted uppercase mt-5 mb-1">
-                  Wykonane dziś
+                  Wykonane
                 </Text>
                 {progressRows.length === 0 ? (
                   <Text className="text-sm text-muted py-2">
